@@ -1,0 +1,19 @@
+<svg xmlns="http://w3.org" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Background is transparent by default -->
+  <g id="low_poly_terrain">
+    <!-- Left smaller polygon mountain -->
+    <polygon points="1,14 5,8 8,14" fill="#478cbf" opacity="0.85" />
+    <polygon points="5,8 8,14 4,14" fill="#3b75a2" />
+    
+    <!-- Right main mountain (foreground) -->
+    <polygon points="5,14 10,4 15,14" fill="#60a5fa" />
+    <!-- Shading on the right mountain flank for 3D effect -->
+    <polygon points="10,4 12,14 15,14" fill="#2563eb" opacity="0.9" />
+    
+    <!-- Middle connecting terrain / valley facet -->
+    <polygon points="5,14 8,11 12,14" fill="#1d4ed8" opacity="0.7" />
+    
+    <!-- Front small flat hill -->
+    <polygon points="2,14 6,12 10,14" fill="#93c5fd" opacity="0.5" />
+  </g>
+</svg>

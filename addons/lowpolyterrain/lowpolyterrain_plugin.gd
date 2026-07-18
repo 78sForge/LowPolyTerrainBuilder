@@ -11,7 +11,19 @@ var is_drawing: bool = false
 var brush_gizmo: MeshInstance3D = null
 
 func _get_plugin_name() -> String:
-	return "Low Poly Chunk Terrain"
+	return "Low Poly Terrain Builder"
+	
+func _enter_tree() -> void:
+	# Registriert den neuen Node mit Ihrem Custom-Icon
+	add_custom_type(
+		"LowPolyTerrainManager", 
+		"Node3D", 
+		preload("res://addons/lowpolyterrain/LowPolyTerrainManager.gd"), 
+		preload("res://addons/lowpolyterrain/icon.svg")
+	)
+
+func _exit_tree() -> void:
+	remove_custom_type("LowPolyTerrainManager")
 
 func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
