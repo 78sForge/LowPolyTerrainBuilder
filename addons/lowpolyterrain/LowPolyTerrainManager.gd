@@ -5,8 +5,8 @@ class_name LowPolyTerrainManager
 ## Master controller script that handles seamless height coordinates, multi-chunk modification,
 ## multi-pass smoothing operations, and automated static collision baking.
 
+## signals
 signal signal_brush_settings_changed
-
 
 # Centralized structural constants for advanced Inspector paths
 const GROUP_DIMENSIONS := "World Dimensions (Requires Apply)"
