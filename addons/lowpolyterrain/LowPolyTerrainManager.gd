@@ -155,7 +155,8 @@ var bake_collisions_button: Callable = func() -> void: _bake_live_collisions_as_
 
 
 # --- PERFORMANCE CRITICAL: Flattened array structure instead of Dictionary ---
-var global_height_data: PackedFloat32Array = PackedFloat32Array()
+@export_storage var global_height_data: PackedFloat32Array = PackedFloat32Array()
+
 
 # Cached structural bounds variables to achieve zero-latency lookup performance
 var _total_vertices_x: int = 0
