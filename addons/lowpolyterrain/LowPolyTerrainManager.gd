@@ -203,6 +203,14 @@ func _set(property: StringName, _value: Variant) -> bool:
 	return false
 
 
+@export_group("Data Export")
+## The target path within your project where the generated terrain mesh will be saved as a GLTF file.
+@export_global_file("*.gltf") var export_target_path: String = "res://terrain_export.gltf"
+
+## Click to bundle and export all current active terrain chunks as a standalone, production-ready GLTF file.
+@export_tool_button("Export Terrain as GLTF", "Save")
+var export_gltf_button: Callable:
+	get: return func() -> void: if has_method("_export_terrain_as_gltf"): call("_export_terrain_as_gltf")
 
 
 ####################################################################################################
@@ -671,3 +679,69 @@ func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPoly
 			var chunk: LowPolyTerrainChunk = chunks_dict[coord]
 			if not chunk in update_list:
 				update_list.append(chunk)
+
+
+## Bundles all active visual chunk meshes into a dynamic node tree and exports them as a clean GLTF asset.
+func _export_terrain_as_gltf() -> void:
+	if export_target_path.strip_edges().is_empty():
+		print("Export Cancelled: Please specify a valid target path in the inspector.")
+		return
+		
+	print("Starting GLTF terrain export to: %s" % export_target_path)
+	
+	# 1. Create a transient root node to act as the staging anchor for our chunks
+	var export_root := Node3D.new()
+	export_root.name = "Exported_LowPoly_Terrain"
+	
+	var chunks_exported: int = 0
+	
+	# 2. Iterate through all active chunks and duplicate their meshes with physical transforms
+	for coord in chunks_dict.keys():
+		var chunk: LowPolyTerrainChunk = chunks_dict[coord]
+		if chunk == null or chunk.mesh == null: 
+			continue
+			
+		# Create a fresh standard MeshInstance3D to strip out plugin behaviors from the asset
+		var chunk_instance := MeshInstance3D.new()
+		chunk_instance.name = "Terrain_Chunk_%d_%d" % [coord.x, coord.y]
+		chunk_instance.mesh = chunk.mesh
+		
+		# Assign the custom material if available so the look is preserved in the file
+		if chunk.material_override != null:
+			chunk_instance.material_override = chunk.material_override
+			
+		# Mirror the precise spatial position of the chunk relative to the manager
+		chunk_instance.position = chunk.position
+		
+		# Add to our staging hierarchy
+		export_root.add_child(chunk_instance)
+		chunk_instance.set_owner(export_root)
+		chunks_exported += 1
+		
+	if chunks_exported == 0:
+		print("Export Cancelled: No active chunk meshes found to package.")
+		export_root.free()
+		return
+		
+	# 3. Initialize Godot's native GLTF document processing architecture
+	var gltf_doc := GLTFDocument.new()
+	var gltf_state := GLTFState.new()
+	
+	# Bake our staging tree into the GLTF state buffer
+	gltf_doc.append_from_scene(export_root, gltf_state)
+	
+	# Save the baked state straight to disk at the specified location
+	var error_code: Error = gltf_doc.write_to_filesystem(gltf_state, export_target_path)
+	
+	# 4. Clean up our memory footprint and evaluate final success state
+	export_root.free()
+	
+	if error_code == OK:
+		print("SUCCESS: Successfully exported %d terrain chunks to GLTF format!" % chunks_exported)
+		# Force Godot's FileSystem dock to refresh so the new asset shows up immediately
+		if Engine.is_editor_hint():
+			var editor_interface := EditorInterface.get_resource_filesystem()
+			if editor_interface:
+				editor_interface.scan()
+	else:
+		print("ERROR: GLTF export failed with engine error code: %d" % error_code)
