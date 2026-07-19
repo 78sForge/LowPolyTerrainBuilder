@@ -2,3 +2,6 @@
 .godot/
 /android/
 addons/gut
+.DS_Store
+addons/.DS_Store
+addons/lowpolyterrain/.DS_Store

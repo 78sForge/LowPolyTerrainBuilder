@@ -21,6 +21,11 @@ painting performance.
   Abandons the typical stiff voxel/grid layout by calculating custom triangle networks on
   mathematically shifted vertex points.
 
+* **Production-Ready GLTF Export:**
+  Provides an integrated asset pipeline to bundle and bake all active visual chunk meshes into a
+  standardized, completely decoupled standalone `.gltf` 3D asset file, ensuring comprehensive
+  long-term compatibility and hassle-free data backups.
+
 * **Lossless Grid Migration:** 
   Safely handles real-time inspector resizing. Shrinking map boundaries filters data safely,
   while enlarging matrices copies matching height points coordinate-accurately.
@@ -75,27 +80,29 @@ hash(x, z) = frac(sin(x * 12.9898 + z * 78.233) * 43758.5453)
 This calculation yields pseudo-random vectors between `-1.0` and `1.0` that are 100%
 reproducible for any specific global coordinate pair across the scene lifetime.
 
-### 2. Slope-Aware Jitter Attenuation
+### 2. Non-Linear Cubic Jitter Attenuation
 
 To protect flat plains and terrace pathways from getting distorted by noisy polygon spikes, the
-mesh updates apply an automated slope incline calculation using cardinal neighbors:
+mesh updates apply a non-linear damping algorithm via Cubic Hermite Interpolation (Smoothstep).
+The calculated incline slope dynamically maps to an S-curve factor:
 
 ```math
-slope \(= \frac\){max(\(\vert{}h_{right} -\) h_{left}|, |h_{down} - h_{up}|)}{cell\_size * 2.0}
+t = clamp\((\frac{slope}{jitter\_slope\_threshold}, 0.0, 1.0) \%\%\)MAGIT_PARSER_PROTECT%%```
+```math
+slope\_factor \(= t^2 \cdot\) (\(3.0 - 2.0 \cdot\) t)
 ```
 
-Vertices are only offset if this calculation matches your user-defined `jitter_slope_threshold`.
-Steep cliffs receive full geometric fracturing, while horizontal surfaces scale down to zero
-noise.
+Vertices only receive spatial noise offsets if this calculation yields a positive value. Steep
+cliffs receive fracturing, while horizontal surfaces remain completely rigid to stabilize shading.
 
-### 3. Boundary Edge Decimation
+### 3. Boundary Edge & Distance Decimation
 
-To guarantee seamless, crack-free rendering transitions where separate chunk grids touch, the
-triangulation engine runs explicit boundary constraints. Points located on active edges skip
-spatial noise alterations. 
+To guarantee seamless, crack-free rendering transitions where separate chunk grids touch, points
+located on active edges completely skip spatial noise alterations. 
 
 Furthermore, flat boundaries are systematically decimated using modular constraints
-(`index % 4 != 0`) to counteract complex web artifact patterns.
+(`index % 4 != 0`) to counteract complex web artifact patterns, while a flippable vertex-distance
+dampening factor guarantees smooth, quadratic topology transitions approaching the borders.
 
 ### 4. Fragment-Level Flat Face Normals
 
@@ -140,6 +147,10 @@ values allow noise on flatter pathways. |
 
 | **Custom Material** | Terrain Properties | `Resource` | Inspector custom resource slot
 filtering out Fog/Particles. Accepts only 3D materials. |
+
+| **Export Target Path** | Data Export | `String` | Project-relative storage directory configuration layout where the `.gltf` asset is written. |
+
+| **Choose Path & Export Terrain** | Data Export | `Button` | Spawns an integrated native EditorFileDialog to choose directories, type new names, and trigger the export. |
 
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Custom physics layer
 mask and scene group definitions for the colliders. |
