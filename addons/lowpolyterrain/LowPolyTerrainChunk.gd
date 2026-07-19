@@ -59,8 +59,8 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, m_co
 				if child is Label3D: child.free()
 
 
-## Core geometry geometry generation engine. Parses the heightmap grid, runs decimation rules, 
-## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
+## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
+## applies advanced slope-damped random displacements, and builds the visual trimesh via Delaunay.
 func generate_mesh() -> void:
 	if height_data.is_empty(): return
 	var vert_count: int = chunk_size + 1
@@ -114,7 +114,7 @@ func generate_mesh() -> void:
 				else:
 					if x % 4 != 0: continue
 			
-			# --- SLOPE-AWARE JITTER DAMPENING AGAINST VERTEX ARTIFACTS ---
+			# --- ADVANCED SLOPE & EDGE AWARE JITTER DAMPENING ---
 			var jitter := Vector3.ZERO
 			if not is_edge and jitter_strength > 0.0:
 				var h_r: float = height_data[clampi(x + 1, 0, chunk_size) + z * vert_count]
@@ -128,12 +128,22 @@ func generate_mesh() -> void:
 				
 				var true_slope: float = max_diff / cell_size
 				var current_threshold: float = jitter_slope_threshold
-				
 				if is_zero_approx(current_threshold):
 					current_threshold = 0.5
 				
-				var slope_factor: float = clampf(true_slope / current_threshold, 0.0, 1.0)
-				jitter = _get_jitter_offset(x, z) * slope_factor
+				# Optimization 1: Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
+				# Keeps flat areas completely rigid, eliminates micro-noise, and stabilizes shading.
+				var t: float = clampf(true_slope / current_threshold, 0.0, 1.0)
+				var slope_factor: float = t * t * (3.0 - 2.0 * t)
+				
+				# Optimization 2: Boundary Distance Damping (Prevents sharp triangle spikes at seams)
+				var dist_to_edge_x: float = minf(x, chunk_size - x)
+				var dist_to_edge_z: float = minf(z, chunk_size - z)
+				# Scales smoothly from 0.0 (edge) to 1.0 (center) over a 2-vertex safety margin
+				var edge_damp: float = clampf(minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0)
+				
+				# Final jitter computation combining both attenuation factors
+				jitter = _get_jitter_offset(x, z) * slope_factor * edge_damp
 
 			var pos_x: float = x * cell_size + jitter.x
 			var pos_z: float = -z * cell_size + jitter.z
@@ -188,11 +198,12 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	var hash_z: float = sin(float(global_gx) * 37.719  + float(global_gz) * 11.135) * 43758.5453
 	var random_x: float = (hash_x - floorf(hash_x)) * 2.0 - 1.0
 	var random_z: float = (hash_z - floorf(hash_z)) * 2.0 - 1.0
+	
+	# NOTE: Jitter strength multiplication now executes directly within the base calculator
 	return Vector3(random_x * cell_size * jitter_strength, 0.0, -random_z * cell_size * jitter_strength)
 
 
 ####################################################################################################
-
 ## Automatically builds and maps a custom ShaderMaterial layout using an injection channel for Perlin noise.
 ## FIXED: Supports user-defined material overrides with automatic built-in shader fallback.
 func _apply_custom_shader() -> void:
@@ -220,6 +231,8 @@ func _apply_custom_shader() -> void:
 	generated_material.set_shader_parameter("base_color", material_color)
 	generated_material.set_shader_parameter("noise_texture", noise_texture)
 	material_override = generated_material
+	
+
 
 
 ## Refreshes and instantiates persistent runtime node labels mapping structural coordinates within the viewport.
@@ -239,6 +252,8 @@ func _update_editor_label() -> void:
 	
 	var half_bounds: float = (float(chunk_size) * cell_size) / 2.0
 	label.position = Vector3(half_bounds, 2.0, -half_bounds)
+
+
 
 
 ## Generates runtime physical collider shape matrices aligned with the generated mesh.
@@ -268,7 +283,6 @@ func bake_collision(scene_root: Node) -> void:
 	
 	# NOTE: Layer, Mask and Groups are now dynamically assigned by the manager 
 	# inside the central baking engine loop to allow flexible inspector settings.
-	
 	static_body.add_child(collision_shape)
 	add_child(static_body)
 	
