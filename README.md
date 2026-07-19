@@ -13,6 +13,10 @@ painting performance.
   Automatically breaks the terrain map down into grid blocks initialized natively inside the
   editor RAM without cluttering your persistent `.tscn` save file layout.
 
+* **High-Performance Packed Arrays:**
+  Utilizes a heavily optimized `PackedFloat32Array` architecture for storing `global_height_data`
+  instead of dynamic dictionaries, maximizing memory throughput and minimizing cache misses.
+
 * **Organic Delaunay Topology:** 
   Abandons the typical stiff voxel/grid layout by calculating custom triangle networks on
   mathematically shifted vertex points.
