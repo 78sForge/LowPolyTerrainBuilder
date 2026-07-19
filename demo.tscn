@@ -23,7 +23,7 @@ shadow_enabled = true
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=809019558]
 environment = SubResource("Environment_m0rpm")
 
-[node name="LowPolyTerrainManager" type="Node3D" parent="." unique_id=108772233]
+[node name="LowPolyTerrainManager" type="Node3D" parent="." unique_id=1801458084]
 script = ExtResource("1_5hfv0")
 total_size_meters = Vector2(50, 50)
 total_vertices = 3025
@@ -31,4 +31,4 @@ global_height_data = PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 metadata/_custom_type_script = "uid://dxq4p56omxx80"
 metadata/_edit_lock_ = true
 
-[node name="Terrain_Assets" type="Node3D" parent="LowPolyTerrainManager" unique_id=1337078792]
+[node name="Terrain_Assets" type="Node3D" parent="LowPolyTerrainManager" unique_id=1184499354]

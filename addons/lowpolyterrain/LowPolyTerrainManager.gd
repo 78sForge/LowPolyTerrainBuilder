@@ -205,12 +205,43 @@ func _set(property: StringName, _value: Variant) -> bool:
 
 @export_group("Data Export")
 ## The target path within your project where the generated terrain mesh will be saved as a GLTF file.
-@export_global_file("*.gltf") var export_target_path: String = "res://terrain_export.gltf"
+@export var export_target_path: String = "res://terrain_export.gltf"
 
-## Click to bundle and export all current active terrain chunks as a standalone, production-ready GLTF file.
-@export_tool_button("Export Terrain as GLTF", "Save")
+## Click to open a native Editor Save Dialog where you can choose a folder and name a new GLTF file.
+@export_tool_button("Choose Path & Export Terrain", "Save")
 var export_gltf_button: Callable:
-	get: return func() -> void: if has_method("_export_terrain_as_gltf"): call("_export_terrain_as_gltf")
+	get: return func() -> void: if has_method("_open_export_dialog"): call("_open_export_dialog")
+
+
+## Spawns an integrated Editor FileDialog configured exclusively for naming new assets.
+func _open_export_dialog() -> void:
+	if not Engine.is_editor_hint(): return
+	
+	# Instantiate an native editor-themed dialog window
+	var dialog := EditorFileDialog.new()
+	
+	# Configure the window to allow entering non-existent filenames for saving
+	dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	dialog.add_filter("*.gltf", "GLTF 3D Asset")
+	
+	# Pre-fill with the currently set path to save time
+	dialog.current_path = export_target_path
+	
+	# Connect the success signal using the clean Godot 4.7+ Callable approach
+	dialog.file_selected.connect(
+		func(selected_path: String) -> void:
+			export_target_path = selected_path
+			_export_terrain_as_gltf()
+			dialog.queue_free()
+	)
+	
+	# Automatically clean up RAM if the user cancels or closes the window
+	dialog.canceled.connect(func() -> void: dialog.queue_free())
+	
+	# Inject the window into the active Godot Editor UI tree to display it instantly
+	EditorInterface.get_base_control().add_child(dialog)
+	dialog.popup_file_dialog()
 
 
 ####################################################################################################
