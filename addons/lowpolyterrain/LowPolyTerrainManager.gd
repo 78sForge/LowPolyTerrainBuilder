@@ -101,10 +101,6 @@ func _update_read_only_metrics() -> void:
 @export_range(0.05, 2.0, 0.05) var jitter_slope_threshold: float = 1.5:
 	set(v): jitter_slope_threshold = v; _queue_setup()
 
-## The base albedo color passed directly into the custom low-poly terrain shader.
-@export var material_color: Color = Color(0.522, 0.576, 0.478):
-	set(v): material_color = v; _queue_setup()
-
 ## Optional custom 3D material to override the terrain shader. Accepts ShaderMaterial or StandardMaterial3D.
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial,StandardMaterial3D") var custom_material: Material = null:
 	set(v): custom_material = v; _queue_setup()
@@ -399,18 +395,19 @@ func rebuild_chunks_structure() -> void:
 				for i in range(slice.size()):
 					chunk_local_heights[local_offset + i] = slice[i]
 
+			# Chunks now directly receive your manual inspector material override
 			chunks_dict[coord].initialize(
 				coord, 
 				chunk_size, 
 				cell_size, 
 				step_height, 
-				material_color, 
 				chunk_local_heights, 
 				jitter_strength, 
 				show_chunk_labels, 
 				jitter_slope_threshold,
 				custom_material
 			)
+
 
 
 ####################################################################################################
@@ -468,12 +465,13 @@ func _smooth_entire_terrain() -> void:
 				chunk_local_heights[local_offset + i] = slice[i]
 				
 		chunk.initialize(
-			coord, chunk_size, cell_size, step_height, material_color,
+			coord, chunk_size, cell_size, step_height,
 			chunk_local_heights, jitter_strength, show_chunk_labels,
 			jitter_slope_threshold, custom_material
 		)
 		
 	notify_property_list_changed()
+
 
 
 # Bakes and instantiates persistent physical collider nodes directly under the scene root.
@@ -638,7 +636,7 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				chunk_local_heights[local_offset + i] = slice[i]
 				
 		chunk.initialize(
-			coord, chunk_size, cell_size, step_height, material_color,
+			coord, chunk_size, cell_size, step_height,
 			chunk_local_heights, jitter_strength, show_chunk_labels,
 			jitter_slope_threshold, custom_material
 		)

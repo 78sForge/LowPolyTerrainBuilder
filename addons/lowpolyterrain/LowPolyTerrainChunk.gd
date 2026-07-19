@@ -9,7 +9,6 @@ var chunk_coord: Vector2i = Vector2i.ZERO
 @export var chunk_size: int = 20
 @export var cell_size: float = 0.5
 @export var step_height: float = 0.1
-@export var material_color: Color = Color(0.522, 0.576, 0.478)
 var jitter_strength: float = 0.0
 var jitter_slope_threshold: float = 0.5
 
@@ -30,12 +29,11 @@ func _ready() -> void:
 
 
 ## Called by the manager to safely pass initialized tracking states, configurations, and raw height arrays.
-func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, m_color: Color, manager_data: PackedFloat32Array, m_jitter: float, show_labels: bool, m_threshold: float, m_material: Material) -> void:
+func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, manager_data: PackedFloat32Array, m_jitter: float, show_labels: bool, m_threshold: float, m_material: Material) -> void:
 	chunk_coord = coord
 	chunk_size = c_size
 	cell_size = cell_s
 	step_height = step_h
-	material_color = m_color
 	height_data = manager_data
 	jitter_strength = m_jitter
 	jitter_slope_threshold = m_threshold
@@ -59,8 +57,8 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, m_co
 				if child is Label3D: child.free()
 
 
-## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
-## applies advanced slope-damped random displacements, and builds the visual trimesh via Delaunay.
+## Core geometry geometry generation engine. Parses the heightmap grid, runs decimation rules, 
+## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 func generate_mesh() -> void:
 	if height_data.is_empty(): return
 	var vert_count: int = chunk_size + 1
@@ -128,15 +126,16 @@ func generate_mesh() -> void:
 				
 				var true_slope: float = max_diff / cell_size
 				var current_threshold: float = jitter_slope_threshold
+				
 				if is_zero_approx(current_threshold):
 					current_threshold = 0.5
 				
-				# Optimization 1: Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
+				# Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
 				# Keeps flat areas completely rigid, eliminates micro-noise, and stabilizes shading.
 				var t: float = clampf(true_slope / current_threshold, 0.0, 1.0)
 				var slope_factor: float = t * t * (3.0 - 2.0 * t)
 				
-				# Optimization 2: Boundary Distance Damping (Prevents sharp triangle spikes at seams)
+				# Boundary Distance Damping (Prevents sharp triangle spikes at seams)
 				var dist_to_edge_x: float = minf(x, chunk_size - x)
 				var dist_to_edge_z: float = minf(z, chunk_size - z)
 				# Scales smoothly from 0.0 (edge) to 1.0 (center) over a 2-vertex safety margin
@@ -189,6 +188,7 @@ func generate_mesh() -> void:
 	_apply_custom_shader()
 
 
+
 ## Generates pseudo-random, mathematically reproducible coordinate shifts using sine trigonometry hashes.
 func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	if is_zero_approx(jitter_strength): return Vector3.ZERO
@@ -204,33 +204,10 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 
 
 ####################################################################################################
-## Automatically builds and maps a custom ShaderMaterial layout using an injection channel for Perlin noise.
-## FIXED: Supports user-defined material overrides with automatic built-in shader fallback.
+## Maps the user-defined inspector material allocation directly to the mesh instance.
 func _apply_custom_shader() -> void:
-	# If the user provided a custom material in the inspector, apply it and exit immediately
-	if custom_material != null:
-		material_override = custom_material
-		return
-		
-	# Fallback: Build the default low-poly terrain shader
-	var generated_material := ShaderMaterial.new()
-	var shader_path: String = "res://addons/lowpolyterrain/shader/terrain_lowpoly.gdshader"
-	
-	if ResourceLoader.exists(shader_path):
-		generated_material.shader = load(shader_path) as Shader
-	else:
-		print("Terrain Error: Custom shader file not found at: %s" % shader_path)
-		return
-		
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_PERLIN
-	var noise_texture := NoiseTexture2D.new()
-	noise_texture.seamless = true
-	noise_texture.noise = noise
-	
-	generated_material.set_shader_parameter("base_color", material_color)
-	generated_material.set_shader_parameter("noise_texture", noise_texture)
-	material_override = generated_material
+	material_override = custom_material
+
 	
 
 
