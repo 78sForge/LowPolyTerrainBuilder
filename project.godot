@@ -21,7 +21,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/lowpolyterrain/plugin.cfg")
+enabled=PackedStringArray("res://addons/gut/plugin.cfg", "res://addons/lowpolyterrain/plugin.cfg")
 
 [physics]
 
