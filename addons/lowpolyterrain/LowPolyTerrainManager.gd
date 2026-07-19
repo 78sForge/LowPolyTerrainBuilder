@@ -108,9 +108,16 @@ func _update_read_only_metrics() -> void:
 @export_range(0.05, 2.0, 0.05) var jitter_slope_threshold: float = 1.5:
 	set(v): jitter_slope_threshold = v; _queue_setup()
 
-## Optional custom 3D material to override the terrain shader. Accepts ShaderMaterial or StandardMaterial3D.
+
+
+## Automatically falls back to a pre-configured terrain_and_cliff ShaderMaterial if left empty.
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial,StandardMaterial3D") var custom_material: Material = null:
-	set(v): custom_material = v; _queue_setup()
+	set(v):
+		custom_material = v
+		if custom_material == null and Engine.is_editor_hint():
+			_apply_default_shader_fallback()
+		_queue_setup()
+
 
 
 ## Defines the available sculpting tool profiles for terrain interaction.
@@ -212,6 +219,26 @@ var _setup_pending: bool = false
 var chunks_dict: Dictionary = {}
 var _paint_cooldown: float = 0.1 
 var _last_paint_time: float = 0.0
+
+
+
+
+
+# --- AUTOMATIC INITIALIZATION PIPELINE ---
+func _init() -> void:
+	# Enforce the default shader selection the exact millisecond the node is created in the editor
+	if custom_material == null and Engine.is_editor_hint():
+		_apply_default_shader_fallback()
+
+
+## Helper function to construct and assign the default terrain shader instance
+func _apply_default_shader_fallback() -> void:
+	var default_shader_path: String = "res://addons/lowpolyterrain/shader/terrain_and_cliff.gdshader"
+	if ResourceLoader.exists(default_shader_path):
+		var default_mat := ShaderMaterial.new()
+		default_mat.shader = load(default_shader_path) as Shader
+		custom_material = default_mat
+		print("LowPolyBuilder: Default shader pre-configured successfully.")
 
 
 func _ready() -> void:
