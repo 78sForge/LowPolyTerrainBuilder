@@ -45,16 +45,6 @@ var cell_size: float = 1.0
 @export var show_chunk_labels: bool = false:
 	set(v): show_chunk_labels = v; _queue_setup()
 	
-@export_subgroup(SUBGROUP_METRICS)
-## The absolute spatial size of the generated terrain world in meters (Width, Length). Formulated as: preview_world_chunks * preview_chunk_size * preview_cell_size.
-@export var total_size_meters: Vector2:
-	get: return Vector2(float(preview_world_chunks.x * preview_chunk_size) * preview_cell_size, float(preview_world_chunks.y * preview_chunk_size) * preview_cell_size)
-
-## The total amount of vertices processed across the entire map. Formulated as: (preview_chunk_size + 1)^2 * total_chunks.
-@export var total_vertices: int:
-	get: return (preview_chunk_size + 1) * (preview_chunk_size + 1) * (preview_world_chunks.x * preview_world_chunks.y)
-
-
 # REAL INSPECTOR BUTTONS: Resolved via safe Lambda Callables to prevent early parsing errors
 ## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size. Warning: Shrinking boundaries will delete out-of-bounds data!
 @export_tool_button("Apply Dimension Changes", "Node3D")
@@ -63,6 +53,23 @@ var apply_dimensions_button: Callable = func() -> void: _apply_dimension_changes
 ## Automatically shifts this manager's global position to align the geometric center of the terrain perfectly with the scene origin (0,0,0).
 @export_tool_button("Center Global Position", "Marker3D")
 var center_global_position_button: Callable = func() -> void: _center_global_position_to_origin()
+
+
+@export_subgroup(SUBGROUP_METRICS)
+## The absolute spatial size of the generated terrain world in meters (Width, Length).
+@export_custom(PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY) var total_size_meters: Vector2:
+	get:
+		var x_val: float = float(preview_world_chunks.x * preview_chunk_size) * preview_cell_size
+		var z_val: float = float(preview_world_chunks.y * preview_chunk_size) * preview_cell_size
+		return Vector2(x_val, z_val)
+
+## The total amount of vertices processed across the entire map.
+@export_custom(PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY) var total_vertices: int:
+	get:
+		var per_chunk: int = (preview_chunk_size + 1) * (preview_chunk_size + 1)
+		return per_chunk * (preview_world_chunks.x * preview_world_chunks.y)
+
+
 
 ## Seamlessly offsets this node's global transform to center the active terrain dimensions around the scene root origin.
 func _center_global_position_to_origin() -> void:
@@ -154,53 +161,6 @@ var global_height_data: PackedFloat32Array = PackedFloat32Array()
 var _total_vertices_x: int = 0
 var _total_vertices_z: int = 0
 
-
-# Tells Godot which hidden or custom properties to store inside the active scene layout
-func _get_property_list() -> Array[Dictionary]:
-	var properties: Array[Dictionary] = []
-	
-	# Keep your vital height data safely serialized on disk inside the high-performance flat array
-	properties.append({
-		"name": "global_height_data",
-		"type": TYPE_PACKED_FLOAT32_ARRAY,
-		"usage": PROPERTY_USAGE_STORAGE
-	})
-	
-	# Register the calculated metrics with full path names to slide them under the correct subgroup layout
-	properties.append({
-		"name": PATH_SIZE_METERS,
-		"type": TYPE_VECTOR2,
-		"usage": PROPERTY_USAGE_EDITOR
-	})
-	properties.append({
-		"name": PATH_TOTAL_VERTICES,
-		"type": TYPE_INT,
-		"usage": PROPERTY_USAGE_EDITOR
-	})
-	
-	return properties
-
-
-# Automatically intercepts properties before rendering to enforce a true grayed-out read-only state
-func _validate_property(property: Dictionary) -> void:
-	if PROP_SIZE_METERS in property.name or PROP_TOTAL_VERTICES in property.name:
-		property.usage |= PROPERTY_USAGE_READ_ONLY
-
-
-# Resolves inspector read requests for custom dynamically paths properties
-func _get(property: StringName) -> Variant:
-	if property == PATH_SIZE_METERS:
-		return Vector2(float(preview_world_chunks.x * preview_chunk_size) * preview_cell_size, float(preview_world_chunks.y * preview_chunk_size) * preview_cell_size)
-	elif property == PATH_TOTAL_VERTICES:
-		return (preview_chunk_size + 1) * (preview_chunk_size + 1) * (preview_world_chunks.x * preview_world_chunks.y)
-	return null
-
-
-# Intercepts write attempts to ensure custom properties remain strictly read-only
-func _set(property: StringName, _value: Variant) -> bool:
-	if PROP_SIZE_METERS in property or PROP_TOTAL_VERTICES in property:
-		return true # Action handled, value discarded to enforce read-only constraint
-	return false
 
 
 @export_group("Data Export")
