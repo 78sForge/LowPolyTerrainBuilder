@@ -42,7 +42,15 @@
 * **Boundary Decimation:** Boundary edges must never receive random spatial noise or jitter to 
   keep chunk seams perfectly blended (use the `index % 4 != 0` constraint).
 
-## 5. Automated Testing Rules (GUT Framework)
+## 5. Performance Optimization Standards (CRITICAL)
+* **Zero-Latency Target:** All algorithms, brush strokes, and loops must be strictly optimized 
+  for real-time execution to guarantee zero-latency editor painting and peak runtime FPS.
+* **Optimized Math & Type Casting:** Avoid un-typed arrays or dynamic lookups in loops. Use 
+  PackedVector3Array or PackedFloat32Array for mesh generation. Cache calculation values.
+* **Efficient Memory Allocation:** Minimize allocations inside process loops. Reuse objects, 
+  leverage distance-culling, and disable distant colliders natively (`disabled = true`).
+
+## 6. Automated Testing Rules (GUT Framework)
 * **Framework:** All internal automated test scripts must strictly use the **Godot Unit Test 
   (GUT)** framework.
 * **Validation Protocols:** When writing or updating tests, ensure you adhere to the three main 
