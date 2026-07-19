@@ -492,31 +492,33 @@ func _write_to_array(cx: int, cz: int, gx: int, gz: int, new_h: float) -> void:
 ## FIXED: Dynamically applies user-defined collision layers and group configurations.
 func _bake_live_collisions_as_child() -> void:
 	# Fallback tree selection sequence to support both live Editor scenes and isolated GUT test runners
+	var target_parent: Node = get_parent()
 	var scene_root: Node = null
+	
 	if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
 		scene_root = get_tree().edited_scene_root
-	elif get_parent() != null:
-		scene_root = get_parent()
+	else:
+		scene_root = target_parent
 		
-	if scene_root == null:
-		print("Baking cancelled: Active editor scene root not found.")
+	if target_parent == null:
+		print("Baking cancelled: Manager has no parent to place siblings.")
 		return
 		
 	var dynamic_collision_name: String = name + "_Collisions"
-	print("Baking static collisions live into the scene root hierarchy as: %s" % dynamic_collision_name)
+	print("Baking static collisions live parallel to manager as: %s" % dynamic_collision_name)
 	
 	# 1. PURGE OUTDATED LIVE COLLISION CONTAINERS FROM THE ENTIRE SCENE ROOT
-	var old_container = scene_root.find_child(dynamic_collision_name, false, false)
+	var old_container = target_parent.find_child(dynamic_collision_name, false, false)
 	if old_container:
 		old_container.free()
-		print("Successfully cleared historical collision nodes from scene root.")
+		print("Successfully cleared historical collision nodes from parent.")
 		
 	# 2. INSTANTIATE REFRESHED ROOT CONTAINER DIRECTLY UNDER SCENE ROOT
 	var collision_root = Node3D.new()
 	collision_root.name = dynamic_collision_name
-	scene_root.add_child(collision_root)
+	target_parent.add_child(collision_root)
 	
-	if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
+	if Engine.is_editor_hint() and scene_root:
 		collision_root.set_owner(scene_root)
 	
 	# 3. ITERATE ACTIVE CHUNKS TO BUILD COLLIDER SHAPES
@@ -549,12 +551,12 @@ func _bake_live_collisions_as_child() -> void:
 					static_body.add_to_group(collision_group, true)
 				
 				# Distribute structural ownership cleanly down the tree hierarchy
-				if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
+				if Engine.is_editor_hint() and scene_root:
 					static_body.set_owner(scene_root)
 					for shape_child in static_body.get_children():
 						shape_child.set_owner(scene_root)
 						
-	print("Collisions successfully generated live and anchored under the scene root!")
+	print("Collisions successfully generated live and anchored parallel to manager!")
 
 
 
