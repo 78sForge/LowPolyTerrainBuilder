@@ -122,8 +122,9 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 		for i in range(slice.size()):
 			chunk_local_heights[lz * vert_stride + i] = slice[i]
 			
+	# FIXED: Removed obsolete material_color argument to comply with the updated clean constructor pipeline
 	chunk.initialize(
-		Vector2i(0,0), manager.chunk_size, manager.cell_size, manager.step_height, manager.material_color,
+		Vector2i(0,0), manager.chunk_size, manager.cell_size, manager.step_height,
 		chunk_local_heights, manager.jitter_strength, manager.show_chunk_labels,
 		manager.jitter_slope_threshold, manager.custom_material
 	)
@@ -133,11 +134,6 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 	var faces: PackedVector3Array = chunk.mesh.get_faces()
 	assert_true(faces.size() > 0, "Generated mesh must contain active geometric triangle faces.")
 	assert_eq(faces.size() % 3, 0, "Mesh face array length must be a multiple of 3 to form clean triangles.")
-
-
-
-####################################################################################################
-
 
 
 # --- TEST 6: SLOPE-AWARE JITTER ATTENUATION ---
@@ -184,9 +180,18 @@ func test_jitter_attenuation_dampens_flat_planes_and_fractures_steep_cliffs() ->
 	var diff_z: float = maxf(absf(current_h - h_d), absf(current_h - h_u))
 	var true_slope: float = maxf(diff_x, diff_z) / chunk.cell_size
 	
-	var slope_factor_cliff: float = clampf(true_slope / chunk.jitter_slope_threshold, 0.0, 1.0)
-	var final_cliff_jitter: Vector3 = chunk._get_jitter_offset(5, 5) * slope_factor_cliff
+	# FIXED: Updated validation calculation to perfectly match the new cubic smoothstep math
+	var t: float = clampf(true_slope / chunk.jitter_slope_threshold, 0.0, 1.0)
+	var slope_factor_cliff: float = t * t * (3.0 - 2.0 * t)
 	
+	# FIXED: Calculate the new border distance damping factor for center coordinate (5, 5) inside a size 10 chunk
+	var dist_to_edge_x: float = minf(5.0, float(chunk.chunk_size) - 5.0)
+	var dist_to_edge_z: float = minf(5.0, float(chunk.chunk_size) - 5.0)
+	var edge_damp: float = clampf(minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0)
+	
+	var final_cliff_jitter: Vector3 = chunk._get_jitter_offset(5, 5) * slope_factor_cliff * edge_damp
+	
+	assert_true(slope_factor_cliff > 0.0, "Steep incline contexts must resolve a positive non-linear slope attenuation value.")
 	assert_ne(final_cliff_jitter, Vector3.ZERO, "Jitter attenuation error: Steep slopes must allow structural vertex fracturing noise.")
 
 
@@ -229,17 +234,20 @@ func test_shift_modifier_successfully_inverts_sculpting_brush_polarity() -> void
 
 # --- TEST 9: HEIGHT DATA SERIALIZATION & CRASH HEALING ---
 func test_height_data_heals_automatically_when_corrupted_or_null() -> void:
-	# 1. Assert that the hidden property registry configuration is correctly declared for background disk storage
-	var property_list: Array[Dictionary] = manager._get_property_list()
+	# 1. FIXED: Assert script metadata using the modern script property validation API to check for true @export_storage persistence
+	var target_script: Script = manager.get_script()
 	var found_storage_flag := false
-	for prop in property_list:
+	
+	for prop in target_script.get_script_property_list():
 		if prop["name"] == "global_height_data":
+			# Modern Godot 4.x serializes @export_storage fields under the PROPERTY_USAGE_STORAGE bitmask
 			if prop["usage"] & PROPERTY_USAGE_STORAGE:
 				found_storage_flag = true
 				break
-	assert_true(found_storage_flag, "Serialization Error: global_height_data must be configured for background disk storage.")
+				
+	assert_true(found_storage_flag, "Serialization Error: global_height_data must be configured with @export_storage for background disk storage.")
 	
-	# 2. FIXED: Simulate an empty memory state by clearing out the packed memory array blocks
+	# 2. Simulate an empty memory state by clearing out the packed memory array blocks
 	manager.global_height_data = PackedFloat32Array()
 	
 	# 3. Act: Trigger the structural rebuild pipeline which evaluates and heals the empty flat layout structures
