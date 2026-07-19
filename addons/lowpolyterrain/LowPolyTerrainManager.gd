@@ -163,12 +163,49 @@ var _total_vertices_z: int = 0
 func _get_property_list() -> Array[Dictionary]:
 	var properties: Array[Dictionary] = []
 	
+	# Keep your vital height data safely serialized on disk inside the high-performance flat array
 	properties.append({
 		"name": "global_height_data",
 		"type": TYPE_PACKED_FLOAT32_ARRAY,
 		"usage": PROPERTY_USAGE_STORAGE
 	})
+	
+	# Register the calculated metrics with full path names to slide them under the correct subgroup layout
+	properties.append({
+		"name": PATH_SIZE_METERS,
+		"type": TYPE_VECTOR2,
+		"usage": PROPERTY_USAGE_EDITOR
+	})
+	properties.append({
+		"name": PATH_TOTAL_VERTICES,
+		"type": TYPE_INT,
+		"usage": PROPERTY_USAGE_EDITOR
+	})
+	
 	return properties
+
+
+# Automatically intercepts properties before rendering to enforce a true grayed-out read-only state
+func _validate_property(property: Dictionary) -> void:
+	if PROP_SIZE_METERS in property.name or PROP_TOTAL_VERTICES in property.name:
+		property.usage |= PROPERTY_USAGE_READ_ONLY
+
+
+# Resolves inspector read requests for custom dynamically paths properties
+func _get(property: StringName) -> Variant:
+	if property == PATH_SIZE_METERS:
+		return Vector2(float(preview_world_chunks.x * preview_chunk_size) * preview_cell_size, float(preview_world_chunks.y * preview_chunk_size) * preview_cell_size)
+	elif property == PATH_TOTAL_VERTICES:
+		return (preview_chunk_size + 1) * (preview_chunk_size + 1) * (preview_world_chunks.x * preview_world_chunks.y)
+	return null
+
+
+# Intercepts write attempts to ensure custom properties remain strictly read-only
+func _set(property: StringName, _value: Variant) -> bool:
+	if PROP_SIZE_METERS in property or PROP_TOTAL_VERTICES in property:
+		return true # Action handled, value discarded to enforce read-only constraint
+	return false
+
 
 
 
