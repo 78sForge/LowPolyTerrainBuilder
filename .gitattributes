@@ -8,6 +8,8 @@
 /project.godot export-ignore
 /ai-rules.md export-ignore
 /.gitattributes export-ignore
+/lowpolyterrain_demo_demo.jpg export-ignore
+/lowpolyterrain_demo_demo.jpg.import export-ignore
 
 # Exclude root documentation to avoid duplicates (the copies inside /addons/ remain!)
 /README.md export-ignore
