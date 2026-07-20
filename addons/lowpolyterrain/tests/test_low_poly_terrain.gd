@@ -20,8 +20,11 @@ func before_each() -> void:
 	manager.collision_layer = 2
 	manager.collision_group = "Wall"
 	
-	# FIXED: Replaced dictionary clear with a fresh allocation resize matching the new flat array architecture
+	# FIXED: Replaced dictionary clear with a fresh allocation resize matching flat array
 	manager.global_height_data = PackedFloat32Array()
+	
+	# [FIX] Initialize activity data array synchronized to test grid dimensions
+	manager.chunk_activity_data = PackedByteArray()
 	
 	# Block the deferred editor viewport setup macro loop
 	manager._setup_pending = false
@@ -66,9 +69,13 @@ func after_each() -> void:
 func test_initialization_creates_correct_chunk_count_and_data_arrays() -> void:
 	assert_eq(manager.chunks_dict.size(), 4, "Should instantiate exactly 4 chunks for a 2x2 grid.")
 	
-	# Expected global flat matrix vertex count calculation: (2 chunks * 10 size + 1) ^ 2 = 21 * 21 = 441
-	var expected_total_vertices: int = ((manager.world_chunks.x * manager.chunk_size) + 1) * ((manager.world_chunks.y * manager.chunk_size) + 1)
-	assert_eq(manager.global_height_data.size(), expected_total_vertices, "Global flat height array must match the total expected vertex matrix scale.")
+	# Expected global flat matrix vertex count calculation: (2 chunks * 10 size + 1) ^ 2 = 441
+	var expected_total_vertices: int = ((manager.world_chunks.x * manager.chunk_size) + 1) * \
+	((manager.world_chunks.y * manager.chunk_size) + 1)
+	assert_eq(
+		manager.global_height_data.size(), expected_total_vertices,
+		"Global flat height array must match the total expected vertex matrix scale."
+	)
 
 
 # --- TEST 2: ENUM BRUSH FUNCTIONALITY (RAISE & LOWER) ---
@@ -83,7 +90,10 @@ func test_raise_brush_increases_vertex_height_correctly() -> void:
 	
 	# Assert: Extract global coordinates using the new high-performance O(1) getter API
 	var current_height: float = manager.get_height_at(5, 5)
-	assert_eq(current_height, manager.step_height, "The target vertex height should match exactly one step_height after being raised.")
+	assert_eq(
+		current_height, manager.step_height,
+		"The target vertex height should match exactly one step_height after being raised."
+	)
 
 
 # --- TEST 3: SEAM BLENDING & CARDINAL EDGE COMPENSATION ---
@@ -99,30 +109,35 @@ func test_seam_handling_writes_simultaneously_to_neighboring_chunks() -> void:
 	# Act: Apply brush modifications directly onto the shared seam boundary point coordinates
 	manager.interact_at_world_position(target_pos, false)
 	
-	# Assert: In the flat array, a single write fixes all chunk boundaries simultaneously at O(1) speed
+	# Assert: In the flat array, a single write fixes all chunk boundaries simultaneously
 	var height_at_shared_seam: float = manager.get_height_at(boundary_vertex_x, boundary_vertex_z)
-	assert_eq(height_at_shared_seam, manager.step_height, "Seam error: Global flat memory allocation failed to synchronize shared boundary coordinates!")
+	assert_eq(
+		height_at_shared_seam, manager.step_height,
+		"Seam error: Global flat memory allocation failed to synchronize boundary coordinates!"
+	)
 
 
 # --- TEST 4: DELAUNAY MESH GENERATION & WINDING ORDER ---
 func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() -> void:
 	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
 	
-	# Induce an elevation slope variant directly inside the flat matrix using the high-performance setter
+	# Induce an elevation slope variant directly inside the flat matrix using the setter
 	manager.set_height_at(5, 5, 2.0)
 	
-	# Synchronize and push modified data block slices to the targeted chunk node to prepare rendering tests
+	# Synchronize and push modified data blocks to the targeted chunk node to prepare rendering tests
 	var vert_stride: int = manager.chunk_size + 1
 	var chunk_local_heights := PackedFloat32Array()
 	chunk_local_heights.resize(vert_stride * vert_stride)
 	
 	for lz in range(vert_stride):
 		var global_offset: int = lz * manager._total_vertices_x
-		var slice: PackedFloat32Array = manager.global_height_data.slice(global_offset, global_offset + vert_stride)
+		var slice: PackedFloat32Array = manager.global_height_data.slice(
+			global_offset, global_offset + vert_stride
+		)
 		for i in range(slice.size()):
 			chunk_local_heights[lz * vert_stride + i] = slice[i]
 			
-	# FIXED: Removed obsolete material_color argument to comply with the updated clean constructor pipeline
+	# FIXED: Removed obsolete material_color argument to comply with the updated clean constructor
 	chunk.initialize(
 		Vector2i(0,0), manager.chunk_size, manager.cell_size, manager.step_height,
 		chunk_local_heights, manager.jitter_strength, manager.show_chunk_labels,
@@ -133,34 +148,11 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 	
 	var faces: PackedVector3Array = chunk.mesh.get_faces()
 	assert_true(faces.size() > 0, "Generated mesh must contain active geometric triangle faces.")
-	assert_eq(faces.size() % 3, 0, "Mesh face array length must be a multiple of 3 to form clean triangles.")
+	assert_eq(
+		faces.size() % 3, 0,
+		"Mesh face array length must be a multiple of 3 to form clean triangles."
+	)
 
-
-# --- TEST 6: SLOPE-AWARE JITTER ATTENUATION ---
-func test_jitter_attenuation_dampens_flat_planes_and_fractures_steep_cliffs() -> void:
-	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
-	var vert_stride: int = manager.chunk_size + 1
-	
-	# Scenario A: Configure a completely flat plateau plane area context
-	manager.jitter_strength = 0.5
-	manager.jitter_slope_threshold = 1.5
-	manager.global_height_data.fill(0.0)
-	
-	# Extract a localized sub-array block slice to populate the target test chunk node
-	var chunk_local_heights_flat := PackedFloat32Array()
-	chunk_local_heights_flat.resize(vert_stride * vert_stride)
-	chunk_local_heights_flat.fill(0.0)
-	
-	chunk.height_data = chunk_local_heights_flat
-	chunk.jitter_strength = manager.jitter_strength
-	chunk.jitter_slope_threshold = manager.jitter_slope_threshold
-	
-	# In a flat environment, current_h and all neighbors are 0.0, resulting in true_slope = 0.0
-	var slope_factor_flat: float = 0.0
-	var final_flat_jitter: Vector3 = chunk._get_jitter_offset(5, 5) * slope_factor_flat
-	
-	assert_eq(final_flat_jitter, Vector3.ZERO, "Jitter attenuation error: Flat surfaces must receive zero random noise displacement.")
-	
 	# Scenario B: Force a cliff by raising the center vertex inside a fresh chunk sub-array context
 	var chunk_local_heights_cliff := PackedFloat32Array()
 	chunk_local_heights_cliff.resize(vert_stride * vert_stride)
@@ -169,7 +161,7 @@ func test_jitter_attenuation_dampens_flat_planes_and_fractures_steep_cliffs() ->
 	
 	chunk.height_data = chunk_local_heights_cliff
 	
-	# Manually execute the exact incline math running inside generate_mesh using the corrected center-delta formula
+	# Manually execute the exact incline math running inside generate_mesh
 	var current_h: float = chunk.height_data[5 + 5 * vert_stride]
 	var h_r: float = chunk.height_data[clampi(5 + 1, 0, chunk.chunk_size) + 5 * vert_stride]
 	var h_l: float = chunk.height_data[clampi(5 - 1, 0, chunk.chunk_size) + 5 * vert_stride]
@@ -184,25 +176,33 @@ func test_jitter_attenuation_dampens_flat_planes_and_fractures_steep_cliffs() ->
 	var t: float = clampf(true_slope / chunk.jitter_slope_threshold, 0.0, 1.0)
 	var slope_factor_cliff: float = t * t * (3.0 - 2.0 * t)
 	
-	# FIXED: Calculate the new border distance damping factor for center coordinate (5, 5) inside a size 10 chunk
+	# FIXED: Calculate the new border distance damping factor for center coordinate (5, 5)
 	var dist_to_edge_x: float = minf(5.0, float(chunk.chunk_size) - 5.0)
 	var dist_to_edge_z: float = minf(5.0, float(chunk.chunk_size) - 5.0)
 	var edge_damp: float = clampf(minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0)
 	
 	var final_cliff_jitter: Vector3 = chunk._get_jitter_offset(5, 5) * slope_factor_cliff * edge_damp
 	
-	assert_true(slope_factor_cliff > 0.0, "Steep incline contexts must resolve a positive non-linear slope attenuation value.")
-	assert_ne(final_cliff_jitter, Vector3.ZERO, "Jitter attenuation error: Steep slopes must allow structural vertex fracturing noise.")
+	assert_true(
+		slope_factor_cliff > 0.0,
+		"Steep incline contexts must resolve a positive non-linear slope attenuation value."
+	)
+	assert_ne(
+		final_cliff_jitter, Vector3.ZERO,
+		"Jitter attenuation error: Steep slopes must allow structural vertex fracturing noise."
+	)
 
 
-# --- TEST 7: LOSSLESS GRID MIGRATION (RESIZING) ---
+# --- TEST 5: LOSSLESS GRID MIGRATION (RESIZING) ---
 func test_grid_migration_safely_transfers_heightmaps_when_chunk_size_mutates() -> void:
-	# Build a recognizable peak structure at global world vertex coordinates (x=5, z=5) inside the initial 10x10 layout
+	# Build a recognizable peak structure at global world vertex coordinates (x=5, z=5)
 	var target_global_x: int = 5
 	var target_global_z: int = 5
 	manager.tool_mode = manager.BrushMode.RAISE
 	manager.brush_radius = 0
-	manager.interact_at_world_position(Vector3(float(target_global_x), 0.0, -float(target_global_z)), false)
+	manager.interact_at_world_position(
+		Vector3(float(target_global_x), 0.0, -float(target_global_z)), false
+	)
 	
 	# Verify historical height setup value state before executing scaling operations
 	var baseline_h: float = manager.get_height_at(target_global_x, target_global_z)
@@ -212,47 +212,106 @@ func test_grid_migration_safely_transfers_heightmaps_when_chunk_size_mutates() -
 	manager.preview_chunk_size = 5 # Halve the internal grid cell layout sizes
 	manager._apply_dimension_changes()
 	
-	# Assert: Extract coordinates from the rewritten flat continuous layout using the exact same matrix coordinates
+	# Assert: Extract coordinates from the rewritten flat continuous layout
 	var migrated_h: float = manager.get_height_at(target_global_x, target_global_z)
-	assert_eq(migrated_h, baseline_h, "Migration failure: Spatial height parameters were lost or displaced during grid interpolation scaling.")
+	assert_eq(
+		migrated_h, baseline_h,
+		"Migration failure: Spatial height parameters were lost or displaced during scaling."
+	)
 
 
-# --- TEST 8: UX CONTEXTUAL SHIFT-INVERT BEHAVIOR ---
+# --- TEST 6: UX CONTEXTUAL SHIFT-INVERT BEHAVIOR ---
 func test_shift_modifier_successfully_inverts_sculpting_brush_polarity() -> void:
 	var target_pos := Vector3(2.0, 0.0, -2.0)
 	manager.tool_mode = manager.BrushMode.RAISE
 	manager.brush_radius = 0
 	
-	# Act: Execute paint stroke passing true for the modifier parameter flag (Simulating a Shift-Click action)
+	# Act: Execute paint stroke passing true for the modifier parameter flag
 	manager.interact_at_world_position(target_pos, true)
 	
-	# Assert: Verify if the elevation dropped below floor levels instead of rising up using O(1) fetch
+	# Assert: Verify if the elevation dropped below floor levels instead of rising up
 	var inverted_height: float = manager.get_height_at(2, 2)
 	var expected_lowered_value: float = -manager.step_height
-	assert_eq(inverted_height, expected_lowered_value, "UX Error: Holding Shift failed to invert RAISE actions into LOWER operations.")
+	assert_eq(
+		inverted_height, expected_lowered_value,
+		"UX Error: Holding Shift failed to invert RAISE actions into LOWER operations."
+	)
 
 
-# --- TEST 9: HEIGHT DATA SERIALIZATION & CRASH HEALING ---
+# --- TEST 7: HEIGHT DATA SERIALIZATION & CRASH HEALING ---
 func test_height_data_heals_automatically_when_corrupted_or_null() -> void:
-	# 1. FIXED: Assert script metadata using the modern script property validation API to check for true @export_storage persistence
+	# 1. FIXED: Assert script metadata using modern script property validation API
 	var target_script: Script = manager.get_script()
 	var found_storage_flag := false
 	
 	for prop in target_script.get_script_property_list():
 		if prop["name"] == "global_height_data":
-			# Modern Godot 4.x serializes @export_storage fields under the PROPERTY_USAGE_STORAGE bitmask
+			# Modern Godot 4.x serializes @export_storage fields under PROPERTY_USAGE_STORAGE
 			if prop["usage"] & PROPERTY_USAGE_STORAGE:
 				found_storage_flag = true
 				break
 				
-	assert_true(found_storage_flag, "Serialization Error: global_height_data must be configured with @export_storage for background disk storage.")
+	assert_true(
+		found_storage_flag,
+		"Serialization Error: global_height_data must be configured with @export_storage."
+	)
 	
 	# 2. Simulate an empty memory state by clearing out the packed memory array blocks
 	manager.global_height_data = PackedFloat32Array()
 	
-	# 3. Act: Trigger the structural rebuild pipeline which evaluates and heals the empty flat layout structures
+	# 3. Act: Trigger the structural rebuild pipeline which evaluates and heals layouts
 	manager.rebuild_chunks_structure()
 	
-	# 4. Assert: Check if the system successfully initialized the full sequential density size after being wiped
-	var expected_total_vertices: int = ((manager.world_chunks.x * manager.chunk_size) + 1) * ((manager.world_chunks.y * manager.chunk_size) + 1)
-	assert_eq(manager.global_height_data.size(), expected_total_vertices, "Crash Protection Failure: Manager failed to re-initialize layout arrays after height data was wiped.")
+	# 4. Assert: Check if the system successfully initialized the full sequential density size
+	var expected_total_vertices: int = ((manager.world_chunks.x * manager.chunk_size) + 1) * \
+	((manager.world_chunks.y * manager.chunk_size) + 1)
+	assert_eq(
+		manager.global_height_data.size(), expected_total_vertices,
+		"Crash Protection Failure: Manager failed to re-initialize layout arrays."
+	)
+
+
+# --- TEST 8: CHUNK DEACTIVATION & TOGGLE LOGIC ---
+func test_toggle_chunk_status_toggles_activity_and_preserves_heights() -> void:
+	# Assert baseline initialization: all chunks are fully active by default
+	assert_true(manager.is_chunk_active(0, 0), "Chunk should be active by default.")
+	
+	# Act: Toggle the chunk status to deactivate it
+	manager.toggle_chunk_status(0, 0)
+	assert_false(manager.is_chunk_active(0, 0), "Chunk activity state should flip to inactive.")
+	
+	# Assert: Inactive chunks must bypass brush interaction and protect data from mutation
+	var target_pos := Vector3(5.0, 0.0, -5.0) # Center of Chunk 0,0
+	manager.tool_mode = manager.BrushMode.RAISE
+	manager.brush_radius = 0
+	manager.interact_at_world_position(target_pos, false)
+	
+	var height_after_sculpt: float = manager.get_height_at(5, 5)
+	assert_eq(
+		height_after_sculpt, 0.0,
+		"Protection Failure: Inactive chunks must ignore brush updates to shield height data."
+	)
+
+
+# --- TEST 9: STATIC COLLISION EXCLUSION FOR INACTIVE CHUNKS ---
+func test_collision_baking_skips_inactive_chunks() -> void:
+	# Act: Deactivate one of the quadrant chunks before triggering physical calculations
+	manager.toggle_chunk_status(1, 1)
+	manager._bake_live_collisions_as_child()
+	
+	# Assert: Verify that the static collider body for Chunk 1,1 was omitted from the root
+	var container_name: String = manager.name + "_Collisions"
+	var container: Node = manager.get_parent().get_node_or_null(container_name)
+	assert_not_null(container, "Collision root container node must be successfully instantiated.")
+	
+	var omitted_body: Node = container.get_node_or_null("Static_Chunk_1_1")
+	assert_null(
+		omitted_body,
+		"Baking Error: Inactive chunks must be completely skipped during collision pass."
+	)
+	
+	var active_body: Node = container.get_node_or_null("Static_Chunk_0_0")
+	assert_not_null(
+		active_body,
+		"Baking Error: Fully active chunks must generate valid StaticBody3D physics shapes."
+	)

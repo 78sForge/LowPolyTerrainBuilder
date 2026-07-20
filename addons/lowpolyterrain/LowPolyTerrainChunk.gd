@@ -5,7 +5,7 @@ class_name LowPolyTerrainChunk
 ## Runtime rendering child node. Gathers geofenced points, performs dynamic edge decimation,
 ## injects slope-aware vertex jittering, and triangulates organic low-poly meshes via Delaunay.
 
-var chunk_coord: Vector2i = Vector2i.ZERO
+@export_storage var chunk_coord: Vector2i = Vector2i.ZERO
 @export var chunk_size: int = 20
 @export var cell_size: float = 0.5
 @export var step_height: float = 0.1
@@ -39,6 +39,17 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 	jitter_slope_threshold = m_threshold
 	custom_material = m_material
 	
+	# [FIX] Ensure the visibility state from the manager is respected on scene load
+	if not visible:
+		if Engine.is_editor_hint():
+			# If we are in editor, force visibility back to true so the placeholder mesh can be clicked
+			visible = true
+		else:
+			mesh = null
+			for child in get_children():
+				if child is Label3D: child.free()
+			return
+	
 	var vert_count: int = chunk_size + 1
 	var required_size: int = vert_count * vert_count
 	
@@ -46,7 +57,11 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 		height_data.resize(required_size)
 		height_data.fill(0.0)
 	
-	position = Vector3(float(coord.x * chunk_size) * cell_size, 0.0, float(-coord.y * chunk_size) * cell_size)
+	position = Vector3(
+		float(coord.x * chunk_size) * cell_size,
+		0.0,
+		float(-coord.y * chunk_size) * cell_size
+	)
 	generate_mesh()
 	
 	if Engine.is_editor_hint():
@@ -57,10 +72,13 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 				if child is Label3D: child.free()
 
 
+
 ## Core geometry geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 func generate_mesh() -> void:
-	if height_data.is_empty(): return
+	if height_data.is_empty() or not visible:
+		mesh = null
+		return
 	var vert_count: int = chunk_size + 1
 	
 	var st := SurfaceTool.new()
@@ -74,7 +92,9 @@ func generate_mesh() -> void:
 	for z in range(vert_count):
 		for x in range(vert_count):
 			var is_edge: bool = (x == 0 or x == chunk_size or z == 0 or z == chunk_size)
-			var is_corner: bool = ((x == 0 or x == chunk_size) and (z == 0 or z == chunk_size))
+			var is_corner: bool = (
+				(x == 0 or x == chunk_size) and (z == 0 or z == chunk_size)
+			)
 			
 			var current_h: float = height_data[x + z * vert_count]
 			
@@ -85,7 +105,8 @@ func generate_mesh() -> void:
 				var h_l: float = height_data[(x-1) + z * vert_count]
 				var h_d: float = height_data[x + (z+1) * vert_count]
 				var h_u: float = height_data[x + (z-1) * vert_count]
-				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
+				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and \
+				is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
 					is_flat_center = true
 					
 			# Boundary edge decimation designed to bypass the spiderweb artifact pattern
@@ -139,7 +160,9 @@ func generate_mesh() -> void:
 				var dist_to_edge_x: float = minf(x, chunk_size - x)
 				var dist_to_edge_z: float = minf(z, chunk_size - z)
 				# Scales smoothly from 0.0 (edge) to 1.0 (center) over a 2-vertex safety margin
-				var edge_damp: float = clampf(minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0)
+				var edge_damp: float = clampf(
+					minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0
+				)
 				
 				# Final jitter computation combining both attenuation factors
 				jitter = _get_jitter_offset(x, z) * slope_factor * edge_damp
@@ -149,10 +172,11 @@ func generate_mesh() -> void:
 			
 			points_2d.append(Vector2(pos_x, pos_z))
 			points_3d.append(Vector3(pos_x, current_h, pos_z))
-			
+	
 	# --- STEP 2: GODOT DELAUNAY TRIANGULATION ---
 	var triangles: PackedInt32Array = Geometry2D.triangulate_delaunay(points_2d)
 	if triangles.size() == 0: 
+		mesh = null
 		return
 		
 	# --- STEP 3: ASSEMBLE MESH GEOMETRY ---
@@ -188,7 +212,6 @@ func generate_mesh() -> void:
 	_apply_custom_shader()
 
 
-
 ## Generates pseudo-random, mathematically reproducible coordinate shifts using sine trigonometry hashes.
 func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	if is_zero_approx(jitter_strength): return Vector3.ZERO
@@ -200,16 +223,17 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	var random_z: float = (hash_z - floorf(hash_z)) * 2.0 - 1.0
 	
 	# NOTE: Jitter strength multiplication now executes directly within the base calculator
-	return Vector3(random_x * cell_size * jitter_strength, 0.0, -random_z * cell_size * jitter_strength)
+	return Vector3(
+		random_x * cell_size * jitter_strength,
+		0.0,
+		-random_z * cell_size * jitter_strength
+	)
 
 
 ####################################################################################################
 ## Maps the user-defined inspector material allocation directly to the mesh instance.
 func _apply_custom_shader() -> void:
 	material_override = custom_material
-
-	
-
 
 
 ## Refreshes and instantiates persistent runtime node labels mapping structural coordinates within the viewport.
@@ -231,11 +255,13 @@ func _update_editor_label() -> void:
 	label.position = Vector3(half_bounds, 2.0, -half_bounds)
 
 
-
-
 ## Generates runtime physical collider shape matrices aligned with the generated mesh.
 func bake_collision(scene_root: Node) -> void:
-	if not mesh: return
+	if not mesh or not visible:
+		for child in get_children():
+			if child is StaticBody3D: child.free()
+		return
+		
 	for child in get_children():
 		if child is StaticBody3D: child.free()
 		

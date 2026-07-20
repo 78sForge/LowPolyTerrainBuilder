@@ -25,32 +25,42 @@ var world_chunks: Vector2i = Vector2i(5, 5)
 var chunk_size: int = 10
 var cell_size: float = 1.0
 
+## Tracks visibility and collision activation state per chunk.
+## Size matches (world_chunks.x * world_chunks.y). 1 = Active, 0 = Inactive.
+@export_storage var chunk_activity_data: PackedByteArray = PackedByteArray()
+
+
 @export_group(GROUP_DIMENSIONS)
 ## Defines the dimensions of the map grid measured in total chunks (Width, Length).
 @export var preview_world_chunks: Vector2i = Vector2i(5, 5):
 	set(v): preview_world_chunks = v; _update_read_only_metrics()
 
-## Defines the vertex density per chunk. Higher values create more triangles per chunk but reduce performance.
+## Defines the vertex density per chunk. Higher values create more triangles per chunk
+## but reduce performance.
 @export var preview_chunk_size: int = 10:
 	set(v): preview_chunk_size = v; _update_read_only_metrics()
 
-## The spatial size of a single grid cell in meters. Scales the horizontal expansion of the entire terrain.
+## The spatial size of a single grid cell in meters. Scales the horizontal expansion
+## of the entire terrain.
 @export var preview_cell_size: float = 1.0:
 	set(v): 
 		preview_cell_size = v
 		_update_read_only_metrics()
 		signal_brush_settings_changed.emit()
 
-## If enabled, renders 3D text overlays inside the editor viewport showing the coordinates of each active chunk.
+## If enabled, renders 3D text overlays inside the editor viewport showing the coordinates
+## of each active chunk.
 @export var show_chunk_labels: bool = false:
 	set(v): show_chunk_labels = v; _queue_setup()
 	
 # REAL INSPECTOR BUTTONS: Resolved via safe Lambda Callables to prevent early parsing errors
-## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size. Warning: Shrinking boundaries will delete out-of-bounds data!
+## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size.
+## Warning: Shrinking boundaries will delete out-of-bounds data!
 @export_tool_button("Apply Dimension Changes", "Node3D")
 var apply_dimensions_button: Callable = func() -> void: _apply_dimension_changes()
 
-## Automatically shifts this manager's global position to align the geometric center of the terrain perfectly with the scene origin (0,0,0).
+## Automatically shifts this manager's global position to align the geometric center of the
+## terrain perfectly with the scene origin (0,0,0).
 @export_tool_button("Center Global Position", "Marker3D")
 var center_global_position_button: Callable = func() -> void: _center_global_position_to_origin()
 
@@ -69,7 +79,8 @@ var center_global_position_button: Callable = func() -> void: _center_global_pos
 		var per_chunk: int = (preview_chunk_size + 1) * (preview_chunk_size + 1)
 		return per_chunk * (preview_world_chunks.x * preview_world_chunks.y)
 
-## Seamlessly offsets this node's global transform to center the active terrain dimensions around the scene root origin.
+## Seamlessly offsets this node's global transform to center the active terrain dimensions
+## around the scene root origin.
 func _center_global_position_to_origin() -> void:
 	if not Engine.is_editor_hint(): return
 	
@@ -79,7 +90,8 @@ func _center_global_position_to_origin() -> void:
 	var world_width_x: float = total_size_meters.x
 	var world_length_z: float = total_size_meters.y
 	
-	# Apply the exact inverse half-bounds offset to shift the spatial layout perfectly onto the origin matrix
+	# Apply the exact inverse half-bounds offset to shift the spatial layout perfectly
+	# onto the origin matrix
 	global_position.x = -world_width_x / 2.0
 	global_position.z = world_length_z / 2.0
 	
@@ -87,22 +99,26 @@ func _center_global_position_to_origin() -> void:
 	notify_property_list_changed()
 
 
-## Triggers an instant inspector refresh to update calculated read-only size metrics in real-time.
+## Triggers an instant inspector refresh to update calculated read-only size metrics
+## in real-time.
 func _update_read_only_metrics() -> void:
 	if Engine.is_editor_hint():
 		notify_property_list_changed()
 
 
 @export_group("Terrain Properties")
-## The exact vertical increment (in meters) applied to vertices when using the Raise, Lower, or Flatten brushes.
+## The exact vertical increment (in meters) applied to vertices when using the Raise, Lower,
+## or Flatten brushes.
 @export var step_height: float = 0.2:
 	set(v): step_height = v; _queue_setup(); signal_brush_settings_changed.emit()
 
-## Controls the intensity of random vertex displacement. Higher values break up the grid for a more organic Delaunay look.
+## Controls the intensity of random vertex displacement. Higher values break up the grid
+## for a more organic Delaunay look.
 @export_range(0.0, 0.5, 0.05) var jitter_strength: float = 0.5:
 	set(v): jitter_strength = v; _queue_setup()
 
-## The slope incline threshold. Steep cliffs exceeding this value receive full jitter, while gentle slopes and flat planes are dampened to prevent noise.
+## The slope incline threshold. Steep cliffs exceeding this value receive full jitter,
+## while gentle slopes and flat planes are dampened to prevent noise.
 @export_range(0.05, 2.0, 0.05) var jitter_slope_threshold: float = 1.5:
 	set(v): jitter_slope_threshold = v; _queue_setup()
 
@@ -117,11 +133,13 @@ func _update_read_only_metrics() -> void:
 
 ## Defines the available sculpting tool profiles for terrain interaction.
 enum BrushMode {
-	RAISE = 0,   ## Elevates vertices by the step_height
-	LOWER = 1,   ## Lowers vertices by the step_height
-	FLATTEN = 2, ## Snaps vertices to the initial click elevation
-	SMOOTH = 3   ## Blurs and softens adjacent vertex elevations
+	RAISE = 0,       ## Elevates vertices by the step_height
+	LOWER = 1,       ## Lowers vertices by the step_height
+	FLATTEN = 2,     ## Snaps vertices to the initial click elevation
+	SMOOTH = 3,      ## Blurs and softens adjacent vertex elevations
+	TOGGLE_CHUNK = 4 ## Toggles visibility and collision of a whole chunk via click
 }
+
 
 @export_group("Brush Tools")
 ## Selects the active sculpting tool interaction profile: Raise, Lower, Flatten, or Smooth.
@@ -135,11 +153,14 @@ enum BrushMode {
 
 
 @export_group("Terrain Smoothing")
-## Blending weight factor used during smoothing operations. Higher values result in more aggressive terrain blurring per pass.
+## Blending weight factor used during smoothing operations. Higher values result in more
+## aggressive terrain blurring per pass.
 @export_range(0.0, 1.0, 0.05) var smooth_factor: float = 0.5
-## Determines how many consecutive iterations the global smoothing algorithm executes back-to-back when clicked.
+## Determines how many consecutive iterations the global smoothing algorithm executes back-to-back
+## when clicked.
 @export_range(1, 10, 1) var smooth_iterations: int = 1
-## Click to run a global smoothing pass over the entire map. Blurs and softens all terrain hills based on the smoothing settings below.
+## Click to run a global smoothing pass over the entire map. Blurs and softens all terrain hills
+## based on the smoothing settings below.
 @export_tool_button("Smooth Entire Terrain", "Mesh")
 var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 
@@ -151,9 +172,30 @@ var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 ## The scene group name assigned to every generated static collision node. Default is "Wall".
 @export var collision_group: String = "Wall"
 
-## Bakes static physical colliders for all visible chunks. Generates a permanent container node directly parallel to this manager.
+## Bakes static physical colliders for all visible chunks. Generates a permanent container node
+## directly parallel to this manager.
 @export_tool_button("Bake Live Collisions", "StaticBody3D")
 var bake_collisions_button: Callable = func() -> void: _bake_live_collisions_as_child()
+
+
+## Helper function to check if a chunk at specific grid coordinates is currently active.
+func is_chunk_active(cx: int, cz: int) -> bool:
+	if cx < 0 or cx >= world_chunks.x or cz < 0 or cz >= world_chunks.y:
+		return false
+	var index := cz * world_chunks.x + cx
+	if index >= chunk_activity_data.size():
+		return true
+	return chunk_activity_data[index] == 1
+
+
+## Toggles activation state of a chunk at specific coordinates and requests visual rebuild.
+func toggle_chunk_status(cx: int, cz: int) -> void:
+	if cx < 0 or cx >= world_chunks.x or cz < 0 or cz >= world_chunks.y:
+		return
+	var index := cz * world_chunks.x + cx
+	if index < chunk_activity_data.size():
+		chunk_activity_data[index] = 0 if chunk_activity_data[index] == 1 else 1
+		_queue_setup()
 
 
 # --- PERFORMANCE CRITICAL: Flattened array structure instead of Dictionary ---
@@ -164,18 +206,15 @@ var _total_vertices_x: int = 0
 var _total_vertices_z: int = 0
 
 @export_group("Data Export")
-## The target path within your project where the generated terrain mesh will be saved as a GLTF file.
+## The target path within your project where the generated terrain mesh will be saved
+## as a GLTF file.
 @export var export_target_path: String = "res://terrain_export.gltf"
 
-## Click to open a native Editor Save Dialog where you can choose a folder and name a new GLTF file.
+## Click to open a native Editor Save Dialog where you can choose a folder and name
+## a new GLTF file.
 @export_tool_button("Choose Path & Export Terrain", "Save")
 var export_gltf_button: Callable:
 	get: return func() -> void: if has_method("_open_export_dialog"): call("_open_export_dialog")
-
-
-
-####################################################################################################
-
 
 
 ## Spawns an integrated Editor FileDialog configured exclusively for naming new assets.
@@ -234,7 +273,8 @@ func _apply_default_shader_fallback() -> void:
 
 
 func _ready() -> void:
-	# Synchronize active operational variables with serialized preview settings on load to guarantee structural persistence
+	# Synchronize active operational variables with serialized preview settings on load to
+	# guarantee structural persistence
 	world_chunks = preview_world_chunks
 	chunk_size = preview_chunk_size
 	cell_size = preview_cell_size
@@ -245,9 +285,11 @@ func _ready() -> void:
 	# Compute the dynamic expected collision container name to match the structural safety rules
 	var dynamic_collision_name: String = name + "_Collisions"
 	
-	# Purge old visual RAM chunk nodes on startup, while protecting transient brush gizmos, collisions, and assets
+	# Purge old visual RAM chunk nodes on startup, while protecting transient brush gizmos,
+	# collisions, and assets
 	for child in get_children():
-		if child.name == dynamic_collision_name or child.name == "DEBUG_BrushGizmo_Transient" or child.name == "Terrain_Assets":
+		if child.name == dynamic_collision_name or child.name == "DEBUG_BrushGizmo_Transient" \
+		or child.name == "Terrain_Assets":
 			continue
 		child.free()
 		
@@ -265,7 +307,12 @@ func _ready() -> void:
 	if global_height_data.is_empty():
 		_initialize_empty_grid()
 		
+	if chunk_activity_data.is_empty():
+		chunk_activity_data.resize(world_chunks.x * world_chunks.y)
+		chunk_activity_data.fill(1)
+		
 	rebuild_chunks_structure()
+
 
 
 func _queue_setup() -> void:
@@ -300,6 +347,9 @@ func _initialize_empty_grid() -> void:
 	var total_cells: int = _total_vertices_x * _total_vertices_z
 	global_height_data.resize(total_cells)
 	global_height_data.fill(0.0)
+	
+	chunk_activity_data.resize(world_chunks.x * world_chunks.y)
+	chunk_activity_data.fill(1)
 
 
 ## Safeguards world changes by prompting warning logs and transferring active preview parameters.
@@ -312,9 +362,16 @@ func _apply_dimension_changes() -> void:
 	_migrate_grid_data()
 
 
+####################################################################################################
+
+
 ## Lossless Grid Migration Pipeline: Safely transforms and scales the continuous 
 ## data memory blocks without dropping height values across modified grid matrices.
 func _migrate_grid_data() -> void:
+	var old_chunks_x: int = world_chunks.x
+	var old_chunks_y: int = world_chunks.y
+	var old_activity_data: PackedByteArray = chunk_activity_data.duplicate()
+	
 	var old_vertices_x: int = _total_vertices_x
 	var old_vertices_z: int = _total_vertices_z
 	var old_height_data: PackedFloat32Array = global_height_data.duplicate()
@@ -331,6 +388,19 @@ func _migrate_grid_data() -> void:
 	var new_height_data := PackedFloat32Array()
 	new_height_data.resize(new_total_cells)
 	new_height_data.fill(0.0)
+	
+	var new_activity_data := PackedByteArray()
+	new_activity_data.resize(world_chunks.x * world_chunks.y)
+	new_activity_data.fill(1)
+	
+	for cz in range(world_chunks.y):
+		for cx in range(world_chunks.x):
+			var new_chunk_idx: int = cz * world_chunks.x + cx
+			if cx < old_chunks_x and cz < old_chunks_y and not old_activity_data.is_empty():
+				var old_chunk_idx: int = cz * old_chunks_x + cx
+				new_activity_data[new_chunk_idx] = old_activity_data[old_chunk_idx]
+	
+	chunk_activity_data = new_activity_data
 	
 	# Direct coordinate block-copy intersection pipeline
 	for z in range(_total_vertices_z):
@@ -349,9 +419,6 @@ func _migrate_grid_data() -> void:
 	signal_brush_settings_changed.emit()
 
 
-####################################################################################################
-
-
 ## Cleans, tracks, and instantiates RAM-only chunks, assigning localized sub-arrays 
 ## extracted from the global packed continuous float matrix layout.
 func rebuild_chunks_structure() -> void:
@@ -361,18 +428,35 @@ func rebuild_chunks_structure() -> void:
 	if global_height_data.is_empty():
 		_initialize_empty_grid()
 		
+	if chunk_activity_data.is_empty():
+		chunk_activity_data.resize(world_chunks.x * world_chunks.y)
+		chunk_activity_data.fill(1)
+		
 	_recalculate_matrix_bounds()
 	
 	# 1. HARD CLEANUP: Remove ANY child chunk that falls outside the active world size boundaries
 	var dynamic_collision_name: String = name + "_Collisions"
 	chunks_dict.clear()
+	
+	# Pre-calculate spatial stride to safely reverse-engineer coordinates from world positions
+	var meters_per_chunk: float = float(chunk_size) * cell_size
+	
 	for child in get_children():
 		# Protect vital infrastructure containers from being wiped during resize passes
-		if child.name == "DEBUG_BrushGizmo_Transient" or child.name == dynamic_collision_name or child.name == "Terrain_Assets":
+		if child.name == "DEBUG_BrushGizmo_Transient" or child.name == dynamic_collision_name \
+		or child.name == "Terrain_Assets":
 			continue
 			
 		if child is LowPolyTerrainChunk and not child.name.contains("@"):
 			var coord: Vector2i = child.chunk_coord
+			
+			# Robust position-based healing fallback for scene loading sequence synchronization
+			if coord == Vector2i.ZERO and not is_zero_approx(meters_per_chunk):
+				var cx_pos: int = roundi(child.position.x / meters_per_chunk)
+				var cz_pos: int = roundi(-child.position.z / meters_per_chunk)
+				coord = Vector2i(cx_pos, cz_pos)
+				child.chunk_coord = coord
+			
 			if coord.x >= world_chunks.x or coord.y >= world_chunks.y:
 				child.free() 
 			else:
@@ -391,6 +475,12 @@ func rebuild_chunks_structure() -> void:
 	# 2. INITIALIZE REFRESHED CHUNK NODES & SYNC LOCAL HEIGHT SUB-ARRAYS
 	var vert_stride: int = chunk_size + 1
 	
+	# Guard against early engine initialization passes before storage array deserialization
+	var expected_total_chunks: int = world_chunks.x * world_chunks.y
+	if chunk_activity_data.size() < expected_total_chunks:
+		chunk_activity_data.resize(expected_total_chunks)
+		chunk_activity_data.fill(1)
+	
 	for cz in range(world_chunks.y):
 		for cx in range(world_chunks.x):
 			var coord := Vector2i(cx, cz)
@@ -401,6 +491,49 @@ func rebuild_chunks_structure() -> void:
 				new_chunk.chunk_coord = coord
 				add_child(new_chunk)
 				chunks_dict[coord] = new_chunk
+			
+			# [FIX] Assign the correct spatial 3D position BEFORE evaluating the activity status
+			chunks_dict[coord].position = Vector3(
+				float(cx * chunk_size) * cell_size,
+				0.0,
+				float(-cz * chunk_size) * cell_size
+			)
+			
+			# Check if the chunk is deactivated
+			if not is_chunk_active(cx, cz):
+				if Engine.is_editor_hint():
+					# Keep node visible in editor but assign a flat placeholder mesh for raycasting
+					chunks_dict[coord].visible = true
+					
+					var st_box := SurfaceTool.new()
+					st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+					
+					var w: float = float(chunk_size) * cell_size
+					var p0 := Vector3(0, 0.05, 0)
+					var p1 := Vector3(w, 0.05, 0)
+					var p2 := Vector3(w, 0.05, -w)
+					var p3 := Vector3(0, 0.05, -w)
+					
+					st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
+					st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
+					
+					chunks_dict[coord].mesh = st_box.commit()
+					
+					# Assign a semi-transparent red material for clear editor feedback
+					var red_mat := StandardMaterial3D.new()
+					red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
+					red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+					chunks_dict[coord].material_override = red_mat
+				else:
+					# Completely hide and purge mesh data in the actual game build
+					chunks_dict[coord].visible = false
+					if "mesh" in chunks_dict[coord]:
+						chunks_dict[coord].mesh = null
+				continue
+				
+			# If activated, reset visibility and material overrides
+			chunks_dict[coord].visible = true
+			chunks_dict[coord].material_override = null
 			
 			# Extract a localized PackedFloat32Array subset corresponding to this specific chunk layout
 			var chunk_local_heights := PackedFloat32Array()
@@ -413,7 +546,9 @@ func rebuild_chunks_structure() -> void:
 				var global_offset: int = global_z * _total_vertices_x + (cx * chunk_size)
 				
 				# Fast bulk block memory copying optimization using built-in C++ slice mechanics
-				var slice: PackedFloat32Array = global_height_data.slice(global_offset, global_offset + vert_stride)
+				var slice: PackedFloat32Array = global_height_data.slice(
+					global_offset, global_offset + vert_stride
+				)
 				for i in range(slice.size()):
 					chunk_local_heights[local_offset + i] = slice[i]
 
@@ -429,10 +564,6 @@ func rebuild_chunks_structure() -> void:
 				jitter_slope_threshold,
 				custom_material
 			)
-
-
-
-####################################################################################################
 
 ## Global multi-pass cross-filter operation that processes and blurs the entire grid structure smoothly.
 func _smooth_entire_terrain() -> void:
@@ -474,6 +605,12 @@ func _smooth_entire_terrain() -> void:
 		var chunk: LowPolyTerrainChunk = chunks_dict[coord]
 		if not chunk: continue
 		
+		if not is_chunk_active(coord.x, coord.y):
+			chunk.visible = false
+			continue
+			
+		chunk.visible = true
+		
 		var chunk_local_heights := PackedFloat32Array()
 		chunk_local_heights.resize(vert_stride * vert_stride)
 		
@@ -482,7 +619,9 @@ func _smooth_entire_terrain() -> void:
 			var local_offset: int = lz * vert_stride
 			var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
 			
-			var slice: PackedFloat32Array = global_height_data.slice(global_offset, global_offset + vert_stride)
+			var slice: PackedFloat32Array = global_height_data.slice(
+				global_offset, global_offset + vert_stride
+			)
 			for i in range(slice.size()):
 				chunk_local_heights[local_offset + i] = slice[i]
 				
@@ -496,67 +635,7 @@ func _smooth_entire_terrain() -> void:
 
 
 
-# Bakes and instantiates persistent physical collider nodes directly under the scene root.
-## FIXED: Dynamically applies user-defined collision layers and group configurations.
-func _bake_live_collisions_as_child() -> void:
-	var target_parent: Node = get_parent()
-	var scene_root: Node = null
-	
-	if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
-		scene_root = get_tree().edited_scene_root
-	else:
-		scene_root = target_parent
-		
-	if target_parent == null:
-		print("Baking cancelled: Manager has no parent to place siblings.")
-		return
-		
-	var dynamic_collision_name: String = name + "_Collisions"
-	print("Baking static collisions live parallel to manager as: %s" % dynamic_collision_name)
-	
-	var old_container: Node = target_parent.find_child(dynamic_collision_name, false, false)
-	if old_container:
-		old_container.free()
-		print("Successfully cleared historical collision nodes from parent.")
-		
-	var collision_root := Node3D.new()
-	collision_root.name = dynamic_collision_name
-	target_parent.add_child(collision_root)
-	
-	if Engine.is_editor_hint() and scene_root:
-		collision_root.set_owner(scene_root)
-	
-	for chunk in chunks_dict.values():
-		if chunk and chunk.mesh:
-			chunk.bake_collision(null)
-			
-			var static_body: StaticBody3D = chunk.find_child("Static_" + chunk.name, false, false) as StaticBody3D
-			if static_body:
-				chunk.remove_child(static_body)
-				collision_root.add_child(static_body)
-				
-				var half_bounds: float = (chunk.chunk_size * chunk.cell_size) / 2.0
-				var center_offset := Vector3(half_bounds, 0.0, -half_bounds)
-				static_body.global_position = chunk.global_position + center_offset
-				
-				for grp in static_body.get_groups():
-					static_body.remove_from_group(grp)
-					
-				static_body.collision_layer = collision_layer
-				static_body.collision_mask = 0 
-				
-				if not collision_group.strip_edges().is_empty():
-					static_body.add_to_group(collision_group, true)
-				
-				if Engine.is_editor_hint() and scene_root:
-					static_body.set_owner(scene_root)
-					for shape_child in static_body.get_children():
-						shape_child.set_owner(scene_root)
-						
-	print("Collisions successfully generated live and anchored parallel to manager!")
-
 ####################################################################################################
-
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
 func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
@@ -565,12 +644,10 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	_last_paint_time = current_time
 
 	var local_pos: Vector3 = to_local(world_pos)
-	var global_vertex_x: int = roundi(local_pos.x / cell_size)
-	var global_vertex_z: int = roundi(-local_pos.z / cell_size)
 	
 	# Determine operation mode based on current selection and modifier keys
 	var mode: BrushMode = tool_mode
-	if is_alternative:
+	if is_alternative and tool_mode != BrushMode.TOGGLE_CHUNK:
 		if tool_mode == BrushMode.RAISE:
 			mode = BrushMode.LOWER
 		elif tool_mode == BrushMode.LOWER:
@@ -578,6 +655,20 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		else:
 			mode = BrushMode.SMOOTH
 		
+	# --- [NEW] CHUNK TOGGLE EXECUTION ---
+	if mode == BrushMode.TOGGLE_CHUNK:
+		var meters_per_chunk: float = float(chunk_size) * cell_size
+		var cx: int = floori(local_pos.x / meters_per_chunk)
+		var cz: int = floori(-local_pos.z / meters_per_chunk)
+		
+		if cx >= 0 and cx < world_chunks.x and cz >= 0 and cz < world_chunks.y:
+			toggle_chunk_status(cx, cz)
+		return
+	# ------------------------------------
+
+	var global_vertex_x: int = roundi(local_pos.x / cell_size)
+	var global_vertex_z: int = roundi(-local_pos.z / cell_size)
+	
 	var chunks_to_update: Array[LowPolyTerrainChunk] = []
 	
 	# High-performance C++ array duplication for rapid read isolations during local operations
@@ -586,8 +677,12 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	# Pre-calculate the flatten height value from the initial click center to optimize loop execution
 	var target_flatten_h: float = 0.0
 	if mode == BrushMode.FLATTEN:
-		if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
-			target_flatten_h = snapped(temporary_data[global_vertex_z * _total_vertices_x + global_vertex_x], step_height)
+		if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and \
+		global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
+			target_flatten_h = snapped(
+				temporary_data[global_vertex_z * _total_vertices_x + global_vertex_x],
+				step_height
+			)
 	
 	# Pre-calculate squared radius to avoid expensive sqrt/length calculations inside the loop
 	var radius_squared: float = float(brush_radius * brush_radius)
@@ -602,6 +697,12 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 			var dz: float = float(gz - global_vertex_z)
 			
 			if (dx * dx + dz * dz) <= radius_squared:
+				var vx_chunk: int = clampi(gx / chunk_size, 0, world_chunks.x - 1)
+				var vz_chunk: int = clampi(gz / chunk_size, 0, world_chunks.y - 1)
+				
+				if not is_chunk_active(vx_chunk, vz_chunk):
+					continue
+					
 				var current_index: int = gz * _total_vertices_x + gx
 				var current_h: float = temporary_data[current_index]
 				var new_h: float = current_h
@@ -645,6 +746,12 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	for chunk in chunks_to_update:
 		if not chunk: continue
 		var coord: Vector2i = chunk.chunk_coord
+		
+		if not is_chunk_active(coord.x, coord.y):
+			chunk.visible = false
+			continue
+			
+		chunk.visible = true
 		var chunk_local_heights := PackedFloat32Array()
 		chunk_local_heights.resize(vert_stride * vert_stride)
 		
@@ -653,17 +760,19 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 			var local_offset: int = lz * vert_stride
 			var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
 			
-			var slice: PackedFloat32Array = global_height_data.slice(global_offset, global_offset + vert_stride)
+			var slice: PackedFloat32Array = global_height_data.slice(
+				global_offset, global_offset + vert_stride
+			)
 			for i in range(slice.size()):
 				chunk_local_heights[local_offset + i] = slice[i]
 				
+		# Chunks now directly receive your manual inspector material override
 		chunk.initialize(
 			coord, chunk_size, cell_size, step_height,
 			chunk_local_heights, jitter_strength, show_chunk_labels,
 			jitter_slope_threshold, custom_material
 		)
 
-####################################################################################################
 
 ## Checks mathematical boundaries to flag all 1-4 edge chunks touching a modified global vertex coordinate.
 func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPolyTerrainChunk]) -> void:
@@ -691,6 +800,71 @@ func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPoly
 				update_list.append(chunk)
 
 
+# Bakes and instantiates persistent physical collider nodes directly under the scene root.
+## FIXED: Dynamically applies user-defined collision layers and group configurations.
+func _bake_live_collisions_as_child() -> void:
+	var target_parent: Node = get_parent()
+	var scene_root: Node = null
+	
+	if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
+		scene_root = get_tree().edited_scene_root
+	else:
+		scene_root = target_parent
+		
+	if target_parent == null:
+		print("Baking cancelled: Manager has no parent to place siblings.")
+		return
+		
+	var dynamic_collision_name: String = name + "_Collisions"
+	print("Baking static collisions live parallel to manager as: %s" % dynamic_collision_name)
+	
+	var old_container: Node = target_parent.find_child(dynamic_collision_name, false, false)
+	if old_container:
+		old_container.free()
+		print("Successfully cleared historical collision nodes from parent.")
+		
+	var collision_root := Node3D.new()
+	collision_root.name = dynamic_collision_name
+	target_parent.add_child(collision_root)
+	
+	if Engine.is_editor_hint() and scene_root:
+		collision_root.set_owner(scene_root)
+	
+	for chunk in chunks_dict.values():
+		if not is_chunk_active(chunk.chunk_coord.x, chunk.chunk_coord.y):
+			continue
+			
+		if chunk and chunk.mesh:
+			chunk.bake_collision(null)
+			
+			var static_body: StaticBody3D = chunk.find_child(
+				"Static_" + chunk.name, false, false
+			) as StaticBody3D
+			if static_body:
+				chunk.remove_child(static_body)
+				collision_root.add_child(static_body)
+				
+				var half_bounds: float = (chunk.chunk_size * chunk.cell_size) / 2.0
+				var center_offset := Vector3(half_bounds, 0.0, -half_bounds)
+				static_body.global_position = chunk.global_position + center_offset
+				
+				for grp in static_body.get_groups():
+					static_body.remove_from_group(grp)
+					
+				static_body.collision_layer = collision_layer
+				static_body.collision_mask = 0 
+				
+				if not collision_group.strip_edges().is_empty():
+					static_body.add_to_group(collision_group, true)
+				
+				if Engine.is_editor_hint() and scene_root:
+					static_body.set_owner(scene_root)
+					for shape_child in static_body.get_children():
+						shape_child.set_owner(scene_root)
+						
+	print("Collisions successfully generated live and anchored parallel to manager!")
+
+
 ## Bundles all active visual chunk meshes into a dynamic node tree and exports them as a clean GLTF asset.
 func _export_terrain_as_gltf() -> void:
 	if export_target_path.strip_edges().is_empty():
@@ -707,6 +881,9 @@ func _export_terrain_as_gltf() -> void:
 	
 	# 2. Iterate through all active chunks and duplicate their meshes with physical transforms
 	for coord in chunks_dict.keys():
+		if not is_chunk_active(coord.x, coord.y):
+			continue
+			
 		var chunk: LowPolyTerrainChunk = chunks_dict[coord]
 		if chunk == null or chunk.mesh == null: 
 			continue
