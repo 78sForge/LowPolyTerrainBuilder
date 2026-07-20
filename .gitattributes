@@ -1,2 +1,9 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Exclude everything except the addons folder and the README from the asset library download.
+/* export-ignore
+/addons export-ignore
+/addons/** !export-ignore
+/README.md !export-ignore
+/LICENSE !export-ignore
