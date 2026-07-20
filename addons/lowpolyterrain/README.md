@@ -2,6 +2,9 @@
 
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic low-poly landscapes.
 
+
+![Low Poly Terrain Demo](lowpolyterrain_demo.jpg)
+
 ---
 
 ## 🚀 Key Features
