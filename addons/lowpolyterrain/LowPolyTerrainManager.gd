@@ -69,8 +69,6 @@ var center_global_position_button: Callable = func() -> void: _center_global_pos
 		var per_chunk: int = (preview_chunk_size + 1) * (preview_chunk_size + 1)
 		return per_chunk * (preview_world_chunks.x * preview_world_chunks.y)
 
-
-
 ## Seamlessly offsets this node's global transform to center the active terrain dimensions around the scene root origin.
 func _center_global_position_to_origin() -> void:
 	if not Engine.is_editor_hint(): return
@@ -109,7 +107,6 @@ func _update_read_only_metrics() -> void:
 	set(v): jitter_slope_threshold = v; _queue_setup()
 
 
-
 ## Automatically falls back to a pre-configured terrain_and_cliff ShaderMaterial if left empty.
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial,StandardMaterial3D") var custom_material: Material = null:
 	set(v):
@@ -117,8 +114,6 @@ func _update_read_only_metrics() -> void:
 		if custom_material == null and Engine.is_editor_hint():
 			_apply_default_shader_fallback()
 		_queue_setup()
-
-
 
 ## Defines the available sculpting tool profiles for terrain interaction.
 enum BrushMode {
@@ -164,12 +159,9 @@ var bake_collisions_button: Callable = func() -> void: _bake_live_collisions_as_
 # --- PERFORMANCE CRITICAL: Flattened array structure instead of Dictionary ---
 @export_storage var global_height_data: PackedFloat32Array = PackedFloat32Array()
 
-
 # Cached structural bounds variables to achieve zero-latency lookup performance
 var _total_vertices_x: int = 0
 var _total_vertices_z: int = 0
-
-
 
 @export_group("Data Export")
 ## The target path within your project where the generated terrain mesh will be saved as a GLTF file.
@@ -179,6 +171,11 @@ var _total_vertices_z: int = 0
 @export_tool_button("Choose Path & Export Terrain", "Save")
 var export_gltf_button: Callable:
 	get: return func() -> void: if has_method("_open_export_dialog"): call("_open_export_dialog")
+
+
+
+####################################################################################################
+
 
 
 ## Spawns an integrated Editor FileDialog configured exclusively for naming new assets.
@@ -212,16 +209,11 @@ func _open_export_dialog() -> void:
 	dialog.popup_file_dialog()
 
 
-####################################################################################################
-
 # --- Internal Operational Logic & Cool-downs ---
 var _setup_pending: bool = false
 var chunks_dict: Dictionary = {}
 var _paint_cooldown: float = 0.1 
 var _last_paint_time: float = 0.0
-
-
-
 
 
 # --- AUTOMATIC INITIALIZATION PIPELINE ---
@@ -355,6 +347,9 @@ func _migrate_grid_data() -> void:
 	
 	rebuild_chunks_structure()
 	signal_brush_settings_changed.emit()
+
+
+####################################################################################################
 
 
 ## Cleans, tracks, and instantiates RAM-only chunks, assigning localized sub-arrays 
@@ -560,8 +555,8 @@ func _bake_live_collisions_as_child() -> void:
 						
 	print("Collisions successfully generated live and anchored parallel to manager!")
 
-
 ####################################################################################################
+
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
 func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
@@ -668,10 +663,7 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 			jitter_slope_threshold, custom_material
 		)
 
-
-
 ####################################################################################################
-
 
 ## Checks mathematical boundaries to flag all 1-4 edge chunks touching a modified global vertex coordinate.
 func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPolyTerrainChunk]) -> void:
@@ -682,7 +674,6 @@ func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPoly
 	# Boundary clamps to catch out-of-bounds calculations at absolute margins
 	var cx_l: int = (gx - 1) / chunk_size if gx > 0 else cx_r
 	var cz_t: int = (gz - 1) / chunk_size if gz > 0 else cz_b
-	
 	var unique_coords: Array[Vector2i] = []
 	
 	# Evaluate grid quadrant positions intersecting coordinates
