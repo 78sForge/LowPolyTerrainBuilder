@@ -127,8 +127,6 @@ func _update_read_only_metrics() -> void:
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial,StandardMaterial3D") var custom_material: Material = null:
 	set(v):
 		custom_material = v
-		if custom_material == null and Engine.is_editor_hint():
-			_apply_default_shader_fallback()
 		_queue_setup()
 
 ## Defines the available sculpting tool profiles for terrain interaction.
@@ -264,12 +262,9 @@ func _init() -> void:
 
 ## Helper function to construct and assign the default terrain shader instance
 func _apply_default_shader_fallback() -> void:
-	var default_shader_path: String = "res://addons/lowpolyterrain/shader/terrain_and_cliff.gdshader"
-	if ResourceLoader.exists(default_shader_path):
-		var default_mat := ShaderMaterial.new()
-		default_mat.shader = load(default_shader_path) as Shader
-		custom_material = default_mat
-		print("LowPolyBuilder: Default shader pre-configured successfully.")
+	var standardMat := StandardMaterial3D.new()
+	custom_material = standardMat
+
 
 
 func _ready() -> void:
