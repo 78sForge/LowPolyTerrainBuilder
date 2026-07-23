@@ -146,6 +146,7 @@ func _update_read_only_metrics() -> void:
 		_queue_setup()
 
 
+
 @export_group("Brush Tools")
 ## Selects the active sculpting tool interaction profile.
 @export var tool_mode: BrushMode = BrushMode.RAISE
@@ -155,6 +156,10 @@ func _update_read_only_metrics() -> void:
 	set(v):
 		brush_radius = v
 		signal_brush_settings_changed.emit()
+
+## Controls how fast the terrain elevates, lowers, or smooths per stroke.
+@export_range(0.05, 5.0, 0.05) var brush_strength: float = 1.0
+
 
 
 @export_group("Terrain Smoothing")
@@ -755,11 +760,14 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				var current_h: float = temporary_data[current_index]
 				var new_h: float = current_h
 				
+				# Calculate dynamic increment based on current brush strength
+				var current_increment: float = step_height * brush_strength
+
 				match mode:
 					BrushMode.RAISE:
-						new_h += step_height
+						new_h += current_increment
 					BrushMode.LOWER:
-						new_h -= step_height
+						new_h -= current_increment
 					BrushMode.FLATTEN:
 						new_h = target_flatten_h
 					BrushMode.SMOOTH:
@@ -781,7 +789,10 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 							
 						if valid_neighbors > 0:
 							var average_height: float = sum_heights / float(valid_neighbors)
-							new_h = lerpf(current_h, average_height, smooth_factor)
+							# Scale the blending factor fluidly with the brush strength
+							var dynamic_smooth: float = clampf(smooth_factor * brush_strength, 0.0, 1.0)
+							new_h = lerpf(current_h, average_height, dynamic_smooth)
+
 				
 				# Direct O(1) mutations into global storage (No chunk border splitting required anymore)
 				global_height_data[current_index] = new_h
