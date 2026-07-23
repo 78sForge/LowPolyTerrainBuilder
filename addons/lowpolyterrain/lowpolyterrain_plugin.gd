@@ -4,15 +4,34 @@ extends EditorPlugin
 ## EditorPlugin script that bridges the Godot 3D viewports with the low poly terrain tools.
 ## Handles a persistent, semi-transparent 3D brush gizmo and processes painting signals.
 
+
+# Mirror the manager's enum and extend it cleanly for utility shortcuts
+enum PluginToolMode {
+	RAISE = 0,
+	LOWER = 1,
+	FLATTEN = 2,
+	SMOOTH = 3,
+	ACTIVATE_CHUNK = 4,
+	DEACTIVATE_CHUNK = 5,
+	# [MARKER] Everything below this value will be skipped by the UI generator loop
+	NO_FURTHER_BUTTONS = 5, 
+	DECREASE_BRUSH_RADIUS = 6,
+	INCREASE_BRUSH_RADIUS = 7
+}
+
+
+
 # Centralized definition array for zero-redundancy UI and shortcut handling
 # Format: [Enum Index, Identifier/Setting String, Display Name, Icon Path, Default Key String]
 const BRUSH_TOOL_DEFINITIONS: Array = [
-	[0, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
-	[1, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
-	[2, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
-	[3, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
-	[4, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
-	[5, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"]
+	[PluginToolMode.RAISE, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
+	[PluginToolMode.LOWER, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
+	[PluginToolMode.FLATTEN, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
+	[PluginToolMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
+	[PluginToolMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
+	[PluginToolMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"],
+	[PluginToolMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"],
+	[PluginToolMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]
 ]
 
 
@@ -94,10 +113,31 @@ func _make_visible(visible: bool) -> void:
 		_destroy_3d_brush_gizmo()
 		_show_brush_ui_panel(false)
 
+
+
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> EditorPlugin.AfterGUIInput:
 	if not active_manager:
 		return EditorPlugin.AFTER_GUI_INPUT_PASS
 		
+	if event is InputEventKey and event.pressed:
+		for mode in brush_shortcuts.keys():
+			var sc: Shortcut = brush_shortcuts[mode]
+			if sc.matches_event(event):
+				# Use clean enum identifiers instead of fragile magic numbers
+				if mode == PluginToolMode.DECREASE_BRUSH_RADIUS:
+					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
+					active_manager.notify_property_list_changed.call_deferred()
+					return EditorPlugin.AFTER_GUI_INPUT_STOP
+				elif mode == PluginToolMode.INCREASE_BRUSH_RADIUS:
+					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
+					active_manager.notify_property_list_changed.call_deferred()
+					return EditorPlugin.AFTER_GUI_INPUT_STOP
+				else:
+					if not event.echo:
+						_select_brush_mode(mode)
+						return EditorPlugin.AFTER_GUI_INPUT_STOP
+						
+
 	# Check for key presses to switch modes instantly via user shortcuts inside the 3D viewport
 	if event is InputEventKey and event.pressed and not event.echo:
 		for mode in brush_shortcuts.keys():
@@ -219,10 +259,9 @@ func _initialize_editor_shortcuts() -> void:
 	if not settings: return
 	
 	for def in BRUSH_TOOL_DEFINITIONS:
-		var mode_idx: int = def[0]
-		var id_str: String = def[1]
-		# [FIX] Read the explicit conflict-free default key string from our constants layout
-		var default_key_str: String = def[4]
+		var mode_idx: int = def[0] as int
+		var id_str: String = def[1] as String
+		var default_key_str: String = def[4] as String
 		
 		# Create a standardized, native editor setting path for the input key
 		var settings_path: String = "plugins/low_poly_terrain_builder/shortcuts/" + id_str
@@ -253,8 +292,15 @@ func _initialize_editor_shortcuts() -> void:
 		var shortcut := Shortcut.new()
 		var key_event := InputEventKey.new()
 		
-		# Fetch the current configuration string and safely resolve it back to an engine KeyCode
+		# Fetch the current configuration string from the settings registry
 		var current_key_str: String = str(settings.get_setting(settings_path))
+		
+		# [FIX] Automatically map raw character inputs back to formal engine key identifiers
+		if current_key_str == ",":
+			current_key_str = "COMMA"
+		elif current_key_str == ".":
+			current_key_str = "PERIOD"
+			
 		var resolved_keycode: int = OS.find_keycode_from_string(current_key_str)
 		
 		key_event.keycode = resolved_keycode as Key
@@ -274,8 +320,12 @@ func _create_brush_ui_panel() -> void:
 	button_group = ButtonGroup.new()
 	
 	for def in BRUSH_TOOL_DEFINITIONS:
-		# Access sub-array elements directly by index position to prevent crash
 		var mode_idx: int = def[0] as int
+		
+		# [FIX] Skip utility sizing tools to prevent rendering layout-breaking redundant buttons
+		if mode_idx > PluginToolMode.NO_FURTHER_BUTTONS:
+			continue
+			
 		var label_text: String = def[2] as String
 		var icon_path: String = def[3] as String
 		
@@ -283,8 +333,6 @@ func _create_brush_ui_panel() -> void:
 		btn.toggle_mode = true
 		btn.button_group = button_group
 		btn.set_meta("brush_mode", mode_idx)
-		
-		# [FIX] Keep standard responsive sizing to guarantee zero stress when resizing the editor window
 		btn.autowrap_mode = TextServer.AUTOWRAP_OFF
 		
 		if ResourceLoader.exists(icon_path):
@@ -300,9 +348,10 @@ func _create_brush_ui_panel() -> void:
 
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
-
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
+
+
 
 ## Clears out the UI elements from the memory tree completely to prevent leaks.
 func _destroy_brush_ui_panel() -> void:

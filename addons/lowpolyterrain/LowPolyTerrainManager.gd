@@ -872,6 +872,15 @@ func _update_single_chunk(coord: Vector2i) -> void:
 	# Process the visibility state of deactivated chunks based on inspector preview rules
 	if not is_chunk_active(coord.x, coord.y):
 		chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
+		if not chunk.visible:
+			chunk.mesh = null
+			chunk.material_override = null
+		
+		# [FIX] Clean up the transient wireframe overlay child node when the chunk gets deactivated
+		var legacy_wire = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
+		if legacy_wire:
+			legacy_wire.free()
+			
 		if chunk.visible:
 			# Forward the label visibility toggle state so deactivated previews can render them
 			if chunk.has_method("update_label_visibility"):
@@ -901,6 +910,7 @@ func _update_single_chunk(coord: Vector2i) -> void:
 		chunk_local_heights, jitter_strength, show_chunk_labels,
 		jitter_slope_threshold, custom_material
 	)
+
 
 
 
