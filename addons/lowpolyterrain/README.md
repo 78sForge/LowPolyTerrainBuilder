@@ -1,6 +1,9 @@
-# Low Poly Chunk Terrain Plugin for Godot 4.7+
+# Low Poly Terrain Builder
 
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic low-poly landscapes.
+
+## ✅ **Update information for v1.0.8 (Optimization):**
+With v1.0.7, a very resource-intensive (GPU-heavy) default ShaderMaterial was used, causing frame drops on weaker systems. This issue has been resolved in v1.0.8. I also tested this add-on on my mobile device, achieving up to 1000 FPS within the editor.
 
 
 ![Low Poly Terrain Demo](lowpolyterrain_demo.jpg)
