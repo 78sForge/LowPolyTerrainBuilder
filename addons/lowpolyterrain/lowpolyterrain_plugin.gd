@@ -4,6 +4,18 @@ extends EditorPlugin
 ## EditorPlugin script that bridges the Godot 3D viewports with the low poly terrain tools.
 ## Handles a persistent, semi-transparent 3D brush gizmo and processes painting signals.
 
+# Centralized definition array for zero-redundancy UI and shortcut handling
+# Format: [Enum Index, Identifier/Setting String, Display Name, Icon Path, Default Key String]
+const BRUSH_TOOL_DEFINITIONS: Array = [
+	[0, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
+	[1, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
+	[2, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
+	[3, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
+	[4, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
+	[5, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"]
+]
+
+
 var active_manager: LowPolyTerrainManager = null
 var is_drawing: bool = false
 
@@ -19,8 +31,7 @@ var brush_shortcuts: Dictionary = {}
 
 func _get_plugin_name() -> String:
 	return "Low Poly Terrain Builder"
-
-
+	
 func _enter_tree() -> void:
 	# Registriert den neuen Node mit Ihrem Custom-Icon
 	add_custom_type(
@@ -30,21 +41,24 @@ func _enter_tree() -> void:
 		preload("res://addons/lowpolyterrain/icon.svg")
 	)
 	
-	# Initialize and register customizable system shortcuts inside the global editor dictionary
 	_initialize_editor_shortcuts()
-	
-	# Construct the modern horizontal radio button bar layout interface
 	_create_brush_ui_panel()
-
+	
+	# Listen for global editor setting updates to dynamically refresh button text
+	var settings := EditorInterface.get_editor_settings()
+	if settings and not settings.settings_changed.is_connected(_on_editor_settings_changed):
+		settings.settings_changed.connect(_on_editor_settings_changed)
 
 func _exit_tree() -> void:
 	remove_custom_type("LowPolyTerrainManager")
 	_destroy_brush_ui_panel()
-
+	
+	var settings := EditorInterface.get_editor_settings()
+	if settings and settings.settings_changed.is_connected(_on_editor_settings_changed):
+		settings.settings_changed.disconnect(_on_editor_settings_changed)
 
 func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
-
 
 func _edit(object: Object) -> void:
 	# Disconnect old signal handler to prevent memory leaks or dual bindings
@@ -71,7 +85,6 @@ func _edit(object: Object) -> void:
 		_destroy_3d_brush_gizmo()
 		_show_brush_ui_panel(false)
 
-
 func _make_visible(visible: bool) -> void:
 	if not visible:
 		if active_manager:
@@ -80,7 +93,6 @@ func _make_visible(visible: bool) -> void:
 		is_drawing = false
 		_destroy_3d_brush_gizmo()
 		_show_brush_ui_panel(false)
-
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> EditorPlugin.AfterGUIInput:
 	if not active_manager:
@@ -109,6 +121,7 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> Edit
 				return EditorPlugin.AFTER_GUI_INPUT_STOP
 				
 	return EditorPlugin.AFTER_GUI_INPUT_PASS
+#
 
 
 ## Spawns a semi-transparent 3D cylinder disk acting as the brush indicator inside the scene tree.
@@ -137,14 +150,12 @@ func _create_3d_brush_gizmo() -> void:
 	active_manager.add_child(brush_gizmo)
 	_update_gizmo_scale()
 
-
 func _destroy_3d_brush_gizmo() -> void:
 	if brush_gizmo:
 		if brush_gizmo.get_parent():
 			brush_gizmo.get_parent().remove_child(brush_gizmo)
 		brush_gizmo.free()
 		brush_gizmo = null
-
 
 ## Instantly recalibrates the gizmo's world scale, bypassing Godot inspector sync latency.
 func _update_gizmo_scale() -> void:
@@ -153,7 +164,6 @@ func _update_gizmo_scale() -> void:
 	var r = active_manager.cell_size * float(active_manager.brush_radius)
 	# Scale across horizontal planes while keeping Y flat
 	brush_gizmo.scale = Vector3(r, 1.0, r)
-
 
 ## Casts a mouse ray against chunk dimensions to lock the gizmo onto the mesh coordinates.
 func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
@@ -193,38 +203,26 @@ func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
 	else:
 		brush_gizmo.visible = false
 
-
 func _process_paint_stroke(camera: Camera3D, mouse_pos: Vector2, is_shift: bool) -> void:
 	if not active_manager: return
 	if brush_gizmo and brush_gizmo.visible:
 		active_manager.interact_at_world_position(brush_gizmo.global_position, is_shift)
-
 
 ## Target handler fired automatically when custom inspector signals require a gizmo resize.
 func _on_signal_brush_settings_changed() -> void:
 	print("_on_signal_brush_settings_changed -> Updating 3D gizmo scale!")
 	_update_gizmo_scale()
 
-
-## Registers shortcuts cleanly inside the Editor Settings under the plugin's own section.
+## Registers shortcuts cleanly inside the Editor Settings using the central constants template.
 func _initialize_editor_shortcuts() -> void:
-	# Profiles map: [Enum Index, Setting Identity String, Default Keyboard Key String]
-	var profiles: Array = [
-		[0, "raise_terrain", "Q"],
-		[1, "lower_terrain", "W"],
-		[2, "flatten_terrain", "E"],
-		[3, "smooth_terrain", "R"],
-		[4, "activate_chunk", "A"],
-		[5, "deactivate_chunk", "S"]
-	]
-	
 	var settings := EditorInterface.get_editor_settings()
 	if not settings: return
 	
-	for item in profiles:
-		var mode_idx: int = item[0] as int
-		var id_str: String = item[1] as String
-		var default_key_str: String = item[2] as String
+	for def in BRUSH_TOOL_DEFINITIONS:
+		var mode_idx: int = def[0]
+		var id_str: String = def[1]
+		# [FIX] Read the explicit conflict-free default key string from our constants layout
+		var default_key_str: String = def[4]
 		
 		# Create a standardized, native editor setting path for the input key
 		var settings_path: String = "plugins/low_poly_terrain_builder/shortcuts/" + id_str
@@ -234,8 +232,7 @@ func _initialize_editor_shortcuts() -> void:
 			var current_val = settings.get_setting(settings_path)
 			if typeof(current_val) == TYPE_INT:
 				var healed_str: String = OS.get_keycode_string(current_val as Key)
-				if healed_str.is_empty():
-					healed_str = default_key_str
+				if healed_str.is_empty(): healed_str = default_key_str
 				settings.set_setting(settings_path, healed_str)
 		else:
 			settings.set_setting(settings_path, default_key_str)
@@ -243,7 +240,7 @@ func _initialize_editor_shortcuts() -> void:
 		# Enforce the default fallback state value explicitly as a clear string type
 		settings.set_initial_value(settings_path, default_key_str, false)
 		
-		# [FIX] Explicitly register property info metadata to tell the editor UI this is a string
+		# Explicitly register property info metadata to tell the editor UI this is a string
 		var property_info := {
 			"name": settings_path,
 			"type": TYPE_STRING,
@@ -266,7 +263,7 @@ func _initialize_editor_shortcuts() -> void:
 		brush_shortcuts[mode_idx] = shortcut
 
 
-## Generates the modern horizontal Radio-Button toolbar interface inside the main editor container.
+## Generates the modern horizontal Radio-Button toolbar interface driven by the central constant.
 func _create_brush_ui_panel() -> void:
 	if brush_panel_container: return
 	
@@ -276,24 +273,13 @@ func _create_brush_ui_panel() -> void:
 	
 	button_group = ButtonGroup.new()
 	
-	# Explicit mapping using your custom addon SVG file paths
-	var button_definitions: Array = [
-		[0, "Raise", "res://addons/lowpolyterrain/icons/raise.svg"],
-		[1, "Lower", "res://addons/lowpolyterrain/icons/lower.svg"],
-		[2, "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg"],
-		[3, "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg"],
-		[4, "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg"],
-		[5, "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg"]
-	]
-	
-	for def in button_definitions:
-		# [FIX] Access sub-array elements directly by index position to prevent crash
-		var mode_idx: int = def[0] as int
-		var label_text: String = def[1] as String
-		var icon_path: String = def[2] as String
+	for def in BRUSH_TOOL_DEFINITIONS:
+		# Access sub-array elements directly by index position to prevent crash
+		var mode_idx: int = def[0]
+		var label_text: String = def[2]
+		var icon_path: String = def[3]
 		
 		var btn := Button.new()
-		btn.text = label_text
 		btn.toggle_mode = true
 		btn.button_group = button_group
 		btn.set_meta("brush_mode", mode_idx)
@@ -302,16 +288,19 @@ func _create_brush_ui_panel() -> void:
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path) as Texture2D
 				
+		# Extract the shortcut text and append it directly to the button text label
 		var shortcut_node = brush_shortcuts.get(mode_idx)
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
-			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_node.get_as_text()]
-			
+			var shortcut_text: String = shortcut_node.get_as_text()
+			btn.text = "%s (%s)" % [label_text, shortcut_text]
+			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
+		else:
+			btn.text = label_text
+
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
-
-
 
 ## Clears out the UI elements from the memory tree completely to prevent leaks.
 func _destroy_brush_ui_panel() -> void:
@@ -321,12 +310,10 @@ func _destroy_brush_ui_panel() -> void:
 		brush_panel_container = null
 		button_group = null
 
-
 ## Toggles visibility status of the tool selection menu container dynamically.
 func _show_brush_ui_panel(visible: bool) -> void:
 	if brush_panel_container:
 		brush_panel_container.visible = visible
-
 
 ## Updates the manager state and forces property list synchronization on click.
 func _select_brush_mode(mode_idx: int) -> void:
@@ -335,11 +322,9 @@ func _select_brush_mode(mode_idx: int) -> void:
 	active_manager.notify_property_list_changed()
 	_sync_ui_buttons_with_manager()
 
-
 ## Internal signal event wrapper fired when clicking any item on the toolbar.
 func _on_brush_button_pressed(mode_idx: int) -> void:
 	_select_brush_mode(mode_idx)
-
 
 ## Pulls active settings directly from the selected node to depress the correct button instance.
 func _sync_ui_buttons_with_manager() -> void:
@@ -350,3 +335,28 @@ func _sync_ui_buttons_with_manager() -> void:
 		if child is Button and child.has_meta("brush_mode"):
 			var btn_mode: int = child.get_meta("brush_mode")
 			child.set_pressed_no_signal(btn_mode == active_mode)
+
+## Automatically fired when the user modifies any configuration inside the Editor Settings.
+func _on_editor_settings_changed() -> void:
+	if not brush_panel_container: return
+	
+	# Force clean refresh of internal shortcuts cache
+	_initialize_editor_shortcuts()
+	
+	# Update active button label displays on the fly without breaking tree allocations
+	for child in brush_panel_container.get_children():
+		if child is Button and child.has_meta("brush_mode"):
+			var mode_idx: int = child.get_meta("brush_mode")
+			var label_text: String = ""
+			
+			# Extract display name directly from our centralized constant array blueprint
+			for def in BRUSH_TOOL_DEFINITIONS:
+				if def[0] == mode_idx:
+					label_text = def[2]
+					break
+					
+			var shortcut_node = brush_shortcuts.get(mode_idx)
+			if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
+				var shortcut_text: String = shortcut_node.get_as_text()
+				child.text = "%s (%s)" % [label_text, shortcut_text]
+				child.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
