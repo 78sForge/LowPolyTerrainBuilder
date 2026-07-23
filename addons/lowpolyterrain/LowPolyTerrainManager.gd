@@ -62,6 +62,11 @@ var cell_size: float = 1.0
 @export var show_chunk_labels: bool = false:
 	set(v): show_chunk_labels = v; _queue_setup()
 	
+## If disabled, completely hides the semi-transparent red preview meshes of deactivated chunks.
+@export var show_deactivated_chunks: bool = true:
+	set(v): show_deactivated_chunks = v; _queue_setup()
+
+	
 # REAL INSPECTOR BUTTONS: Resolved via safe Lambda Callables to prevent early parsing errors
 ## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size.
 ## Warning: Shrinking boundaries will delete out-of-bounds data!
@@ -533,30 +538,35 @@ func rebuild_chunks_structure() -> void:
 			# Check if the chunk is deactivated
 			if not is_chunk_active(cx, cz):
 				if Engine.is_editor_hint():
-					# Keep node visible in editor but assign a flat placeholder mesh for raycasting
-					chunks_dict[coord].visible = true
+					# Toggle node visibility based on the inspector checkbox setting
+					chunks_dict[coord].visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
+
 					
-					var st_box := SurfaceTool.new()
-					st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+					if show_deactivated_chunks:
+						var st_box := SurfaceTool.new()
+						st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+						
+						var w: float = float(chunk_size) * cell_size
+						var p0 := Vector3(0, 0.05, 0)
+						var p1 := Vector3(w, 0.05, 0)
+						var p2 := Vector3(w, 0.05, -w)
+						var p3 := Vector3(0, 0.05, -w)
+						
+						st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
+						st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
+						
+						chunks_dict[coord].mesh = st_box.commit()
+						
+						var red_mat := StandardMaterial3D.new()
+						red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
+						red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+						red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+						chunks_dict[coord].material_override = red_mat
+					else:
+						chunks_dict[coord].mesh = null
+						chunks_dict[coord].material_override = null
 					
-					var w: float = float(chunk_size) * cell_size
-					var p0 := Vector3(0, 0.05, 0)
-					var p1 := Vector3(w, 0.05, 0)
-					var p2 := Vector3(w, 0.05, -w)
-					var p3 := Vector3(0, 0.05, -w)
-					
-					st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
-					st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
-					
-					chunks_dict[coord].mesh = st_box.commit()
-					
-					# Assign a semi-transparent red material for clear editor feedback
-					var red_mat := StandardMaterial3D.new()
-					red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
-					red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-					chunks_dict[coord].material_override = red_mat
-					
-					# [FIX] Forward the visibility state of labels to deactivated chunks so they can clear them
+					# Forward the visibility state of labels to deactivated chunks so they can clear them
 					if chunks_dict[coord].has_method("update_label_visibility"):
 						chunks_dict[coord].update_label_visibility(show_chunk_labels)
 				else:
@@ -565,6 +575,7 @@ func rebuild_chunks_structure() -> void:
 					if "mesh" in chunks_dict[coord]:
 						chunks_dict[coord].mesh = null
 				continue
+
 				
 			# If activated, reset visibility and material overrides
 			chunks_dict[coord].visible = true
