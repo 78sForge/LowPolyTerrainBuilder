@@ -16,7 +16,7 @@
   architecture pipelines without permission.
 * **Code Only:** When updating files, output the full modified code block or precise diffs 
   without conversational filler.
-* **Additional format constrainst:** Limit each line (code or documentation) to a maximum of 
+* **Additional format constrainst:** Limit each line of documentation to a maximum of 
   100 characters to enable better readability. Except for table formattings in order to 
   avoid broken tables.
 

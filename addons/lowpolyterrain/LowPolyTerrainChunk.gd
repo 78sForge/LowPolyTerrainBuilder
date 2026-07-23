@@ -65,13 +65,21 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 	generate_mesh()
 	
 	if Engine.is_editor_hint():
-		if show_labels:
-			_update_editor_label()
-		else:
-			for child in get_children():
-				if child is Label3D: child.free()
+		update_label_visibility(show_labels)
 
 
+## Updates or purges the 3D text label overlay according to the active visibility setting.
+func update_label_visibility(show_labels: bool) -> void:
+	if not Engine.is_editor_hint(): return
+	if show_labels:
+		_update_editor_label()
+	else:
+		for child in get_children():
+			if child is Label3D:
+				child.free()
+
+
+##@@
 
 ## Core geometry geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
@@ -230,8 +238,9 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	)
 
 
-####################################################################################################
-## Maps the user-defined inspector material allocation directly to the mesh instance.
+##@@
+
+### Maps the user-defined inspector material allocation directly to the mesh instance.
 func _apply_custom_shader() -> void:
 	material_override = custom_material
 

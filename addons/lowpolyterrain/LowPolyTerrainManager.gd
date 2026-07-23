@@ -19,6 +19,15 @@ const PROP_TOTAL_VERTICES := "total_vertices"
 const PATH_SIZE_METERS := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP_SIZE_METERS
 const PATH_TOTAL_VERTICES := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP_TOTAL_VERTICES
 
+# Supported sculpting and utility brush modes for modifying the grid topology
+enum BrushMode {
+	RAISE,
+	LOWER,
+	FLATTEN,
+	SMOOTH,
+	ACTIVATE_CHUNK,   # Replaces toggle mode to explicitly turn on chunk render and collision logic.
+	DEACTIVATE_CHUNK # Replaces toggle mode to explicitly shut down chunk visibility and physics.
+}
 
 # Active operational configuration values used internally by the grid generation system
 var world_chunks: Vector2i = Vector2i(5, 5)
@@ -99,6 +108,8 @@ func _center_global_position_to_origin() -> void:
 	notify_property_list_changed()
 
 
+##@@
+
 ## Triggers an instant inspector refresh to update calculated read-only size metrics
 ## in real-time.
 func _update_read_only_metrics() -> void:
@@ -129,18 +140,9 @@ func _update_read_only_metrics() -> void:
 		custom_material = v
 		_queue_setup()
 
-## Defines the available sculpting tool profiles for terrain interaction.
-enum BrushMode {
-	RAISE = 0,       ## Elevates vertices by the step_height
-	LOWER = 1,       ## Lowers vertices by the step_height
-	FLATTEN = 2,     ## Snaps vertices to the initial click elevation
-	SMOOTH = 3,      ## Blurs and softens adjacent vertex elevations
-	TOGGLE_CHUNK = 4 ## Toggles visibility and collision of a whole chunk via click
-}
-
 
 @export_group("Brush Tools")
-## Selects the active sculpting tool interaction profile: Raise, Lower, Flatten, or Smooth.
+## Selects the active sculpting tool interaction profile.
 @export var tool_mode: BrushMode = BrushMode.RAISE
 
 ## The operational radius of the painting brush measured in grid vertices.
@@ -185,15 +187,52 @@ func is_chunk_active(cx: int, cz: int) -> bool:
 		return true
 	return chunk_activity_data[index] == 1
 
+##@@
 
-## Toggles activation state of a chunk at specific coordinates and requests visual rebuild.
-func toggle_chunk_status(cx: int, cz: int) -> void:
-	if cx < 0 or cx >= world_chunks.x or cz < 0 or cz >= world_chunks.y:
-		return
-	var index := cz * world_chunks.x + cx
-	if index < chunk_activity_data.size():
-		chunk_activity_data[index] = 0 if chunk_activity_data[index] == 1 else 1
+## Sets activation state of chunks within a world-space radius and requests visual rebuild.
+func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
+	# Convert the vertex-based brush radius into world space meters
+	var radius_meters: float = float(brush_radius) * cell_size
+	var chunk_meters: float = float(chunk_size) * cell_size
+	
+	# Transpose Z into positive grid space matching the layout orientation
+	var grid_center_z: float = -center_pos.z
+	
+	# Determine bounds of chunks that could potentially intersect the brush radius
+	var min_cx: int = clampi(int((center_pos.x - radius_meters) / chunk_meters), 0, world_chunks.x - 1)
+	var max_cx: int = clampi(int((center_pos.x + radius_meters) / chunk_meters), 0, world_chunks.x - 1)
+	var min_cz: int = clampi(int((grid_center_z - radius_meters) / chunk_meters), 0, world_chunks.y - 1)
+	var max_cz: int = clampi(int((grid_center_z + radius_meters) / chunk_meters), 0, world_chunks.y - 1)
+	
+	var changed: bool = false
+	var target_value: int = 1 if activate else 0
+	
+	# Check all chunks within bounding box for actual intersection with the brush sphere
+	for cz in range(min_cz, max_cz + 1):
+		for cx in range(min_cx, max_cx + 1):
+			# Calculate boundary limits in positive grid space
+			var chunk_min_x: float = float(cx) * chunk_meters
+			var chunk_max_x: float = float(cx + 1) * chunk_meters
+			var chunk_min_z: float = float(cz) * chunk_meters
+			var chunk_max_z: float = float(cz + 1) * chunk_meters
+			
+			var closest_x: float = clampf(center_pos.x, chunk_min_x, chunk_max_x)
+			var closest_z: float = clampf(grid_center_z, chunk_min_z, chunk_max_z)
+			
+			var dist_x: float = center_pos.x - closest_x
+			var dist_z: float = grid_center_z - closest_z
+			var dist_sq: float = (dist_x * dist_x) + (dist_z * dist_z)
+			
+			# If the chunk area is within the brush sphere, update its activity state
+			if dist_sq <= (radius_meters * radius_meters):
+				var index := cz * world_chunks.x + cx
+				if index < chunk_activity_data.size() and chunk_activity_data[index] != target_value:
+					chunk_activity_data[index] = target_value
+					changed = true
+					
+	if changed:
 		_queue_setup()
+
 
 
 # --- PERFORMANCE CRITICAL: Flattened array structure instead of Dictionary ---
@@ -266,7 +305,6 @@ func _apply_default_shader_fallback() -> void:
 	custom_material = standardMat
 
 
-
 func _ready() -> void:
 	# Synchronize active operational variables with serialized preview settings on load to
 	# guarantee structural persistence
@@ -309,7 +347,6 @@ func _ready() -> void:
 	rebuild_chunks_structure()
 
 
-
 func _queue_setup() -> void:
 	if not Engine.is_editor_hint(): return
 	if not _setup_pending:
@@ -323,6 +360,7 @@ func get_height_at(x: int, z: int) -> float:
 		return global_height_data[z * _total_vertices_x + x]
 	return 0.0
 
+##@@
 
 ## Highly optimized O(1) mutation method tailored for zero-latency brush sculpting.
 func set_height_at(x: int, z: int, value: float) -> void:
@@ -355,9 +393,6 @@ func _apply_dimension_changes() -> void:
 	
 	# Trigger high-performance grid data block copy migration pipeline
 	_migrate_grid_data()
-
-
-####################################################################################################
 
 
 ## Lossless Grid Migration Pipeline: Safely transforms and scales the continuous 
@@ -413,6 +448,7 @@ func _migrate_grid_data() -> void:
 	rebuild_chunks_structure()
 	signal_brush_settings_changed.emit()
 
+##@@
 
 ## Cleans, tracks, and instantiates RAM-only chunks, assigning localized sub-arrays 
 ## extracted from the global packed continuous float matrix layout.
@@ -519,6 +555,10 @@ func rebuild_chunks_structure() -> void:
 					red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
 					red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
 					chunks_dict[coord].material_override = red_mat
+					
+					# [FIX] Forward the visibility state of labels to deactivated chunks so they can clear them
+					if chunks_dict[coord].has_method("update_label_visibility"):
+						chunks_dict[coord].update_label_visibility(show_chunk_labels)
 				else:
 					# Completely hide and purge mesh data in the actual game build
 					chunks_dict[coord].visible = false
@@ -559,6 +599,9 @@ func rebuild_chunks_structure() -> void:
 				jitter_slope_threshold,
 				custom_material
 			)
+
+
+##@@
 
 ## Global multi-pass cross-filter operation that processes and blurs the entire grid structure smoothly.
 func _smooth_entire_terrain() -> void:
@@ -628,9 +671,8 @@ func _smooth_entire_terrain() -> void:
 		
 	notify_property_list_changed()
 
+##@@
 
-
-####################################################################################################
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
 func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
@@ -642,24 +684,24 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	
 	# Determine operation mode based on current selection and modifier keys
 	var mode: BrushMode = tool_mode
-	if is_alternative and tool_mode != BrushMode.TOGGLE_CHUNK:
+	if is_alternative:
 		if tool_mode == BrushMode.RAISE:
 			mode = BrushMode.LOWER
 		elif tool_mode == BrushMode.LOWER:
 			mode = BrushMode.RAISE
+		elif tool_mode == BrushMode.ACTIVATE_CHUNK:
+			mode = BrushMode.DEACTIVATE_CHUNK
+		elif tool_mode == BrushMode.DEACTIVATE_CHUNK:
+			mode = BrushMode.ACTIVATE_CHUNK
 		else:
 			mode = BrushMode.SMOOTH
 		
-	# --- [NEW] CHUNK TOGGLE EXECUTION ---
-	if mode == BrushMode.TOGGLE_CHUNK:
-		var meters_per_chunk: float = float(chunk_size) * cell_size
-		var cx: int = floori(local_pos.x / meters_per_chunk)
-		var cz: int = floori(-local_pos.z / meters_per_chunk)
-		
-		if cx >= 0 and cx < world_chunks.x and cz >= 0 and cz < world_chunks.y:
-			toggle_chunk_status(cx, cz)
+	# --- [NEW] RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
+	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
+		var is_activation_pass: bool = (mode == BrushMode.ACTIVATE_CHUNK)
+		set_chunk_status_in_radius(local_pos, is_activation_pass)
 		return
-	# ------------------------------------
+	# --------------------------------------------------------------------
 
 	var global_vertex_x: int = roundi(local_pos.x / cell_size)
 	var global_vertex_z: int = roundi(-local_pos.z / cell_size)
@@ -768,6 +810,8 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 			jitter_slope_threshold, custom_material
 		)
 
+
+##@@
 
 ## Checks mathematical boundaries to flag all 1-4 edge chunks touching a modified global vertex coordinate.
 func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[LowPolyTerrainChunk]) -> void:
