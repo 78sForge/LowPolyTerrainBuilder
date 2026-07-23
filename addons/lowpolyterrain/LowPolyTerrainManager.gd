@@ -577,27 +577,11 @@ func _smooth_entire_terrain() -> void:
 				var current_index: int = gz * _total_vertices_x + gx
 				var current_height: float = temporary_data[current_index]
 				
-				var sum_heights: float = 0.0
-				var valid_neighbors: int = 0
-				
-				# Inline unrolled boundary checks for performance optimization (eliminates function overhead)
-				if gx + 1 < _total_vertices_x:
-					sum_heights += temporary_data[gz * _total_vertices_x + (gx + 1)]
-					valid_neighbors += 1
-				if gx - 1 >= 0:
-					sum_heights += temporary_data[gz * _total_vertices_x + (gx - 1)]
-					valid_neighbors += 1
-				if gz + 1 < _total_vertices_z:
-					sum_heights += temporary_data[(gz + 1) * _total_vertices_x + gx]
-					valid_neighbors += 1
-				if gz - 1 >= 0:
-					sum_heights += temporary_data[(gz - 1) * _total_vertices_x + gx]
-					valid_neighbors += 1
-					
-				if valid_neighbors > 0:
-					var average_height: float = sum_heights / float(valid_neighbors)
-					global_height_data[current_index] = lerpf(current_height, average_height, smooth_factor)
-					
+				# [REFAC] Extracted redundant unrolled neighbor checks into a unified helper method
+				var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
+				global_height_data[current_index] = lerpf(current_height, average_height, smooth_factor)
+
+
 	# Synchronize and push fresh data blocks directly into the active chunks using our dry update loop
 	for coord in chunks_dict.keys():
 		_update_single_chunk(coord)
@@ -694,28 +678,11 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 					BrushMode.FLATTEN:
 						new_h = target_flatten_h
 					BrushMode.SMOOTH:
-						var sum_heights: float = 0.0
-						var valid_neighbors: int = 0
-						
-						if gx + 1 < _total_vertices_x:
-							sum_heights += temporary_data[gz * _total_vertices_x + (gx + 1)]
-							valid_neighbors += 1
-						if gx - 1 >= 0:
-							sum_heights += temporary_data[gz * _total_vertices_x + (gx - 1)]
-							valid_neighbors += 1
-						if gz + 1 < _total_vertices_z:
-							sum_heights += temporary_data[(gz + 1) * _total_vertices_x + gx]
-							valid_neighbors += 1
-						if gz - 1 >= 0:
-							sum_heights += temporary_data[(gz - 1) * _total_vertices_x + gx]
-							valid_neighbors += 1
-							
-						if valid_neighbors > 0:
-							var average_height: float = sum_heights / float(valid_neighbors)
-							# Scale the blending factor fluidly with the brush strength
-							var dynamic_smooth: float = clampf(smooth_factor * brush_strength, 0.0, 1.0)
-							new_h = lerpf(current_h, average_height, dynamic_smooth)
-				
+						# [REFAC] Reused centralized neighborhood calculation to maintain DRY principles
+						var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
+						var dynamic_smooth: float = clampf(smooth_factor * brush_strength, 0.0, 1.0)
+						new_h = lerpf(current_h, average_height, dynamic_smooth)
+
 				# Direct O(1) mutations into global storage (No chunk border splitting required anymore)
 				global_height_data[current_index] = new_h
 				_add_affected_chunks_to_update(gx, gz, chunks_to_update)
@@ -933,3 +900,24 @@ func _update_single_chunk(coord: Vector2i) -> void:
 		chunk_local_heights, jitter_strength, show_chunk_labels,
 		jitter_slope_threshold, custom_material
 	)
+
+
+## Calculates the average height of valid cross-neighbors for a given vertex coordinate.
+func _calculate_average_neighbor_height(gx: int, gz: int, data: PackedFloat32Array) -> float:
+	var sum_heights: float = 0.0
+	var valid_neighbors: int = 0
+	
+	if gx + 1 < _total_vertices_x:
+		sum_heights += data[gz * _total_vertices_x + (gx + 1)]
+		valid_neighbors += 1
+	if gx - 1 >= 0:
+		sum_heights += data[gz * _total_vertices_x + (gx - 1)]
+		valid_neighbors += 1
+	if gz + 1 < _total_vertices_z:
+		sum_heights += data[(gz + 1) * _total_vertices_x + gx]
+		valid_neighbors += 1
+	if gz - 1 >= 0:
+		sum_heights += data[(gz - 1) * _total_vertices_x + gx]
+		valid_neighbors += 1
+		
+	return sum_heights / float(valid_neighbors) if valid_neighbors > 0 else data[gz * _total_vertices_x + gx]

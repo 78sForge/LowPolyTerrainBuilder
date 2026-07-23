@@ -323,7 +323,8 @@ func _select_brush_mode(mode_idx: int) -> void:
 	active_manager.tool_mode = mode_idx as LowPolyTerrainManager.BrushMode
 	
 	# [FIX] Force deactivated chunk previews visible the exact moment the tool is selected
-	if mode_idx == 4 or mode_idx == 5: # ACTIVATE_CHUNK (4) or DEACTIVATE_CHUNK (5)
+	if mode_idx == LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK or mode_idx == LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK:
+
 		if not active_manager.show_deactivated_chunks:
 			active_manager.show_deactivated_chunks = true
 			active_manager.rebuild_chunks_structure()
