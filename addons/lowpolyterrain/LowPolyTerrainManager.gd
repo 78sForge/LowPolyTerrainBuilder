@@ -514,9 +514,6 @@ func rebuild_chunks_structure() -> void:
 			asset_container.set_owner(get_tree().edited_scene_root)
 
 	# 2. INITIALIZE REFRESHED CHUNK NODES & SYNC LOCAL HEIGHT SUB-ARRAYS
-	var vert_stride: int = chunk_size + 1
-	
-	# Guard against early engine initialization passes before storage array deserialization
 	var expected_total_chunks: int = world_chunks.x * world_chunks.y
 	if chunk_activity_data.size() < expected_total_chunks:
 		chunk_activity_data.resize(expected_total_chunks)
@@ -533,88 +530,36 @@ func rebuild_chunks_structure() -> void:
 				add_child(new_chunk)
 				chunks_dict[coord] = new_chunk
 			
-			# [FIX] Assign the correct spatial 3D position BEFORE evaluating the activity status
+			# Assign the correct spatial 3D position BEFORE evaluating the activity status
 			chunks_dict[coord].position = Vector3(
 				float(cx * chunk_size) * cell_size,
 				0.0,
 				float(-cz * chunk_size) * cell_size
 			)
 			
-			# Check if the chunk is deactivated
-			if not is_chunk_active(cx, cz):
-				if Engine.is_editor_hint():
-					# Toggle node visibility based on the inspector checkbox setting
-					chunks_dict[coord].visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
-
-					
-					if show_deactivated_chunks:
-						var st_box := SurfaceTool.new()
-						st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
-						
-						var w: float = float(chunk_size) * cell_size
-						var p0 := Vector3(0, 0.05, 0)
-						var p1 := Vector3(w, 0.05, 0)
-						var p2 := Vector3(w, 0.05, -w)
-						var p3 := Vector3(0, 0.05, -w)
-						
-						st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
-						st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
-						
-						chunks_dict[coord].mesh = st_box.commit()
-						
-						var red_mat := StandardMaterial3D.new()
-						red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
-						red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-						red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-						chunks_dict[coord].material_override = red_mat
-					else:
-						chunks_dict[coord].mesh = null
-						chunks_dict[coord].material_override = null
-					
-					# Forward the visibility state of labels to deactivated chunks so they can clear them
-					if chunks_dict[coord].has_method("update_label_visibility"):
-						chunks_dict[coord].update_label_visibility(show_chunk_labels)
-				else:
-					# Completely hide and purge mesh data in the actual game build
-					chunks_dict[coord].visible = false
-					if "mesh" in chunks_dict[coord]:
-						chunks_dict[coord].mesh = null
-				continue
-
+			# If the chunk is deactivated but show_deactivated_chunks is enabled, 
+			# we generate a flat box collision mesh for raycasting directly inside the update engine
+			if not is_chunk_active(cx, cz) and bool(show_deactivated_chunks) and Engine.is_editor_hint():
+				var st_box := SurfaceTool.new()
+				st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+				var w: float = float(chunk_size) * cell_size
+				var p0 := Vector3(0, 0.05, 0)
+				var p1 := Vector3(w, 0.05, 0)
+				var p2 := Vector3(w, 0.05, -w)
+				var p3 := Vector3(0, 0.05, -w)
+				st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
+				st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
+				chunks_dict[coord].mesh = st_box.commit()
 				
-			# If activated, reset visibility and material overrides
-			chunks_dict[coord].visible = true
-			chunks_dict[coord].material_override = null
+				var red_mat := StandardMaterial3D.new()
+				red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
+				red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+				red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+				chunks_dict[coord].material_override = red_mat
 			
-			# Extract a localized PackedFloat32Array subset corresponding to this specific chunk layout
-			var chunk_local_heights := PackedFloat32Array()
-			chunk_local_heights.resize(vert_stride * vert_stride)
-			
-			# Map global matrix slice directly into sequential local vertex data blocks
-			for lz in range(vert_stride):
-				var global_z: int = (cz * chunk_size) + lz
-				var local_offset: int = lz * vert_stride
-				var global_offset: int = global_z * _total_vertices_x + (cx * chunk_size)
-				
-				# Fast bulk block memory copying optimization using built-in C++ slice mechanics
-				var slice: PackedFloat32Array = global_height_data.slice(
-					global_offset, global_offset + vert_stride
-				)
-				for i in range(slice.size()):
-					chunk_local_heights[local_offset + i] = slice[i]
+			# Use the unified clean update method to initialize states fluidly
+			_update_single_chunk(coord)
 
-			# Chunks now directly receive your manual inspector material override
-			chunks_dict[coord].initialize(
-				coord, 
-				chunk_size, 
-				cell_size, 
-				step_height, 
-				chunk_local_heights, 
-				jitter_strength, 
-				show_chunk_labels, 
-				jitter_slope_threshold,
-				custom_material
-			)
 
 
 ##@@
@@ -653,41 +598,9 @@ func _smooth_entire_terrain() -> void:
 					var average_height: float = sum_heights / float(valid_neighbors)
 					global_height_data[current_index] = lerpf(current_height, average_height, smooth_factor)
 					
-	# Synchronize and push fresh data blocks directly into the active chunks
-	var vert_stride: int = chunk_size + 1
+	# Synchronize and push fresh data blocks directly into the active chunks using our dry update loop
 	for coord in chunks_dict.keys():
-		var chunk: LowPolyTerrainChunk = chunks_dict[coord]
-		if not chunk: continue
-		
-		# [FIX] Handle deactivated chunks correctly based on the editor toggle instead of hard-hiding them
-		if not is_chunk_active(coord.x, coord.y):
-			chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
-			if not chunk.visible:
-				chunk.mesh = null
-				chunk.material_override = null
-			continue
-			
-		chunk.visible = true
-		
-		var chunk_local_heights := PackedFloat32Array()
-		chunk_local_heights.resize(vert_stride * vert_stride)
-		
-		for lz in range(vert_stride):
-			var global_z: int = (coord.y * chunk_size) + lz
-			var local_offset: int = lz * vert_stride
-			var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
-			
-			var slice: PackedFloat32Array = global_height_data.slice(
-				global_offset, global_offset + vert_stride
-			)
-			for i in range(slice.size()):
-				chunk_local_heights[local_offset + i] = slice[i]
-				
-		chunk.initialize(
-			coord, chunk_size, cell_size, step_height,
-			chunk_local_heights, jitter_strength, show_chunk_labels,
-			jitter_slope_threshold, custom_material
-		)
+		_update_single_chunk(coord)
 		
 	notify_property_list_changed()
 
@@ -719,10 +632,15 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		
 	# --- RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
 	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
+		# [FIX] Automatically force previews on so raycasting works flawlessly for activation
+		if not show_deactivated_chunks:
+			show_deactivated_chunks = true
+			
 		var is_activation_pass: bool = (mode == BrushMode.ACTIVATE_CHUNK)
 		set_chunk_status_in_radius(local_pos, is_activation_pass)
 		return
 	# --------------------------------------------------------------------
+
 
 	var global_vertex_x: int = roundi(local_pos.x / cell_size)
 	var global_vertex_z: int = roundi(-local_pos.z / cell_size)
@@ -804,41 +722,11 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 
 	notify_property_list_changed()
 	
-	# Push chunk data segments to specific nodes and queue mesh updates
-	var vert_stride: int = chunk_size + 1
+	# Push chunk data segments to specific nodes and queue mesh updates via the new shared API
 	for chunk in chunks_to_update:
 		if not chunk: continue
-		var coord: Vector2i = chunk.chunk_coord
-		
-		# [FIX] Handle deactivated border chunks correctly instead of wiping their preview visibility
-		if not is_chunk_active(coord.x, coord.y):
-			chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
-			if not chunk.visible:
-				chunk.mesh = null
-				chunk.material_override = null
-			continue
-			
-		chunk.visible = true
-		var chunk_local_heights := PackedFloat32Array()
-		chunk_local_heights.resize(vert_stride * vert_stride)
-		
-		for lz in range(vert_stride):
-			var global_z: int = (coord.y * chunk_size) + lz
-			var local_offset: int = lz * vert_stride
-			var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
-			
-			var slice: PackedFloat32Array = global_height_data.slice(
-				global_offset, global_offset + vert_stride
-			)
-			for i in range(slice.size()):
-				chunk_local_heights[local_offset + i] = slice[i]
-				
-		# Chunks now directly receive your manual inspector material override
-		chunk.initialize(
-			coord, chunk_size, cell_size, step_height,
-			chunk_local_heights, jitter_strength, show_chunk_labels,
-			jitter_slope_threshold, custom_material
-		)
+		_update_single_chunk(chunk.chunk_coord)
+
 
 
 ##@@
@@ -1001,3 +889,47 @@ func _export_terrain_as_gltf() -> void:
 				editor_interface.scan()
 	else:
 		print("ERROR: GLTF export failed with engine error code: %d" % error_code)
+
+
+
+## Synchronizes a single chunk's visibility, height data segments, and mesh generation.
+func _update_single_chunk(coord: Vector2i) -> void:
+	if not chunks_dict.has(coord): return
+	var chunk: LowPolyTerrainChunk = chunks_dict[coord]
+	if not chunk: return
+	
+	# Process the visibility state of deactivated chunks based on inspector preview rules
+	if not is_chunk_active(coord.x, coord.y):
+		chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
+		if not chunk.visible:
+			chunk.mesh = null
+			chunk.material_override = null
+		else:
+			# Forward the label visibility toggle state so deactivated previews can render them
+			if chunk.has_method("update_label_visibility"):
+				chunk.update_label_visibility(show_chunk_labels)
+		return
+		
+	chunk.visible = true
+	var vert_stride: int = chunk_size + 1
+	var chunk_local_heights := PackedFloat32Array()
+	chunk_local_heights.resize(vert_stride * vert_stride)
+	
+	# Extract a localized sub-array subset out of the global continuous layout array memory
+	for lz in range(vert_stride):
+		var global_z: int = (coord.y * chunk_size) + lz
+		var local_offset: int = lz * vert_stride
+		var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
+		
+		var slice: PackedFloat32Array = global_height_data.slice(
+			global_offset, global_offset + vert_stride
+		)
+		for i in range(slice.size()):
+			chunk_local_heights[local_offset + i] = slice[i]
+			
+	# Fully re-triangulate and build the visual low-poly terrain mesh geometry
+	chunk.initialize(
+		coord, chunk_size, cell_size, step_height,
+		chunk_local_heights, jitter_strength, show_chunk_labels,
+		jitter_slope_threshold, custom_material
+	)

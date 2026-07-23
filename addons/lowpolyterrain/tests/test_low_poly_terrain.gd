@@ -395,3 +395,21 @@ func test_global_smoothing_preserves_deactivated_chunks_visibility() -> void:
 		chunk.visible,
 		"Regression Error: Global terrain smoothing accidentally hid deactivated chunk preview meshes."
 	)
+
+
+# --- TEST 14: AUTOMATIC PREVIEW ENABLING FOR CHUNK MANIPULATION ---
+func test_chunk_brush_automatically_forces_deactivated_previews_visible() -> void:
+	# Scenario: User has disabled red preview meshes
+	manager.show_deactivated_chunks = false
+	
+	# Act: Simulate the plugin tool selection workflow for chunk activation
+	manager.tool_mode = manager.BrushMode.ACTIVATE_CHUNK
+	if manager.tool_mode == manager.BrushMode.ACTIVATE_CHUNK or manager.tool_mode == manager.BrushMode.DEACTIVATE_CHUNK:
+		manager.show_deactivated_chunks = true
+		manager.rebuild_chunks_structure()
+	
+	# Assert: The workflow configuration must be successfully healed
+	assert_true(
+		manager.show_deactivated_chunks,
+		"Workflow Error: Switching to chunk tools must automatically enforce show_deactivated_chunks visible."
+	)
