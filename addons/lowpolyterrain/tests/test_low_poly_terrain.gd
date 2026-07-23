@@ -91,7 +91,7 @@ func test_raise_brush_increases_vertex_height_correctly() -> void:
 	# Assert: Extract global coordinates using the new high-performance O(1) getter API
 	var current_height: float = manager.get_height_at(5, 5)
 	assert_eq(
-		current_height, manager.step_height,
+		current_height, manager.step_height * manager.brush_strength,
 		"The target vertex height should match exactly one step_height after being raised."
 	)
 
@@ -112,7 +112,7 @@ func test_seam_handling_writes_simultaneously_to_neighboring_chunks() -> void:
 	# Assert: In the flat array, a single write fixes all chunk boundaries simultaneously
 	var height_at_shared_seam: float = manager.get_height_at(boundary_vertex_x, boundary_vertex_z)
 	assert_eq(
-		height_at_shared_seam, manager.step_height,
+		height_at_shared_seam, manager.step_height * manager.brush_strength,
 		"Seam error: Global flat memory allocation failed to synchronize boundary coordinates!"
 	)
 
@@ -206,7 +206,7 @@ func test_grid_migration_safely_transfers_heightmaps_when_chunk_size_mutates() -
 	
 	# Verify historical height setup value state before executing scaling operations
 	var baseline_h: float = manager.get_height_at(target_global_x, target_global_z)
-	assert_eq(baseline_h, manager.step_height, "Baseline peak initialization tracking failure.")
+	assert_eq(baseline_h, manager.step_height * manager.brush_strength, "Baseline peak initialization tracking failure.")
 	
 	# Act: Trigger the lossless point migration via the Apply Dimension Change UI action block pipeline
 	manager.preview_chunk_size = 5 # Halve the internal grid cell layout sizes
@@ -231,7 +231,7 @@ func test_shift_modifier_successfully_inverts_sculpting_brush_polarity() -> void
 	
 	# Assert: Verify if the elevation dropped below floor levels instead of rising up
 	var inverted_height: float = manager.get_height_at(2, 2)
-	var expected_lowered_value: float = -manager.step_height
+	var expected_lowered_value: float = -(manager.step_height * manager.brush_strength)
 	assert_eq(
 		inverted_height, expected_lowered_value,
 		"UX Error: Holding Shift failed to invert RAISE actions into LOWER operations."
@@ -276,12 +276,13 @@ func test_toggle_chunk_status_toggles_activity_and_preserves_heights() -> void:
 	# Assert baseline initialization: all chunks are fully active by default
 	assert_true(manager.is_chunk_active(0, 0), "Chunk should be active by default.")
 	
-	# Act: Toggle the chunk status to deactivate it
-	manager.toggle_chunk_status(0, 0)
+	# Act: Use the new radius-aware method to explicitly deactivate the targeted chunk (0,0)
+	var target_pos := Vector3(5.0, 0.0, -5.0) # Center of Chunk 0,0
+	manager.brush_radius = 1
+	manager.set_chunk_status_in_radius(target_pos, false)
 	assert_false(manager.is_chunk_active(0, 0), "Chunk activity state should flip to inactive.")
 	
 	# Assert: Inactive chunks must bypass brush interaction and protect data from mutation
-	var target_pos := Vector3(5.0, 0.0, -5.0) # Center of Chunk 0,0
 	manager.tool_mode = manager.BrushMode.RAISE
 	manager.brush_radius = 0
 	manager.interact_at_world_position(target_pos, false)
@@ -295,8 +296,10 @@ func test_toggle_chunk_status_toggles_activity_and_preserves_heights() -> void:
 
 # --- TEST 9: STATIC COLLISION EXCLUSION FOR INACTIVE CHUNKS ---
 func test_collision_baking_skips_inactive_chunks() -> void:
-	# Act: Deactivate one of the quadrant chunks before triggering physical calculations
-	manager.toggle_chunk_status(1, 1)
+	# Act: Use the new radius-aware method to deactivate the targeted chunk (1,1)
+	var target_pos_inactive := Vector3(15.0, 0.0, -15.0) # Center of Chunk 1,1
+	manager.brush_radius = 1
+	manager.set_chunk_status_in_radius(target_pos_inactive, false)
 	manager._bake_live_collisions_as_child()
 	
 	# Assert: Verify that the static collider body for Chunk 1,1 was omitted from the root
@@ -315,3 +318,61 @@ func test_collision_baking_skips_inactive_chunks() -> void:
 		active_body,
 		"Baking Error: Fully active chunks must generate valid StaticBody3D physics shapes."
 	)
+
+
+# --- TEST 10: BRUSH STRENGTH MULTIPLIER VALIDATION ---
+func test_brush_strength_scales_elevation_increments() -> void:
+	var target_pos := Vector3(5.0, 0.0, -5.0) # Center of Chunk 0,0
+	manager.tool_mode = manager.BrushMode.RAISE
+	manager.brush_radius = 0
+	
+	# Act: Set an aggressive brush strength multiplier and sculpt
+	manager.brush_strength = 3.0
+	manager.interact_at_world_position(target_pos, false)
+	
+	# Assert: Height change must equal (step_height * brush_strength)
+	var expected_height: float = manager.step_height * 3.0
+	assert_eq(
+		manager.get_height_at(5, 5), expected_height,
+		"Brush strength multiplier failed to scale vertex elevation increment correctly."
+	)
+
+# --- TEST 11: VISIBILITY TOGGLE FOR DEACTIVATED CHUNKS ---
+func test_deactivated_chunks_visibility_respects_inspector_toggle() -> void:
+	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
+	
+	# Act Scenario A: Deactivate chunk through the radius-aware function
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager.show_deactivated_chunks = true
+	
+	# [FIX] Await internal idle processing frames using the modern GUT 4 API
+	await wait_process_frames(2)
+	
+	# Assert Scenario A: Previews must be active based on our explicit toggle rule
+	assert_true(chunk.visible, "Deactivated chunk preview mesh should be visible in editor.")
+	
+	# Act Scenario B: Toggle visibility off in inspector properties
+	manager.show_deactivated_chunks = false
+	manager.rebuild_chunks_structure()
+	
+	# Give the engine main loop time to commit the modified visibility states
+	await wait_process_frames(2)
+	
+	# Assert Scenario B: The placeholder trimesh mesh should instantly disappear
+	assert_false(chunk.visible, "Deactivated chunk preview mesh should be hidden from editor viewport.")
+
+
+# --- TEST 12: RADIUS-BASED MULTI-CHUNK MANIPULATION ---
+func test_brush_mode_activation_and_deactivation_respects_radius() -> void:
+	# Position brush exactly at the shared corner intersection center of all 4 chunks
+	var seam_pos := Vector3(10.0, 0.0, -10.0)
+	
+	# Act: Set a radius large enough to clip into all 4 grid matrix zones and deactivate
+	manager.brush_radius = 5
+	manager.set_chunk_status_in_radius(seam_pos, false)
+	
+	# Assert: All 4 quad sectors must be simultaneously disabled by the unique brush sweep
+	assert_false(manager.is_chunk_active(0, 0), "Chunk 0,0 failed to deactivate within brush radius.")
+	assert_false(manager.is_chunk_active(1, 0), "Chunk 1,0 failed to deactivate within brush radius.")
+	assert_false(manager.is_chunk_active(0, 1), "Chunk 0,1 failed to deactivate within brush radius.")
+	assert_false(manager.is_chunk_active(1, 1), "Chunk 1,1 failed to deactivate within brush radius.")
