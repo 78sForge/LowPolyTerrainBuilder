@@ -322,7 +322,6 @@ func _create_brush_ui_panel() -> void:
 	for def in BRUSH_TOOL_DEFINITIONS:
 		var mode_idx: int = def[0] as int
 		
-		# Clean, global marker skip - no individual button exceptions
 		if mode_idx > PluginToolMode.NO_FURTHER_BUTTONS:
 			continue
 			
@@ -335,9 +334,20 @@ func _create_brush_ui_panel() -> void:
 		btn.set_meta("brush_mode", mode_idx)
 		btn.autowrap_mode = TextServer.AUTOWRAP_OFF
 		
-		# Universal asset rendering - loads the graphic as a raw texture asset
+		# Universal white asset loading with built-in theme-aware modulation overrides
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path) as Texture2D
+			
+			var editor_theme := EditorInterface.get_editor_theme()
+			if editor_theme:
+				var normal_color: Color = editor_theme.get_color("icon_normal_color", "Editor")
+				var pressed_color: Color = editor_theme.get_color("icon_pressed_color", "Editor")
+				var hover_color: Color = editor_theme.get_color("icon_hover_color", "Editor")
+				
+				btn.add_theme_color_override("icon_normal_color", normal_color)
+				btn.add_theme_color_override("icon_pressed_color", pressed_color)
+				btn.add_theme_color_override("icon_hover_color", hover_color)
+				btn.add_theme_color_override("icon_focus_color", hover_color)
 				
 		var shortcut_node = brush_shortcuts.get(mode_idx)
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
@@ -355,6 +365,7 @@ func _create_brush_ui_panel() -> void:
 		brush_panel_container.add_child(btn)
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
+
 
 
 ## Clears out the UI elements from the memory tree completely to prevent leaks.
