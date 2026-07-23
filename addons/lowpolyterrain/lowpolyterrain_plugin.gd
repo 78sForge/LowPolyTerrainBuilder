@@ -322,7 +322,7 @@ func _create_brush_ui_panel() -> void:
 	for def in BRUSH_TOOL_DEFINITIONS:
 		var mode_idx: int = def[0] as int
 		
-		# [FIX] Skip utility sizing tools to prevent rendering layout-breaking redundant buttons
+		# Clean, global marker skip - no individual button exceptions
 		if mode_idx > PluginToolMode.NO_FURTHER_BUTTONS:
 			continue
 			
@@ -335,12 +335,17 @@ func _create_brush_ui_panel() -> void:
 		btn.set_meta("brush_mode", mode_idx)
 		btn.autowrap_mode = TextServer.AUTOWRAP_OFF
 		
+		# Universal asset rendering - loads the graphic as a raw texture asset
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path) as Texture2D
 				
 		var shortcut_node = brush_shortcuts.get(mode_idx)
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
 			var shortcut_text: String = shortcut_node.get_as_text()
+			
+			if shortcut_text == "Comma": shortcut_text = ","
+			if shortcut_text == "Period": shortcut_text = "."
+			
 			btn.text = "%s (%s)" % [label_text, shortcut_text]
 			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
 		else:
@@ -350,7 +355,6 @@ func _create_brush_ui_panel() -> void:
 		brush_panel_container.add_child(btn)
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
-
 
 
 ## Clears out the UI elements from the memory tree completely to prevent leaks.
@@ -394,6 +398,10 @@ func _sync_ui_buttons_with_manager() -> void:
 		if child is Button and child.has_meta("brush_mode"):
 			var btn_mode: int = child.get_meta("brush_mode")
 			child.set_pressed_no_signal(btn_mode == active_mode)
+			
+			# Force immediate redrawing update on active state color toggles
+			child.queue_redraw()
+
 
 ## Automatically fired when the user modifies any configuration inside the Editor Settings.
 func _on_editor_settings_changed() -> void:

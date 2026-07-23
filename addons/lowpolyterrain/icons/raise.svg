@@ -6,7 +6,7 @@
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
 
 \f0\fs24 \cf0 <svg xmlns="http://w3.org" viewBox="0 0 16 16" width="16" height="16">\
-  <path d="M8 2L3 8h3v6h4V8h3L8 2z" fill="#ffffff"/>\
-  <path d="M2 14h12v1H2v-1z" fill="#ffffff" opacity="0.5"/>\
+  <path d="M8 1L2 7h4v6h4V7h4L8 1z" fill="#ffffff" stroke="#ffffff" stroke-width="0.5"/>\
+  <path d="M1 14h14v1.5H1V14z" fill="#ffffff" opacity="0.6"/>\
 </svg>\
 }
