@@ -376,3 +376,22 @@ func test_brush_mode_activation_and_deactivation_respects_radius() -> void:
 	assert_false(manager.is_chunk_active(1, 0), "Chunk 1,0 failed to deactivate within brush radius.")
 	assert_false(manager.is_chunk_active(0, 1), "Chunk 0,1 failed to deactivate within brush radius.")
 	assert_false(manager.is_chunk_active(1, 1), "Chunk 1,1 failed to deactivate within brush radius.")
+
+
+# --- TEST 13: GLOBAL SMOOTHING VISIBILITY FOR INACTIVE CHUNKS ---
+func test_global_smoothing_preserves_deactivated_chunks_visibility() -> void:
+	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
+	
+	# Act: Deactivate the chunk and force preview visualization visibility on
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager.show_deactivated_chunks = true
+	manager.rebuild_chunks_structure()
+	
+	# Execute the global terrain cross-filter smoothing operation pipeline
+	manager._smooth_entire_terrain()
+	
+	# Assert: The deactivated chunk placeholder must remain visible in editor RAM
+	assert_true(
+		chunk.visible,
+		"Regression Error: Global terrain smoothing accidentally hid deactivated chunk preview meshes."
+	)

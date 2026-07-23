@@ -659,8 +659,12 @@ func _smooth_entire_terrain() -> void:
 		var chunk: LowPolyTerrainChunk = chunks_dict[coord]
 		if not chunk: continue
 		
+		# [FIX] Handle deactivated chunks correctly based on the editor toggle instead of hard-hiding them
 		if not is_chunk_active(coord.x, coord.y):
-			chunk.visible = false
+			chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
+			if not chunk.visible:
+				chunk.mesh = null
+				chunk.material_override = null
 			continue
 			
 		chunk.visible = true
@@ -686,6 +690,7 @@ func _smooth_entire_terrain() -> void:
 		)
 		
 	notify_property_list_changed()
+
 
 ##@@
 

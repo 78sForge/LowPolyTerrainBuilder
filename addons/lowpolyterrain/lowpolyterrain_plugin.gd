@@ -275,20 +275,21 @@ func _create_brush_ui_panel() -> void:
 	
 	for def in BRUSH_TOOL_DEFINITIONS:
 		# Access sub-array elements directly by index position to prevent crash
-		var mode_idx: int = def[0]
-		var label_text: String = def[2]
-		var icon_path: String = def[3]
+		var mode_idx: int = def[0] as int
+		var label_text: String = def[2] as String
+		var icon_path: String = def[3] as String
 		
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.button_group = button_group
 		btn.set_meta("brush_mode", mode_idx)
 		
-		# Robust resource loading of your custom SVG graphics
+		# [FIX] Keep standard responsive sizing to guarantee zero stress when resizing the editor window
+		btn.autowrap_mode = TextServer.AUTOWRAP_OFF
+		
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path) as Texture2D
 				
-		# Extract the shortcut text and append it directly to the button text label
 		var shortcut_node = brush_shortcuts.get(mode_idx)
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
 			var shortcut_text: String = shortcut_node.get_as_text()
@@ -299,6 +300,7 @@ func _create_brush_ui_panel() -> void:
 
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
+
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
 
