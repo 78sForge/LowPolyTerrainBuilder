@@ -413,3 +413,35 @@ func test_chunk_brush_automatically_forces_deactivated_previews_visible() -> voi
 		manager.show_deactivated_chunks,
 		"Workflow Error: Switching to chunk tools must automatically enforce show_deactivated_chunks visible."
 	)
+
+
+# --- TEST 15: EDITOR WIREFRAME OVERLAY VISIBILITY TOGGLE ---
+func test_wireframe_overlay_respects_inspector_toggle() -> void:
+	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
+	
+	# Act & Assert Scenario A: Enable wireframe overlay previews
+	manager.show_wireframe = true
+	manager.rebuild_chunks_structure()
+	
+	# [FIX] Inject transient metadata to safely bypass Engine.is_editor_hint filters during test execution
+	chunk.set_meta("force_editor_features", true)
+	if chunk.has_method("_apply_custom_shader"):
+		chunk._apply_custom_shader()
+	
+	var overlay_node_a = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
+	assert_not_null(
+		overlay_node_a,
+		"UI Error: Wireframe vector overlay mesh instance should be instantiated in editor mode."
+	)
+	
+	# Act & Assert Scenario B: Disable wireframe overlay previews
+	manager.show_wireframe = false
+	manager.rebuild_chunks_structure()
+	if chunk.has_method("_apply_custom_shader"):
+		chunk._apply_custom_shader()
+	
+	var overlay_node_b = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
+	assert_null(
+		overlay_node_b,
+		"UI Error: Wireframe vector overlay mesh must be completely removed when the toggle is turned off."
+	)

@@ -66,6 +66,10 @@ var cell_size: float = 1.0
 @export var show_deactivated_chunks: bool = true:
 	set(v): show_deactivated_chunks = v; _queue_setup()
 
+## If enabled, shows a crisp, lightweight vector wireframe overlay on active chunks in the editor.
+@export var show_wireframe: bool = true:
+	set(v): show_wireframe = v; _queue_setup()
+
 	
 # REAL INSPECTOR BUTTONS: Resolved via safe Lambda Callables to prevent early parsing errors
 ## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size.
