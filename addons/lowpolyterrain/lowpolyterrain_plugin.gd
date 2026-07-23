@@ -276,22 +276,21 @@ func _create_brush_ui_panel() -> void:
 	
 	button_group = ButtonGroup.new()
 	
+	# Explicit mapping using your custom addon SVG file paths
 	var button_definitions: Array = [
-		[0, "Raise", "ToolsElevation.svg"],
-		[1, "Lower", "ToolsElevationLower.svg"],
-		[2, "Flatten", "ToolsFlatten.svg"],
-		[3, "Smooth", "ToolsSmooth.svg"],
-		[4, "Activate Chunk", "TileChecked.svg"],
-		[5, "Deactivate Chunk", "TileUnchecked.svg"]
+		[0, "Raise", "res://addons/lowpolyterrain/icons/raise.svg"],
+		[1, "Lower", "res://addons/lowpolyterrain/icons/lower.svg"],
+		[2, "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg"],
+		[3, "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg"],
+		[4, "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg"],
+		[5, "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg"]
 	]
 	
-	var base_control := EditorInterface.get_base_control()
-	
 	for def in button_definitions:
-		# [FIX] Extract the data cleanly from the definition array indexes
+		# [FIX] Access sub-array elements directly by index position to prevent crash
 		var mode_idx: int = def[0] as int
 		var label_text: String = def[1] as String
-		var fallback_icon_name: String = def[2] as String
+		var icon_path: String = def[2] as String
 		
 		var btn := Button.new()
 		btn.text = label_text
@@ -299,15 +298,13 @@ func _create_brush_ui_panel() -> void:
 		btn.button_group = button_group
 		btn.set_meta("brush_mode", mode_idx)
 		
-		if base_control and base_control.theme:
-			if base_control.has_theme_icon(fallback_icon_name, "EditorIcons"):
-				btn.icon = base_control.get_theme_icon(fallback_icon_name, "EditorIcons")
+		# Robust resource loading of your custom SVG graphics
+		if ResourceLoader.exists(icon_path):
+			btn.icon = load(icon_path) as Texture2D
 				
 		var shortcut_node = brush_shortcuts.get(mode_idx)
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
-			# [FIX] This now automatically extracts the real character name (e.g. "Q") instead of ASCII codes
 			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_node.get_as_text()]
-
 			
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
