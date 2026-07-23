@@ -712,7 +712,7 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		else:
 			mode = BrushMode.SMOOTH
 		
-	# --- [NEW] RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
+	# --- RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
 	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
 		var is_activation_pass: bool = (mode == BrushMode.ACTIVATE_CHUNK)
 		set_chunk_status_in_radius(local_pos, is_activation_pass)
@@ -762,7 +762,7 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				
 				# Calculate dynamic increment based on current brush strength
 				var current_increment: float = step_height * brush_strength
-
+				
 				match mode:
 					BrushMode.RAISE:
 						new_h += current_increment
@@ -792,7 +792,6 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 							# Scale the blending factor fluidly with the brush strength
 							var dynamic_smooth: float = clampf(smooth_factor * brush_strength, 0.0, 1.0)
 							new_h = lerpf(current_h, average_height, dynamic_smooth)
-
 				
 				# Direct O(1) mutations into global storage (No chunk border splitting required anymore)
 				global_height_data[current_index] = new_h
@@ -806,8 +805,12 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		if not chunk: continue
 		var coord: Vector2i = chunk.chunk_coord
 		
+		# [FIX] Handle deactivated border chunks correctly instead of wiping their preview visibility
 		if not is_chunk_active(coord.x, coord.y):
-			chunk.visible = false
+			chunk.visible = bool(show_deactivated_chunks) if show_deactivated_chunks != null else true
+			if not chunk.visible:
+				chunk.mesh = null
+				chunk.material_override = null
 			continue
 			
 		chunk.visible = true
