@@ -216,7 +216,7 @@ func _create_3d_brush_gizmo() -> void:
 	text_label.font_size = 128
 	text_label.outline_size = 16
 	text_label.modulate = Color(1.0, 1.0, 1.0, 0.95)
-	text_label.position = Vector3(0, 1.2, 0)
+	text_label.position = Vector3(0, 1.2, 0.0)
 	brush_gizmo.add_child(text_label)
 	
 	_update_gizmo_scale()
@@ -257,7 +257,7 @@ func _update_gizmo_scale() -> void:
 				mode_name = def[2] as String # Safely retrieve the human-readable text from index 2
 				break
 				
-		if mode_idx <= PluginToolMode.SMOOTH: 
+		if mode_idx == PluginToolMode.RAISE or mode_idx == PluginToolMode.LOWER or mode_idx == PluginToolMode.SMOOTH: 
 			text_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
 		else: 
 			text_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
