@@ -164,6 +164,9 @@ func _update_read_only_metrics() -> void:
 ## Controls how fast the terrain elevates, lowers, or smooths per stroke.
 @export_range(0.05, 15.0, 0.05) var brush_strength: float = 1.0
 
+## Controls the sharpness of the brush edges. 0.0 is completely sharp/linear, 1.0 is soft smoothstep.
+@export_range(0.0, 1.0, 0.05) var brush_falloff_strength: float = 0.0
+
 
 
 @export_group("Terrain Smoothing")
@@ -675,26 +678,34 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				
 				var current_increment: float = step_height * brush_strength
 				
-				# Enforce a flat full strength factor by default for hard edges (RAISE, LOWER, FLATTEN)
-				var brush_falloff: float = 1.0
+				# 1. Calculate the distance factor from the brush center (0.0 center to 1.0 edge)
+				var distance_from_center: float = sqrt(dist_sq)
+				var radius_factor: float = distance_from_center / float(brush_radius)
 				
-				# Only apply the soft smoothstep falloff transition specifically for the SMOOTH brush
+				# 2. Compute the smoothstep curve profile
+				var smooth_curve: float = 1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor))
+				smooth_curve = clampf(smooth_curve, 0.0, 1.0)
+				
+				# 3. Dynamic blending based on mode and inspector settings
+				var final_falloff: float = 1.0
+				
 				if mode == BrushMode.SMOOTH:
-					var distance_from_center: float = sqrt(dist_sq)
-					var radius_factor: float = distance_from_center / float(brush_radius)
-					brush_falloff = 1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor))
-					brush_falloff = clampf(brush_falloff, 0.0, 1.0)
+					# Smooth brush always uses the organic smoothstep transition curve
+					final_falloff = smooth_curve
+				else:
+					# RAISE, LOWER, and FLATTEN blend linearly between hard (1.0) and soft (smooth_curve)
+					final_falloff = lerpf(1.0, smooth_curve, brush_falloff_strength)
 				
 				match mode:
 					BrushMode.RAISE:
-						new_h += current_increment * brush_falloff
+						new_h += current_increment * final_falloff
 					BrushMode.LOWER:
-						new_h -= current_increment * brush_falloff
+						new_h -= current_increment * final_falloff
 					BrushMode.FLATTEN:
-						new_h = lerpf(current_h, target_flatten_h, brush_falloff)
+						new_h = lerpf(current_h, target_flatten_h, final_falloff)
 					BrushMode.SMOOTH:
 						var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
-						var dynamic_smooth: float = clampf(smooth_factor * brush_strength * brush_falloff, 0.0, 1.0)
+						var dynamic_smooth: float = clampf(smooth_factor * brush_strength * final_falloff, 0.0, 1.0)
 						new_h = lerpf(current_h, average_height, dynamic_smooth)
 
 				global_height_data[current_index] = new_h
