@@ -9,7 +9,7 @@ extends EditorPlugin
 const BRUSH_COLORS: Dictionary = {
 	LowPolyTerrainManager.BrushMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),             # Light Blue (Raise)
 	LowPolyTerrainManager.BrushMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),            # Dark Blue (Lower)
-	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.65, 0.65, 0.65, 0.8),         # Gray (Flatten)
+	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.75, 0.4, 0.2, 0.8),         # Orange (Flatten)
 	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),            # Purple (Smooth)
 	LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
 	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75) # Red (Deactivate)
@@ -47,7 +47,7 @@ func _get_plugin_name() -> String:
 	return "Low Poly Terrain Builder"
 	
 func _enter_tree() -> void:
-	# Registriert den neuen Node mit Ihrem Custom-Icon
+	# Register the custom type node
 	add_custom_type(
 		"LowPolyTerrainManager", 
 		"Node3D", 
@@ -58,10 +58,15 @@ func _enter_tree() -> void:
 	_initialize_editor_shortcuts()
 	_create_brush_ui_panel()
 	
-	# Listen for global editor setting updates to dynamically refresh button text
+	# Listen for global editor setting updates
 	var settings := EditorInterface.get_editor_settings()
 	if settings and not settings.settings_changed.is_connected(_on_editor_settings_changed):
 		settings.settings_changed.connect(_on_editor_settings_changed)
+		
+	# [FIX] Connect the native EditorPlugin signal directly to this script instance
+	if not main_screen_changed.is_connected(_on_main_screen_changed):
+		main_screen_changed.connect(_on_main_screen_changed)
+
 
 func _exit_tree() -> void:
 	remove_custom_type("LowPolyTerrainManager")
@@ -70,6 +75,11 @@ func _exit_tree() -> void:
 	var settings := EditorInterface.get_editor_settings()
 	if settings and settings.settings_changed.is_connected(_on_editor_settings_changed):
 		settings.settings_changed.disconnect(_on_editor_settings_changed)
+		
+	# [FIX] Clean up the signal connection on plugin exit
+	if main_screen_changed.is_connected(_on_main_screen_changed):
+		main_screen_changed.disconnect(_on_main_screen_changed)
+
 
 func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
@@ -110,9 +120,6 @@ func _edit(object: Object) -> void:
 
 
 
-		
-
-
 func _make_visible(visible: bool) -> void:
 	if not visible:
 		if active_manager:
@@ -120,7 +127,20 @@ func _make_visible(visible: bool) -> void:
 		active_manager = null
 		is_drawing = false
 		_destroy_3d_brush_gizmo()
-		_show_brush_ui_panel(false)
+
+
+
+## Automatically fired by Godot when switching between 2D, 3D, and Script screens.
+func _on_main_screen_changed(screen_name: String) -> void:
+	# Hide the 2D canvas label immediately if the user leaves the 3D viewport canvas
+	if screen_name != "3D":
+		if mouse_label:
+			mouse_label.visible = false
+			
+		# Reset session state variables inside the manager to prevent continuous drawing states
+		if active_manager:
+			active_manager.is_paint_stroke_active = false
+		is_drawing = false
 
 
 
