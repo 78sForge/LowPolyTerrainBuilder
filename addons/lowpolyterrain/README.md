@@ -2,13 +2,17 @@
 
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic low-poly landscapes inside the Godot 4 editor.
 
+## ✅  **Update information for v1.0.10 (Make your life colorful):**
+Key additions:
+* brush mode dependend brush circle to directly see which mode is active plus mode label, radius and strength
+
 ## ✅  **Update information for v1.0.9 (The UI & Workflow Update):**
 Version 1.0.9 introduces an overhaul of the user interface and editing ergonomics. 
 Key additions:
-	- a horizontal viewport toolbar
-	- configurable hotkeys for brush tools and brush radius scaling
-	- a wireframe display for all polygons
-	- brush radius dependend activation and deactivation of chunks
+* a horizontal viewport toolbar
+* configurable hotkeys for brush tools and brush radius scaling
+* a wireframe display for all polygons
+* brush radius dependend activation and deactivation of chunks
 	
 ## ✅ **Update information for v1.0.8 (Optimization):**
 With v1.0.7, a very resource-intensive (GPU-heavy) default ShaderMaterial was used, causing frame drops on weaker systems. This issue has been resolved in v1.0.8. I also tested this add-on on my mobile device, achieving up to 1000 FPS within the editor.
