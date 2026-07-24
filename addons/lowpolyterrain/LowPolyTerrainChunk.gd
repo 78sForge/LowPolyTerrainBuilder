@@ -81,7 +81,7 @@ func update_label_visibility(show_labels: bool) -> void:
 
 ##@@
 
-## Core geometry geometry generation engine. Parses the heightmap grid, runs decimation rules, 
+## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 func generate_mesh() -> void:
 	if height_data.is_empty() or not visible:
@@ -93,9 +93,16 @@ func generate_mesh() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var c := Color(1.0, 1.0, 1.0)
 	
-	# --- STEP 1: GATHER ORGANIC COORDINATES (2D & 3D) ---
+	# --- STEP 1: PRE-ALLOCATE ARRAYS TO ELIMINATE RE-ALLOCATION LATENCY ---
+	var max_points: int = vert_count * vert_count
 	var points_2d := PackedVector2Array()
 	var points_3d := PackedVector3Array()
+	
+	points_2d.resize(max_points)
+	points_3d.resize(max_points)
+	
+	# Tracker index for direct O(1) array insertions
+	var active_count: int = 0
 	
 	for z in range(vert_count):
 		for x in range(vert_count):
@@ -160,14 +167,12 @@ func generate_mesh() -> void:
 					current_threshold = 0.5
 				
 				# Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
-				# Keeps flat areas completely rigid, eliminates micro-noise, and stabilizes shading.
 				var t: float = clampf(true_slope / current_threshold, 0.0, 1.0)
 				var slope_factor: float = t * t * (3.0 - 2.0 * t)
 				
-				# Boundary Distance Damping (Prevents sharp triangle spikes at seams)
+				# Boundary Distance Damping
 				var dist_to_edge_x: float = minf(x, chunk_size - x)
 				var dist_to_edge_z: float = minf(z, chunk_size - z)
-				# Scales smoothly from 0.0 (edge) to 1.0 (center) over a 2-vertex safety margin
 				var edge_damp: float = clampf(
 					minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0
 				)
@@ -178,8 +183,14 @@ func generate_mesh() -> void:
 			var pos_x: float = x * cell_size + jitter.x
 			var pos_z: float = -z * cell_size + jitter.z
 			
-			points_2d.append(Vector2(pos_x, pos_z))
-			points_3d.append(Vector3(pos_x, current_h, pos_z))
+			# Direct O(1) assignment into the pre-allocated memory blocks
+			points_2d[active_count] = Vector2(pos_x, pos_z)
+			points_3d[active_count] = Vector3(pos_x, current_h, pos_z)
+			active_count += 1
+	
+	# Shrink arrays down to the actual active Delaunay points in a single operation
+	points_2d.resize(active_count)
+	points_3d.resize(active_count)
 	
 	# --- STEP 2: GODOT DELAUNAY TRIANGULATION ---
 	var triangles: PackedInt32Array = Geometry2D.triangulate_delaunay(points_2d)
@@ -212,12 +223,21 @@ func generate_mesh() -> void:
 		
 		var normal: Vector3 = (p1 - p0).cross(p2 - p0).normalized()
 		
-		st.set_normal(normal); st.set_color(c); st.add_vertex(p0)
-		st.set_normal(normal); st.set_color(c); st.add_vertex(p1)
-		st.set_normal(normal); st.set_color(c); st.add_vertex(p2)
+		st.set_normal(normal)
+		st.set_color(c)
+		st.add_vertex(p0)
+		
+		st.set_normal(normal)
+		st.set_color(c)
+		st.add_vertex(p1)
+		
+		st.set_normal(normal)
+		st.set_color(c)
+		st.add_vertex(p2)
 		
 	mesh = st.commit()
 	_apply_custom_shader()
+
 
 
 
