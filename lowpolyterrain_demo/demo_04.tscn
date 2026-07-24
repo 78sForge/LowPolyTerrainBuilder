@@ -407,6 +407,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 0, 50)
 script = ExtResource("1_jrlr4")
 chunk_activity_data = PackedByteArray("AQEBAQEAAAAAAAEBAQEBAQAAAAABAQEBAQEBAAAAAQEBAQEBAQAAAAABAQEBAQEAAAAAAQEBAQEBAQAAAAABAQEBAQEBAQAAAAEBAQEBAQEAAAABAQEBAQEBAAAAAAEBAQEBAQ==")
 preview_world_chunks = Vector2i(10, 10)
+show_deactivated_chunks = false
+show_wireframe = false
 step_height = 2.0
 jitter_slope_threshold = 0.05
 custom_material = SubResource("ShaderMaterial_j2xnd")
@@ -423,6 +425,7 @@ script = ExtResource("1_jrlr4")
 chunk_activity_data = PackedByteArray("AQEBAQAAAAAAAAEBAQEBAAAAAAAAAQEBAQAAAAAAAAEBAQEBAAAAAAAAAQEBAQAAAAAAAAABAQEBAAAAAAAAAQEBAQEBAAAAAAABAQEBAQEAAAAAAAEBAQEBAAAAAAAAAAEBAQ==")
 preview_world_chunks = Vector2i(10, 10)
 show_deactivated_chunks = false
+show_wireframe = null
 step_height = 2.0
 jitter_strength = 0.0
 jitter_slope_threshold = 0.4

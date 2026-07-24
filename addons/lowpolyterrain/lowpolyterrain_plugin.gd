@@ -16,9 +16,20 @@ enum PluginToolMode {
 	# [MARKER] Everything below this value will be skipped by the UI generator loop
 	NO_FURTHER_BUTTONS = 5, 
 	DECREASE_BRUSH_RADIUS = 6,
-	INCREASE_BRUSH_RADIUS = 7
+	INCREASE_BRUSH_RADIUS = 7,
+	DEFAULT = 20 # used for default assigements
 }
 
+# Centralized color mapping matching the tool modes for intuitive 3D editor feedback
+const BRUSH_COLORS: Dictionary = {
+	PluginToolMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),             # Light Blue (Raise)
+	PluginToolMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),            # Dark Blue (Lower)
+	PluginToolMode.FLATTEN: Color(0.65, 0.65, 0.65, 0.8),         # Gray (Flatten)
+	PluginToolMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),            # Purple (Smooth)
+	PluginToolMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
+	PluginToolMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75), # Red (Deactivate)
+	PluginToolMode.DEFAULT: Color(1.0, 1.0, 1.0, 0.9)
+}
 
 
 # Centralized definition array for zero-redundancy UI and shortcut handling
@@ -80,18 +91,28 @@ func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
 
 func _edit(object: Object) -> void:
-	# Disconnect old signal handler to prevent memory leaks or dual bindings
-	if active_manager and active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
-		active_manager.disconnect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
+	# Disconnect old signal handlers cleanly to prevent double bindings
+	if active_manager:
+		if active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
+			active_manager.disconnect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
+			
+		var inspector := EditorInterface.get_inspector()
+		if inspector and inspector.is_connected("property_edited", _on_inspector_property_edited):
+			inspector.disconnect("property_edited", _on_inspector_property_edited)
 
 	if object is LowPolyTerrainManager:
 		active_manager = object
 		active_manager.set_meta("_edit_lock_", true)
 		active_manager.rebuild_chunks_structure()
 		
-		# Connect signal to dynamic brush scaling updates
+		# Connect only the custom scaling/hotkey signal
 		if not active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
 			active_manager.connect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
+			
+		# Connect the inspector click hook safely
+		var inspector := EditorInterface.get_inspector()
+		if inspector and not inspector.is_connected("property_edited", _on_inspector_property_edited):
+			inspector.connect("property_edited", _on_inspector_property_edited)
 			
 		_create_3d_brush_gizmo()
 		_show_brush_ui_panel(true)
@@ -102,7 +123,11 @@ func _edit(object: Object) -> void:
 		active_manager = null
 		is_drawing = false
 		_destroy_3d_brush_gizmo()
-		_show_brush_ui_panel(false)
+
+
+
+		
+
 
 func _make_visible(visible: bool) -> void:
 	if not visible:
@@ -165,30 +190,38 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> Edit
 
 
 ## Spawns a semi-transparent 3D cylinder disk acting as the brush indicator inside the scene tree.
+## Instantiates the transient, RAM-only 3D sculpting ring and text feedback label.
 func _create_3d_brush_gizmo() -> void:
-	if brush_gizmo or not active_manager: return
+	if not active_manager or brush_gizmo: return
 	
-	brush_gizmo = MeshInstance3D.new()
+	brush_gizmo = MeshInstance3D.new() as MeshInstance3D
 	brush_gizmo.name = "DEBUG_BrushGizmo_Transient"
-	
-	# Build a thin, flat cylinder mesh representing a perfect 3D circle overlay
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 1.0
-	cyl.bottom_radius = 1.0
-	cyl.height = 0.02
-	cyl.radial_segments = 32
-	brush_gizmo.mesh = cyl
-	
-	# Configure an emissive, depth-testing-disabled material for full editor visibility
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED 
-	mat.albedo_color = Color(0.2, 0.6, 1.0, 0.35)
-	mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-	mat.no_depth_test = true 
-	brush_gizmo.material_override = mat
-	
 	active_manager.add_child(brush_gizmo)
+	
+	var gizmo_material := StandardMaterial3D.new()
+	gizmo_material.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
+	gizmo_material.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+	gizmo_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	
+	# [FIX] Disable depth testing so the colored brush circle always renders cleanly on top of the terrain polygons
+	gizmo_material.no_depth_test = true
+	
+	brush_gizmo.material_override = gizmo_material
+	
+	var text_label := Label3D.new()
+	text_label.name = "Gizmo_Text_Label"
+	text_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	text_label.no_depth_test = true
+	
+	text_label.font_size = 128
+	text_label.outline_size = 16
+	text_label.modulate = Color(1.0, 1.0, 1.0, 0.95)
+	text_label.position = Vector3(0, 1.2, 0)
+	brush_gizmo.add_child(text_label)
+	
 	_update_gizmo_scale()
+
+
 
 func _destroy_3d_brush_gizmo() -> void:
 	if brush_gizmo:
@@ -198,12 +231,65 @@ func _destroy_3d_brush_gizmo() -> void:
 		brush_gizmo = null
 
 ## Instantly recalibrates the gizmo's world scale, bypassing Godot inspector sync latency.
+## Dynamically updates the gizmo mesh, material colors, and floating text feedback.
 func _update_gizmo_scale() -> void:
 	if not brush_gizmo or not active_manager: return
-	# Calculate the factual world-space radius based on current grid properties
-	var r = active_manager.cell_size * float(active_manager.brush_radius)
-	# Scale across horizontal planes while keeping Y flat
-	brush_gizmo.scale = Vector3(r, 1.0, r)
+	
+	var ring_mesh: MeshInstance3D = brush_gizmo as MeshInstance3D
+	var text_label: Label3D = brush_gizmo.get_node_or_null("Gizmo_Text_Label") as Label3D
+	
+	var mode_idx: int = active_manager.tool_mode
+	var current_radius: float = float(active_manager.brush_radius) * active_manager.cell_size
+	
+	# 1. UPDATE MATERIAL CODES & ENFORCE ACTIVE COLOR SYNCHRONIZATION
+	var mat: StandardMaterial3D = ring_mesh.material_override as StandardMaterial3D
+	if mat:
+		if BRUSH_COLORS.has(mode_idx):
+			mat.albedo_color = BRUSH_COLORS[mode_idx] as Color
+		else:
+			mat.albedo_color = BRUSH_COLORS[PluginToolMode.DEFAULT] as Color
+			
+	# 2. [FIX] EXTRACT CLEAN LABELS VIA EXPLICIT ARRAY INDEX POSITION DEF
+	if text_label:
+		var mode_name: String = ""
+		for def in BRUSH_TOOL_DEFINITIONS:
+			if def[0] as int == mode_idx:
+				mode_name = def[2] as String # Safely retrieve the human-readable text from index 2
+				break
+				
+		if mode_idx <= PluginToolMode.SMOOTH: 
+			text_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
+		else: 
+			text_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
+			
+		if BRUSH_COLORS.has(mode_idx):
+			var border_color: Color = BRUSH_COLORS[mode_idx]
+			text_label.outline_modulate = Color(border_color.r * 0.2, border_color.g * 0.2, border_color.b * 0.2, 1.0)
+			
+	# 3. BUILD A SOLID TRANSPARENT 3D BRUSH CIRCLE SURFACE
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	
+	var segments: int = 36
+	var center_vertex := Vector3(0.0, 0.03, 0.0)
+	
+	for i in range(segments):
+		var theta0: float = (float(i) / float(segments)) * TAU
+		var theta1: float = (float(i + 1) / float(segments)) * TAU
+		
+		var p0 := Vector3(sin(theta0) * current_radius, 0.03, cos(theta0) * current_radius)
+		var p1 := Vector3(sin(theta1) * current_radius, 0.03, cos(theta1) * current_radius)
+		
+		st.add_vertex(center_vertex)
+		st.add_vertex(p0)
+		st.add_vertex(p1)
+		
+	ring_mesh.mesh = st.commit()
+
+
+
+
+
 
 ## Casts a mouse ray against chunk dimensions to lock the gizmo onto the mesh coordinates.
 func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
@@ -248,10 +334,13 @@ func _process_paint_stroke(camera: Camera3D, mouse_pos: Vector2, is_shift: bool)
 	if brush_gizmo and brush_gizmo.visible:
 		active_manager.interact_at_world_position(brush_gizmo.global_position, is_shift)
 
-## Target handler fired automatically when custom inspector signals require a gizmo resize.
+
+## Target handler fired when custom hotkeys or script calls update the brush properties.
 func _on_signal_brush_settings_changed() -> void:
-	print("_on_signal_brush_settings_changed -> Updating 3D gizmo scale!")
-	_update_gizmo_scale()
+	if active_manager and brush_gizmo:
+		print("_on_signal_brush_settings_changed -> Updating 3D gizmo scale!")
+		_update_gizmo_scale()
+
 
 ## Registers shortcuts cleanly inside the Editor Settings using the central constants template.
 func _initialize_editor_shortcuts() -> void:
@@ -386,15 +475,17 @@ func _select_brush_mode(mode_idx: int) -> void:
 	if not active_manager: return
 	active_manager.tool_mode = mode_idx as LowPolyTerrainManager.BrushMode
 	
-	# [FIX] Force deactivated chunk previews visible the exact moment the tool is selected
-	if mode_idx == LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK or mode_idx == LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK:
-
+	if mode_idx == PluginToolMode.ACTIVATE_CHUNK or mode_idx == PluginToolMode.DEACTIVATE_CHUNK:
 		if not active_manager.show_deactivated_chunks:
 			active_manager.show_deactivated_chunks = true
 			active_manager.rebuild_chunks_structure()
 			
 	active_manager.notify_property_list_changed()
 	_sync_ui_buttons_with_manager()
+	
+	# [FIX] Instantly refresh the visual brush ring color, mesh, and text when the tool changes
+	_update_gizmo_scale()
+
 
 ## Internal signal event wrapper fired when clicking any item on the toolbar.
 func _on_brush_button_pressed(mode_idx: int) -> void:
@@ -438,3 +529,22 @@ func _on_editor_settings_changed() -> void:
 				var shortcut_text: String = shortcut_node.get_as_text()
 				child.text = "%s (%s)" % [label_text, shortcut_text]
 				child.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
+
+## Triggered dynamically whenever any property (like brush_strength) is modified inside the inspector.
+func _on_manager_property_changed() -> void:
+	if active_manager and brush_gizmo:
+		# [FIX] Force immediate synchronization of text labels and scales on inspector input frames
+		_update_gizmo_scale()
+		
+
+## Automatically fired by Godot only when a property is actively modified in the Inspector.
+func _on_inspector_property_edited(property_name: String) -> void:
+	if not active_manager or not brush_gizmo: return
+	
+	# Handle explicit sculpting property updates cleanly without full array frame-spam
+	if property_name == "tool_mode" or property_name == "brush_radius" or property_name == "brush_strength":
+		# 1. Update the 3D visual circle mesh and floating text label
+		_update_gizmo_scale()
+		
+		# 2. Force the toolbar radio buttons to depress the correct tool icon instantly
+		_sync_ui_buttons_with_manager()
