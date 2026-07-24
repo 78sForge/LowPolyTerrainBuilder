@@ -151,9 +151,10 @@ func _update_read_only_metrics() -> void:
 
 
 
-@export_group("Brush Tools")
-## Selects the active sculpting tool interaction profile.
-@export var tool_mode: BrushMode = BrushMode.RAISE
+@export_group("Brush Settings")
+
+# [FIX] Changed from @export to @export_storage to completely hide the redundant dropdown from the inspector
+@export_storage var tool_mode: BrushMode = BrushMode.RAISE
 
 ## The operational radius of the painting brush measured in grid vertices.
 @export_range(1, 50, 1) var brush_radius: int = 2:
