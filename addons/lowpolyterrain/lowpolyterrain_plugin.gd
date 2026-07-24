@@ -165,9 +165,16 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_drawing = event.pressed
+			
+			# When the user releases the left mouse button, reset the session cache in the manager
+			# needed for FLATTEN mode where is_paint_stroke_active is set to true
+			if not is_drawing and active_manager:
+				active_manager.is_paint_stroke_active = false
+				
 			if is_drawing:
 				_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
 				return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
+
 				
 	return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
 

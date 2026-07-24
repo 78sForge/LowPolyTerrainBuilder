@@ -313,6 +313,10 @@ var chunks_dict: Dictionary = {}
 var _paint_cooldown: float = 0.1 
 var _last_paint_time: float = 0.0
 
+# Persistent sculpting data to lock the initial flatten height across frames
+var is_paint_stroke_active: bool = false
+var locked_flatten_height: float = 0.0
+
 
 # --- AUTOMATIC INITIALIZATION PIPELINE ---
 func _init() -> void:
@@ -643,14 +647,22 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	var chunks_to_update: Array[LowPolyTerrainChunk] = []
 	var temporary_data: PackedFloat32Array = global_height_data.duplicate()
 	
+	
 	var target_flatten_h: float = 0.0
 	if mode == BrushMode.FLATTEN:
-		if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
-			target_flatten_h = snapped(
-				temporary_data[global_vertex_z * _total_vertices_x + global_vertex_x],
-				step_height
-			)
-	
+		# Check if this is the absolute first frame of the active click session
+		if not is_paint_stroke_active:
+			is_paint_stroke_active = true
+			if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
+				locked_flatten_height = snapped(
+					temporary_data[global_vertex_z * _total_vertices_x + global_vertex_x],
+					step_height
+				)
+		
+		# Lock the current frame's flatten target straight to the session cache
+		target_flatten_h = locked_flatten_height
+
+
 	var radius_squared: float = float(brush_radius * brush_radius)
 	
 	for gz in range(global_vertex_z - brush_radius, global_vertex_z + brush_radius + 1):
