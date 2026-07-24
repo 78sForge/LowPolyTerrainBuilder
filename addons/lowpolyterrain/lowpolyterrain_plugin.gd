@@ -7,10 +7,10 @@ extends EditorPlugin
 
 # Centralized color mapping matching the tool modes for intuitive 3D editor feedback
 const BRUSH_COLORS: Dictionary = {
-	LowPolyTerrainManager.BrushMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),             # Light Blue (Raise)
-	LowPolyTerrainManager.BrushMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),            # Dark Blue (Lower)
-	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.75, 0.4, 0.2, 0.8),         # Orange (Flatten)
-	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),            # Purple (Smooth)
+	LowPolyTerrainManager.BrushMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),              # Light Blue (Raise)
+	LowPolyTerrainManager.BrushMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),             # Dark Blue (Lower)
+	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.75, 0.4, 0.2, 0.8),            # Orange (Flatten)
+	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),             # Purple (Smooth)
 	LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
 	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75) # Red (Deactivate)
 }

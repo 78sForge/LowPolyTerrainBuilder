@@ -2,16 +2,20 @@
 
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic low-poly landscapes inside the Godot 4 editor.
 
-## ✅  **Update information for v1.0.10 (Make your life colorful):**
+## ✅ **Update information for v1.0.10 (The Zero-Latency & UI Polish Update):**
+Version 1.0.10 brings fluid editing and practical workflow additions.
 Key additions:
-* brush mode dependend brush circle to directly see which mode is active plus mode label, radius and strength
+* Fluid Painting: Completely optimized chunk activation and deactivation passes to maintain heavy editor performance on large terrains.
+* Colored Visual Brush Circles: The 3D viewport indicator now dynamically updates its color profile based on the active sculpting mode for instant visual feedback.
+* 2D Screen Label: The active brush info (mode, radius, strength) now stays perfectly readable directly beside the mouse pointer without 3D space distortion.
+* Adjustable Brush Sharpness: A new slider allows you to choose between sharp low-poly cliff edges and soft, gradual slopes.
+* Fixed Plateau Flattening: The flatten tool now locks its initial click height across fast mouse movements until the mouse button is released.
 
-## ✅  **Update information for v1.0.9 (The UI & Workflow Update):**
+## ✅ **Update information for v1.0.9 (The UI & Workflow Update):**
 Version 1.0.9 introduces an overhaul of the user interface and editing ergonomics. 
 Key additions:
 * a horizontal viewport toolbar
 * configurable hotkeys for brush tools and brush radius scaling
-* a wireframe display for all polygons
 * brush radius dependend activation and deactivation of chunks
 	
 ## ✅ **Update information for v1.0.8 (Optimization):**
@@ -24,16 +28,16 @@ With v1.0.7, a very resource-intensive (GPU-heavy) default ShaderMaterial was us
 
 ## 🚀 Key Features
 
-* **Dynamic Chunk Management:** Grid blocks are initialized inside editor RAM without cluttering `.tscn` files.
-* **High-Performance Packed Arrays:** Uses `PackedFloat32Array` for `global_height_data` to maximize memory throughput.
-* **Organic Delaunay Topology:** Calculates custom triangle networks on mathematically shifted vertex points.
-* **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower (with Shift-Invert), Flatten, Smooth, and dedicated Multi-Chunk Active/Inactive toggles.
-* **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu mapping thick, white SVG icons (`Raise`, `Lower`, `Flatten`, `Smooth`, `Activate`, `Deactivate`) that automatically adapt dark/light contrasts based on active Godot editor themes.
-* **Laptop-Friendly Radius Control:** Scale your brush radius fluidly in mid-air by holding or tapping **, (Comma)** or **. (Period)** with zero 3D camera zoom interference.
-* **Lightweight Editor Wireframe:** Toggles a sub-pixel vector line mesh built natively via `PRIMITIVE_LINES`, skipping pixel-shader math to ensure smooth editing on low-end integrated GPUs.
-* **Production-Ready GLTF Export:** Bakes active visual chunk meshes into standalone, decoupled `.gltf` assets.
-* **Lossless Grid Migration:** Safely copies height points coordinate-accurately during real-time inspector resizing.
-* **Dynamic Live Physics Baking:** Instantiates persistent 3D static colliders parallel to the terrain manager, automatically skipping deactivated sectors to optimize memory.
+* **Dynamic Chunk Management:** Grid blocks are handled fluidly within the editor without cluttering your scene files.
+* **Organic Delaunay Topology:** Creates organic low-poly triangle networks for the typical landscape look.
+* **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower (with Shift-Invert), Flatten, Smooth, and dedicated Active/Inactive chunk toggles.
+* **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu with clear white SVG icons that automatically adapt to dark or light editor themes.
+* **Dynamic Color Indicators:** Features a colored 3D brush circle aligned directly to active terrain tool colors.
+* **Crisp 2D Mouse Display:** Shows the current tool name, radius, and strength directly at your cursor so you always know what you are painting.
+* **Laptop-Friendly Radius Control:** Scale your brush radius fluidly in mid-air by holding or tapping **, (Comma)** or **. (Period)** without camera interference.
+* **Production-Ready GLTF Export:** Exports active terrain chunks directly into a standalone `.gltf` asset for other tools or projects.
+* **Lossless Grid Migration:** Allows safe resizing of the terrain dimensions in the inspector without losing existing hills or data.
+* **Dynamic Live Physics Baking:** Generates static 3D colliders instantly for your terrain, automatically skipping invisible sections.
 
 ---
 
@@ -41,21 +45,21 @@ With v1.0.7, a very resource-intensive (GPU-heavy) default ShaderMaterial was us
 
 | Property | Group | Type | Description |
 | :--- | :--- | :--- | :--- |
-| **Preview World Chunks** | World Dimensions | `Vector2i` | Map size configuration layout measured in full grid chunks (X, Z). |
-| **Preview Chunk Size** | World Dimensions | `int` | Segment subdivision count per chunk. Controls localized vertex density. |
-| **Preview Cell Size** | World Dimensions | `float` | Horizontal coordinate span multiplier (in meters) for grid subdivisions. |
-| **Apply Dimension Changes** | World Dimensions | `Button` | Resolves Lambda Callables to migrate your height matrices safely to a new scale. |
-| **Step Height** | Terrain Properties | `float` | Base vertical increment size applied per stroke during shaping. |
-| **Brush Radius** | Terrain Properties | `int` | Global horizontal boundary scope of the brush. |
-| **Brush Strength** | Terrain Properties | `float` | Intensity multiplier acting directly on the step height per paint frame. |
-| **Jitter Strength** | Terrain Properties | `float` | Maximum random vertex displacement amount to generate the look. |
-| **Jitter Slope Threshold** | Terrain Properties | `float` | Slope angle constraint. Lower values allow noise on flatter pathways. |
-| **Show Deactivated Chunks** | Terrain Properties | `bool` | Toggles semi-transparent red grid boxes over disabled map coordinates. |
-| **Show Wireframe** | Terrain Properties | `bool` | Toggles the low-end friendly edge preview lines across the landscape. |
-| **Custom Material** | Terrain Properties | `Resource` | Inspector custom resource slot filtering out Fog/Particles. Accepts only 3D materials. |
-| **Export Target Path** | Data Export | `String` | Project-relative storage directory configuration layout where the `.gltf` asset is written. |
-| **Choose Path & Export Terrain** | Data Export | `Button` | Spawns an integrated native EditorFileDialog to choose directories, type new names, and trigger the export. |
-| **Collision Layer / Group** | Collision Generation | `Flags / String` | Custom physics layer mask and scene group definitions for the colliders. |
+| **Preview World Chunks** | World Dimensions | `Vector2i` | Map size measured in full grid chunks (X, Z). |
+| **Preview Chunk Size** | World Dimensions | `int` | Subdivision density per chunk. Controls details. |
+| **Preview Cell Size** | World Dimensions | `float` | Scale size of a single grid square in meters. |
+| **Apply Dimension Changes** | World Dimensions | `Button` | Resizes the terrain safely to the new dimensions. |
+| **Step Height** | Terrain Properties | `float` | Vertical step height added or removed per brush stroke. |
+| **Brush Radius** | Terrain Properties | `int` | Size of the painting tool radius. |
+| **Brush Strength** | Terrain Properties | `float` | Multiplier for how fast the terrain deforms. |
+| **Brush Falloff Strength** | Terrain Properties | `float` | Blends between sharp linear brush edges (0.0) and soft transitions (1.0). |
+| **Jitter Strength** | Terrain Properties | `float` | Intensity of the random vertex displacement for the low-poly look. |
+| **Jitter Slope Threshold** | Terrain Properties | `float` | Controls whether flat paths stay plain while hills get unique shapes. |
+| **Show Deactivated Chunks** | Terrain Properties | `bool` | Shows or hides semi-transparent red grid boxes over disabled coordinates. |
+| **Custom Material** | Terrain Properties | `Resource` | Slot for custom 3D shader or standard materials. |
+| **Export Target Path** | Data Export | `String` | Target path where the exported `.gltf` file will be saved. |
+| **Choose Path & Export Terrain** | Data Export | `Button` | Opens a file dialog to name and save the model asset. |
+| **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. |
 
 ---
 
