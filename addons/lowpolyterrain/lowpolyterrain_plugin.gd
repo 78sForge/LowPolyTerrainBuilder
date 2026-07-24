@@ -291,43 +291,53 @@ func _destroy_3d_brush_gizmo() -> void:
 
 
 
-## Casts a mouse ray against chunk dimensions to lock the gizmo onto the mesh coordinates.
+## Casts a mouse ray directly into the O(1) height matrix to instantly find the hit coordinates.
 func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
-	if not brush_gizmo or not active_manager: return
+	if not brush_gizmo or not active_manager: 
+		return
 	
-	var ray_origin = camera.project_ray_origin(mouse_pos)
-	var ray_dir = camera.project_ray_normal(mouse_pos)
+	# Project the viewport screen coordinates into a 3D ray trajectory
+	var ray_origin: Vector3 = camera.project_ray_origin(mouse_pos)
+	var ray_dir: Vector3 = camera.project_ray_normal(mouse_pos).normalized()
 	
-	var closest_hit: float = INF
-	var world_hit_point: Vector3 = Vector3.ZERO
-	var found_hit := false
+	# Transform the world-space ray directly into the manager's localized coordinate system
+	var inv_transform: Transform3D = active_manager.global_transform.inverse()
+	var local_origin: Vector3 = inv_transform * ray_origin
+	var local_dir: Vector3 = inv_transform.basis * ray_dir
 	
-	for chunk in active_manager.chunks_dict.values():
-		if not chunk or not chunk.is_inside_tree() or not chunk.mesh: continue
-		
-		var inv_transform = chunk.global_transform.inverse()
-		var local_origin = inv_transform * ray_origin
-		var local_ray_end = local_origin + (inv_transform.basis * ray_dir) * 5000.0
-		
-		# High-performance AABB segment pre-test to reject distant chunks immediately
-		if not chunk.mesh.get_aabb().intersects_segment(local_origin, local_ray_end):
-			continue
-			
-		var faces = chunk.mesh.get_faces()
-		for i in range(0, faces.size(), 3):
-			var intersect = Geometry3D.ray_intersects_triangle(local_origin, inv_transform.basis * ray_dir, faces[i], faces[i+1], faces[i+2])
-			if intersect != null:
-				var dist = local_origin.distance_to(intersect)
-				if dist < closest_hit:
-					closest_hit = dist
-					world_hit_point = chunk.global_transform * intersect
-					found_hit = true
-					
-	if found_hit:
-		brush_gizmo.visible = true
-		brush_gizmo.global_position = world_hit_point
-	else:
+	# Abort if the ray is pointing away from the terrain plane or is horizontal
+	if is_zero_approx(local_dir.y) or local_dir.y > 0.0:
 		brush_gizmo.visible = false
+		return
+		
+	# 1. MATHEMATICAL PLANE INTERSECTION (O(1) Pre-Calculated Stride)
+	# Calculate where the ray crosses the flat zero-height grid baseline
+	var t: float = -local_origin.y / local_dir.y
+	if t < 0.0:
+		brush_gizmo.visible = false
+		return
+		
+	var hit_plane: Vector3 = local_origin + local_dir * t
+	
+	# Convert world meters into localized integer vertex coordinates
+	var cell_s: float = active_manager.cell_size
+	var gx: int = roundi(hit_plane.x / cell_s)
+	var gz: int = roundi(-hit_plane.z / cell_s)
+	
+	# Validate structural matrix margins before looking up memory
+	if gx < 0 or gx >= active_manager._total_vertices_x or gz < 0 or gz >= active_manager._total_vertices_z:
+		brush_gizmo.visible = false
+		return
+		
+	# 2. EXACT O(1) HEIGHT LOOKUP
+	# Safely pull the precise height value from the unified float matrix
+	var calculated_h: float = active_manager.get_height_at(gx, gz)
+	var local_hit_point := Vector3(hit_plane.x, calculated_h, hit_plane.z)
+	
+	# Re-apply the world transformation to position the 3D visual ring seamlessly
+	brush_gizmo.visible = true
+	brush_gizmo.global_position = active_manager.global_transform * local_hit_point
+
 
 func _process_paint_stroke(camera: Camera3D, mouse_pos: Vector2, is_shift: bool) -> void:
 	if not active_manager: return
