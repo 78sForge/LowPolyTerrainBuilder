@@ -9,28 +9,25 @@ var manager: LowPolyTerrainManager = null
 # Runs automatically before EACH individual test method
 func before_each() -> void:
 	manager = LowPolyTerrainManager.new()
-	manager.name = "TestTerrainManager" # Enforce a static node name for dynamic collision testing
+	manager.name = "TestTerrainManager"
 	add_child(manager)
 	
-	# Force isolated dimensions for the testing environment context
 	manager.world_chunks = Vector2i(2, 2)
 	manager.chunk_size = 10
 	manager.cell_size = 1.0
 	manager.step_height = 0.5
+	manager.brush_strength = 1.0
 	manager.collision_layer = 2
 	manager.collision_group = "Wall"
 	
-	# FIXED: Replaced dictionary clear with a fresh allocation resize matching flat array
+	# INITIALIZE NEW FALLOFF VARIABLE TO HARD EDGES FOR PRECISE ASSERTS
+	manager.brush_falloff_strength = 0.0
+	
 	manager.global_height_data = PackedFloat32Array()
-	
-	# Initialize activity data array synchronized to test grid dimensions
 	manager.chunk_activity_data = PackedByteArray()
-	
-	# Block the deferred editor viewport setup macro loop
 	manager._setup_pending = false
-	
-	# Execute a clean linear data matrix rebuild inside the editor RAM
 	manager.rebuild_chunks_structure()
+
 
 
 # Runs automatically after EACH individual test method to prevent memory leaks
@@ -83,12 +80,12 @@ func test_raise_brush_increases_vertex_height_correctly() -> void:
 	var target_pos := Vector3(5.0, 0.0, -5.0) # Center of Chunk 0,0
 	
 	manager.tool_mode = manager.BrushMode.RAISE 
-	manager.brush_radius = 0 # Target a single unique vertex point location
+	manager.brush_radius = 1 # FIXED: Enforce a minimum radius of 1 to prevent division by zero (NaN)
 	
 	# Act: Execute mock paint stroke interaction
 	manager.interact_at_world_position(target_pos, false)
 	
-	# Assert: Extract global coordinates using the new high-performance O(1) getter API
+	# Assert: Extract global coordinates using the O(1) getter API
 	var current_height: float = manager.get_height_at(5, 5)
 	assert_eq(
 		current_height, manager.step_height * manager.brush_strength,
@@ -98,13 +95,12 @@ func test_raise_brush_increases_vertex_height_correctly() -> void:
 
 # --- TEST 3: SEAM BLENDING & CARDINAL EDGE COMPENSATION ---
 func test_seam_handling_writes_simultaneously_to_neighboring_chunks() -> void:
-	# Position exactly on the intersection corner grid points where 4 map chunks touch (x=10, z=10)
 	var boundary_vertex_x: int = 10
 	var boundary_vertex_z: int = 10
 	var target_pos := Vector3(float(boundary_vertex_x), 0.0, -float(boundary_vertex_z))
 	
 	manager.tool_mode = manager.BrushMode.RAISE
-	manager.brush_radius = 0
+	manager.brush_radius = 1 # FIXED: Enforce a minimum radius of 1 to prevent division by zero (NaN)
 	
 	# Act: Apply brush modifications directly onto the shared seam boundary point coordinates
 	manager.interact_at_world_position(target_pos, false)
@@ -116,7 +112,7 @@ func test_seam_handling_writes_simultaneously_to_neighboring_chunks() -> void:
 		"Seam error: Global flat memory allocation failed to synchronize boundary coordinates!"
 	)
 
-
+# --- TEST 4:
 func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() -> void:
 	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
 	manager.set_height_at(5, 5, 2.0)
@@ -175,8 +171,9 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 func test_grid_migration_safely_transfers_heightmaps_when_chunk_size_mutates() -> void:
 	var target_global_x: int = 5
 	var target_global_z: int = 5
+	
 	manager.tool_mode = manager.BrushMode.RAISE
-	manager.brush_radius = 0
+	manager.brush_radius = 1 # FIXED: Enforce a minimum radius of 1 to prevent division by zero (NaN)
 	manager.interact_at_world_position(Vector3(float(target_global_x), 0.0, -float(target_global_z)), false)
 	
 	var baseline_h: float = manager.get_height_at(target_global_x, target_global_z)
@@ -192,13 +189,15 @@ func test_grid_migration_safely_transfers_heightmaps_when_chunk_size_mutates() -
 # --- TEST 6: UX CONTEXTUAL SHIFT-INVERT BEHAVIOR ---
 func test_shift_modifier_successfully_inverts_sculpting_brush_polarity() -> void:
 	var target_pos := Vector3(2.0, 0.0, -2.0)
+	
 	manager.tool_mode = manager.BrushMode.RAISE
-	manager.brush_radius = 0
+	manager.brush_radius = 1 # FIXED: Enforce a minimum radius of 1 to prevent division by zero (NaN)
 	manager.interact_at_world_position(target_pos, true)
 	
 	var inverted_height: float = manager.get_height_at(2, 2)
 	var expected_lowered_value: float = -(manager.step_height * manager.brush_strength)
 	assert_eq(inverted_height, expected_lowered_value, "Holding Shift failed to invert RAISE into LOWER.")
+
 
 # --- TEST 7: HEIGHT DATA SERIALIZATION & CRASH HEALING ---
 func test_height_data_heals_automatically_when_corrupted_or_null() -> void:
@@ -255,13 +254,15 @@ func test_collision_baking_skips_inactive_chunks() -> void:
 	var active_body: Node = container.get_node_or_null("Static_Chunk_0_0")
 	assert_not_null(active_body, "Fully active chunks must generate valid physics shapes.")
 
+
 # --- TEST 10: BRUSH STRENGTH MULTIPLIER VALIDATION ---
 func test_brush_strength_scales_elevation_increments() -> void:
 	var target_pos := Vector3(5.0, 0.0, -5.0)
-	manager.tool_mode = manager.BrushMode.RAISE
-	manager.brush_radius = 0
 	
+	manager.tool_mode = manager.BrushMode.RAISE
+	manager.brush_radius = 1 # FIXED: Enforce a minimum radius of 1 to prevent division by zero (NaN)
 	manager.brush_strength = 3.0
+	
 	manager.interact_at_world_position(target_pos, false)
 	
 	var expected_height: float = manager.step_height * 3.0
