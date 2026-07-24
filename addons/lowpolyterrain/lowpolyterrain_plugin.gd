@@ -5,45 +5,29 @@ extends EditorPlugin
 ## Handles a persistent, semi-transparent 3D brush gizmo and processes painting signals.
 
 
-# Mirror the manager's enum and extend it cleanly for utility shortcuts
-enum PluginToolMode {
-	RAISE = 0,
-	LOWER = 1,
-	FLATTEN = 2,
-	SMOOTH = 3,
-	ACTIVATE_CHUNK = 4,
-	DEACTIVATE_CHUNK = 5,
-	# [MARKER] Everything below this value will be skipped by the UI generator loop
-	NO_FURTHER_BUTTONS = 5, 
-	DECREASE_BRUSH_RADIUS = 6,
-	INCREASE_BRUSH_RADIUS = 7,
-	DEFAULT = 20 # used for default assigements
-}
-
 # Centralized color mapping matching the tool modes for intuitive 3D editor feedback
 const BRUSH_COLORS: Dictionary = {
-	PluginToolMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),             # Light Blue (Raise)
-	PluginToolMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),            # Dark Blue (Lower)
-	PluginToolMode.FLATTEN: Color(0.65, 0.65, 0.65, 0.8),         # Gray (Flatten)
-	PluginToolMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),            # Purple (Smooth)
-	PluginToolMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
-	PluginToolMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75), # Red (Deactivate)
-	PluginToolMode.DEFAULT: Color(1.0, 1.0, 1.0, 0.9)
+	LowPolyTerrainManager.BrushMode.RAISE: Color(0.3, 0.65, 1.0, 0.8),             # Light Blue (Raise)
+	LowPolyTerrainManager.BrushMode.LOWER: Color(0.1, 0.25, 0.7, 0.85),            # Dark Blue (Lower)
+	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.65, 0.65, 0.65, 0.8),         # Gray (Flatten)
+	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),            # Purple (Smooth)
+	LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
+	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75) # Red (Deactivate)
 }
-
-
-# Centralized definition array for zero-redundancy UI and shortcut handling
-# Format: [Enum Index, Identifier/Setting String, Display Name, Icon Path, Default Key String]
+const FallBackColor := Color(1.0, 1.0, 1.0, 0.9) # Default fallback color
+# Centralized definition array driven directly by the manager's master enum
+# Formatting: [Enum/Index, Identifier String, Display Name, Icon Path, Default Key String]
 const BRUSH_TOOL_DEFINITIONS: Array = [
-	[PluginToolMode.RAISE, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
-	[PluginToolMode.LOWER, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
-	[PluginToolMode.FLATTEN, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
-	[PluginToolMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
-	[PluginToolMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
-	[PluginToolMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"],
-	[PluginToolMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"],
-	[PluginToolMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]
+	[LowPolyTerrainManager.BrushMode.RAISE, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
+	[LowPolyTerrainManager.BrushMode.LOWER, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
+	[LowPolyTerrainManager.BrushMode.FLATTEN, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
+	[LowPolyTerrainManager.BrushMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
+	[LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
+	[LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"],
+	[LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"], # Plugin specific helper index
+	[LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]   # Plugin specific helper index
 ]
+
 
 
 var active_manager: LowPolyTerrainManager = null
@@ -149,11 +133,11 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 		for mode in brush_shortcuts.keys():
 			var sc: Shortcut = brush_shortcuts[mode]
 			if sc.matches_event(event):
-				if mode == PluginToolMode.DECREASE_BRUSH_RADIUS:
+				if mode == LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS:
 					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
 					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
-				elif mode == PluginToolMode.INCREASE_BRUSH_RADIUS:
+				elif mode == LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS:
 					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
 					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
@@ -238,7 +222,7 @@ func _update_gizmo_scale() -> void:
 		if BRUSH_COLORS.has(mode_idx):
 			mat.albedo_color = BRUSH_COLORS[mode_idx]
 		else:
-			mat.albedo_color = BRUSH_COLORS[PluginToolMode.DEFAULT]
+			mat.albedo_color = FallBackColor
 			
 	# Safely extract text fields using absolute indexing to make MouseLabel visible
 	if mouse_label:
@@ -249,7 +233,7 @@ func _update_gizmo_scale() -> void:
 				mode_name = def[2] as String
 				break
 				
-		if mode_idx == PluginToolMode.RAISE or mode_idx == PluginToolMode.LOWER or mode_idx == PluginToolMode.SMOOTH: 
+		if mode_idx == LowPolyTerrainManager.BrushMode.RAISE or mode_idx == LowPolyTerrainManager.BrushMode.LOWER or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH: 
 			mouse_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
 		else: 
 			mouse_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
@@ -411,7 +395,8 @@ func _initialize_editor_shortcuts() -> void:
 
 ## Generates the modern horizontal Radio-Button toolbar interface driven by the central constant.
 func _create_brush_ui_panel() -> void:
-	if brush_panel_container: return
+	if brush_panel_container: 
+		return
 	
 	brush_panel_container = HBoxContainer.new()
 	brush_panel_container.name = "TerrainBuilder_Toolbar_Container"
@@ -422,7 +407,8 @@ func _create_brush_ui_panel() -> void:
 	for def in BRUSH_TOOL_DEFINITIONS:
 		var mode_idx: int = def[0] as int
 		
-		if mode_idx > PluginToolMode.NO_FURTHER_BUTTONS:
+		# Restrict UI loop to terrain tools only, skipping the radius shortcut identifiers
+		if mode_idx > LowPolyTerrainManager.BrushMode.NO_FURTHER_BUTTONS:
 			continue
 			
 		var label_text: String = def[2] as String
@@ -434,7 +420,6 @@ func _create_brush_ui_panel() -> void:
 		btn.set_meta("brush_mode", mode_idx)
 		btn.autowrap_mode = TextServer.AUTOWRAP_OFF
 		
-		# Universal white asset loading with built-in theme-aware modulation overrides
 		if ResourceLoader.exists(icon_path):
 			btn.icon = load(icon_path) as Texture2D
 			
@@ -453,8 +438,10 @@ func _create_brush_ui_panel() -> void:
 		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
 			var shortcut_text: String = shortcut_node.get_as_text()
 			
-			if shortcut_text == "Comma": shortcut_text = ","
-			if shortcut_text == "Period": shortcut_text = "."
+			if shortcut_text == "Comma": 
+				shortcut_text = ","
+			if shortcut_text == "Period": 
+				shortcut_text = "."
 			
 			btn.text = "%s (%s)" % [label_text, shortcut_text]
 			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
@@ -465,6 +452,7 @@ func _create_brush_ui_panel() -> void:
 		brush_panel_container.add_child(btn)
 		
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
+
 
 
 
@@ -486,7 +474,7 @@ func _select_brush_mode(mode_idx: int) -> void:
 	if not active_manager: return
 	active_manager.tool_mode = mode_idx as LowPolyTerrainManager.BrushMode
 	
-	if mode_idx == PluginToolMode.ACTIVATE_CHUNK or mode_idx == PluginToolMode.DEACTIVATE_CHUNK:
+	if mode_idx == LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK or mode_idx == LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK:
 		if not active_manager.show_deactivated_chunks:
 			active_manager.show_deactivated_chunks = true
 			active_manager.rebuild_chunks_structure()

@@ -19,15 +19,19 @@ const PROP_TOTAL_VERTICES := "total_vertices"
 const PATH_SIZE_METERS := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP_SIZE_METERS
 const PATH_TOTAL_VERTICES := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP_TOTAL_VERTICES
 
-# Supported sculpting and utility brush modes for modifying the grid topology
+# Centralized terrain sculpting and chunk state tools
 enum BrushMode {
-	RAISE,
-	LOWER,
-	FLATTEN,
-	SMOOTH,
-	ACTIVATE_CHUNK,   # Replaces toggle mode to explicitly turn on chunk render and collision logic.
-	DEACTIVATE_CHUNK # Replaces toggle mode to explicitly shut down chunk visibility and physics.
+	RAISE = 0,
+	LOWER = 1,
+	FLATTEN = 2,
+	SMOOTH = 3,
+	ACTIVATE_CHUNK = 4,
+	DEACTIVATE_CHUNK = 5,
+	NO_FURTHER_BUTTONS = 5,
+	DECREASE_BRUSH_RADIUS = 6,
+	INCREASE_BRUSH_RADIUS = 7
 }
+
 
 # Active operational configuration values used internally by the grid generation system
 var world_chunks: Vector2i = Vector2i(5, 5)

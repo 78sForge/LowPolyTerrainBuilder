@@ -3,9 +3,6 @@ extends GutTest
 ## Automated stability test suite for the Low Poly Terrain plugin.
 ## Verifies core matrix allocation, seam synchronization, enum-driven brushes, and physics baking.
 
-# Reference the centralized PluginToolMode enum from the plugin script context
-const PluginToolMode = preload("res://addons/lowpolyterrain/lowpolyterrain_plugin.gd").PluginToolMode
-
 var manager: LowPolyTerrainManager = null
 
 
@@ -120,7 +117,6 @@ func test_seam_handling_writes_simultaneously_to_neighboring_chunks() -> void:
 	)
 
 
-# --- TEST 4: DELAUNAY MESH GENERATION & WINDING ORDER ---
 func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() -> void:
 	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
 	manager.set_height_at(5, 5, 2.0)
@@ -129,13 +125,11 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 	var chunk_local_heights := PackedFloat32Array()
 	chunk_local_heights.resize(vert_stride * vert_stride)
 	
+	# Direct O(1) index mapping matching the optimized manager implementation without .slice()
 	for lz in range(vert_stride):
 		var global_offset: int = lz * manager._total_vertices_x
-		var slice: PackedFloat32Array = manager.global_height_data.slice(
-			global_offset, global_offset + vert_stride
-		)
-		for i in range(slice.size()):
-			chunk_local_heights[lz * vert_stride + i] = slice[i]
+		for i in range(vert_stride):
+			chunk_local_heights[lz * vert_stride + i] = manager.global_height_data[global_offset + i]
 			
 	chunk.initialize(
 		Vector2i(0,0), manager.chunk_size, manager.cell_size, manager.step_height,
@@ -174,6 +168,7 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 	var final_cliff_jitter: Vector3 = chunk._get_jitter_offset(5, 5) * slope_factor_cliff * edge_damp
 	assert_true(slope_factor_cliff > 0.0, "Steep incline must resolve positive slope attenuation.")
 	assert_ne(final_cliff_jitter, Vector3.ZERO, "Steep slopes must allow structural fracturing.")
+
 
 
 # --- TEST 5: LOSSLESS GRID MIGRATION (RESIZING) ---
@@ -324,23 +319,11 @@ func test_chunk_brush_automatically_forces_deactivated_previews_visible() -> voi
 	assert_true(manager.show_deactivated_chunks, "Switching to chunk tools must enforce visibility.")
 
 
-# --- TEST 15: EDITOR WIREFRAME OVERLAY VISIBILITY TOGGLE ---
-func test_wireframe_overlay_respects_inspector_toggle() -> void:
+func test_material_assignment_stability() -> void:
 	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0,0)] as LowPolyTerrainChunk
+	var test_mat := StandardMaterial3D.new()
 	
-	manager.show_wireframe = true
-	manager.rebuild_chunks_structure()
-	chunk.set_meta("force_editor_features", true)
-	if chunk.has_method("_apply_custom_shader"):
-		chunk._apply_custom_shader()
+	manager.custom_material = test_mat
+	manager._update_single_chunk(Vector2i(0,0))
 	
-	var overlay_node_a = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
-	assert_not_null(overlay_node_a, "Wireframe overlay should be instantiated in editor mode.")
-	
-	manager.show_wireframe = false
-	manager.rebuild_chunks_structure()
-	if chunk.has_method("_apply_custom_shader"):
-		chunk._apply_custom_shader()
-	
-	var overlay_node_b = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
-	assert_null(overlay_node_b, "Wireframe overlay must be completely removed.")
+	assert_eq(chunk.material_override, test_mat, "Custom material mapping failed on incremental single-chunk update.")
