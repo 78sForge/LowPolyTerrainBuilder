@@ -140,61 +140,61 @@ func _make_visible(visible: bool) -> void:
 
 
 
-func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> EditorPlugin.AfterGUIInput:
+func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if not active_manager:
-		return EditorPlugin.AFTER_GUI_INPUT_PASS
+		return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
 		
+	# Process brush size and tool switching shortcuts inside the 3D viewport
 	if event is InputEventKey and event.pressed:
 		for mode in brush_shortcuts.keys():
 			var sc: Shortcut = brush_shortcuts[mode]
 			if sc.matches_event(event):
-				# Use clean enum identifiers instead of fragile magic numbers
 				if mode == PluginToolMode.DECREASE_BRUSH_RADIUS:
 					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
-					return EditorPlugin.AFTER_GUI_INPUT_STOP
+					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 				elif mode == PluginToolMode.INCREASE_BRUSH_RADIUS:
 					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
-					return EditorPlugin.AFTER_GUI_INPUT_STOP
+					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 				else:
 					if not event.echo:
 						_select_brush_mode(mode)
-						return EditorPlugin.AFTER_GUI_INPUT_STOP
-						
-
-	# Check for key presses to switch modes instantly via user shortcuts inside the 3D viewport
-	if event is InputEventKey and event.pressed and not event.echo:
-		for mode in brush_shortcuts.keys():
-			var sc: Shortcut = brush_shortcuts[mode]
-			if sc.matches_event(event):
-				_select_brush_mode(mode)
-				return EditorPlugin.AFTER_GUI_INPUT_STOP
+						return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 		
+	# Track and update the 2D label and 3D gizmo position on mouse motion
 	if event is InputEventMouseMotion:
-		# Track and update the 3D gizmo position exactly where the cursor ray hits the terrain
 		_update_gizmo_position(viewport_camera, event.position)
+		
+		if mouse_label and brush_gizmo and brush_gizmo.visible:
+			var global_mouse_pos: Vector2 = event.global_position
+			mouse_label.position = global_mouse_pos + Vector2(20, 20)
+			mouse_label.visible = true
+		elif mouse_label:
+			mouse_label.visible = false
+			
 		if is_drawing:
 			_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
-			return EditorPlugin.AFTER_GUI_INPUT_STOP
+			return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 			
+	# Process active mouse click strokes for sculpting operations
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_drawing = event.pressed
 			if is_drawing:
 				_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
-				return EditorPlugin.AFTER_GUI_INPUT_STOP
+				return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 				
-	return EditorPlugin.AFTER_GUI_INPUT_PASS
-#
+	return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
 
+# New 2D label reference inside the plugin script
+var mouse_label: Label = null
 
-## Spawns a semi-transparent 3D cylinder disk acting as the brush indicator inside the scene tree.
-## Instantiates the transient, RAM-only 3D sculpting ring and text feedback label.
 func _create_3d_brush_gizmo() -> void:
-	if not active_manager or brush_gizmo: return
+	if not active_manager or brush_gizmo: 
+		return
 	
-	brush_gizmo = MeshInstance3D.new() as MeshInstance3D
+	brush_gizmo = MeshInstance3D.new()
 	brush_gizmo.name = "DEBUG_BrushGizmo_Transient"
 	active_manager.add_child(brush_gizmo)
 	
@@ -202,74 +202,60 @@ func _create_3d_brush_gizmo() -> void:
 	gizmo_material.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
 	gizmo_material.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
 	gizmo_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	
-	# [FIX] Disable depth testing so the colored brush circle always renders cleanly on top of the terrain polygons
 	gizmo_material.no_depth_test = true
-	
 	brush_gizmo.material_override = gizmo_material
 	
-	var text_label := Label3D.new()
-	text_label.name = "Gizmo_Text_Label"
-	text_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	text_label.no_depth_test = true
-	
-	text_label.font_size = 128
-	text_label.outline_size = 16
-	text_label.modulate = Color(1.0, 1.0, 1.0, 0.95)
-	text_label.position = Vector3(0, 1.2, 0.0)
-	brush_gizmo.add_child(text_label)
+	# Instantiate the 2D canvas label on top of the editor base viewport
+	if not mouse_label:
+		mouse_label = Label.new()
+		mouse_label.name = "Gizmo_Mouse_Label"
+		
+		# Enforce absolute pass-through for mouse clicks to unblock the brush
+		mouse_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		
+		var outline_color := Color(0, 0, 0, 0.8)
+		mouse_label.add_theme_color_override("font_color", Color.WHITE)
+		mouse_label.add_theme_color_override("font_outline_color", outline_color)
+		mouse_label.add_theme_constant_override("outline_size", 6)
+		
+		var editor_base: Control = EditorInterface.get_base_control()
+		if editor_base:
+			editor_base.add_child(mouse_label)
 	
 	_update_gizmo_scale()
 
 
-
-func _destroy_3d_brush_gizmo() -> void:
-	if brush_gizmo:
-		if brush_gizmo.get_parent():
-			brush_gizmo.get_parent().remove_child(brush_gizmo)
-		brush_gizmo.free()
-		brush_gizmo = null
-
-## Instantly recalibrates the gizmo's world scale, bypassing Godot inspector sync latency.
-## Dynamically updates the gizmo mesh, material colors, and floating text feedback.
 func _update_gizmo_scale() -> void:
-	if not brush_gizmo or not active_manager: return
+	if not brush_gizmo or not active_manager: 
+		return
 	
-	var ring_mesh: MeshInstance3D = brush_gizmo as MeshInstance3D
-	var text_label: Label3D = brush_gizmo.get_node_or_null("Gizmo_Text_Label") as Label3D
-	
+	var ring_mesh: MeshInstance3D = brush_gizmo
 	var mode_idx: int = active_manager.tool_mode
 	var current_radius: float = float(active_manager.brush_radius) * active_manager.cell_size
 	
-	# 1. UPDATE MATERIAL CODES & ENFORCE ACTIVE COLOR SYNCHRONIZATION
-	var mat: StandardMaterial3D = ring_mesh.material_override as StandardMaterial3D
+	var mat: StandardMaterial3D = ring_mesh.material_override
 	if mat:
 		if BRUSH_COLORS.has(mode_idx):
-			mat.albedo_color = BRUSH_COLORS[mode_idx] as Color
+			mat.albedo_color = BRUSH_COLORS[mode_idx]
 		else:
-			mat.albedo_color = BRUSH_COLORS[PluginToolMode.DEFAULT] as Color
+			mat.albedo_color = BRUSH_COLORS[PluginToolMode.DEFAULT]
 			
-	# 2. [FIX] EXTRACT CLEAN LABELS VIA EXPLICIT ARRAY INDEX POSITION DEF
-	if text_label:
+	# Safely extract text fields using absolute indexing to make MouseLabel visible
+	if mouse_label:
 		var mode_name: String = ""
 		for def in BRUSH_TOOL_DEFINITIONS:
-			if def[0] as int == mode_idx:
-				mode_name = def[2] as String # Safely retrieve the human-readable text from index 2
+			# Check the specific Enum value from the first array slot (index 0)
+			if def[0] == mode_idx:
+				mode_name = def[2] as String
 				break
 				
 		if mode_idx == PluginToolMode.RAISE or mode_idx == PluginToolMode.LOWER or mode_idx == PluginToolMode.SMOOTH: 
-			text_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
+			mouse_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
 		else: 
-			text_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
+			mouse_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
 			
-		if BRUSH_COLORS.has(mode_idx):
-			var border_color: Color = BRUSH_COLORS[mode_idx]
-			text_label.outline_modulate = Color(border_color.r * 0.2, border_color.g * 0.2, border_color.b * 0.2, 1.0)
-			
-	# 3. BUILD A SOLID TRANSPARENT 3D BRUSH CIRCLE SURFACE
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	
 	var segments: int = 36
 	var center_vertex := Vector3(0.0, 0.03, 0.0)
 	
@@ -288,6 +274,20 @@ func _update_gizmo_scale() -> void:
 
 
 
+
+
+func _destroy_3d_brush_gizmo() -> void:
+	if brush_gizmo:
+		if brush_gizmo.get_parent():
+			brush_gizmo.get_parent().remove_child(brush_gizmo)
+		brush_gizmo.free()
+		brush_gizmo = null
+		
+	if mouse_label:
+		if mouse_label.get_parent():
+			mouse_label.get_parent().remove_child(mouse_label)
+		mouse_label.free()
+		mouse_label = null
 
 
 
