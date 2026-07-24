@@ -604,7 +604,8 @@ func _smooth_entire_terrain() -> void:
 ## Core brush manipulation engine triggered directly by the editor plugin.
 func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
 	var current_time: float = Time.get_ticks_msec() / 1000.0
-	if current_time - _last_paint_time < _paint_cooldown: return
+	if current_time - _last_paint_time < _paint_cooldown:
+		return
 	_last_paint_time = current_time
 
 	var local_pos: Vector3 = to_local(world_pos)
@@ -625,7 +626,6 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		
 	# --- RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
 	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
-		# [FIX] Automatically force previews on so raycasting works flawlessly for activation
 		if not show_deactivated_chunks:
 			show_deactivated_chunks = true
 			
@@ -634,38 +634,35 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		return
 	# --------------------------------------------------------------------
 
-
 	var global_vertex_x: int = roundi(local_pos.x / cell_size)
 	var global_vertex_z: int = roundi(-local_pos.z / cell_size)
 	
 	var chunks_to_update: Array[LowPolyTerrainChunk] = []
-	
-	# High-performance C++ array duplication for rapid read isolations during local operations
 	var temporary_data: PackedFloat32Array = global_height_data.duplicate()
 	
-	# Pre-calculate the flatten height value from the initial click center to optimize loop execution
 	var target_flatten_h: float = 0.0
 	if mode == BrushMode.FLATTEN:
-		if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and \
-		global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
+		if global_vertex_x >= 0 and global_vertex_x < _total_vertices_x and global_vertex_z >= 0 and global_vertex_z < _total_vertices_z:
 			target_flatten_h = snapped(
 				temporary_data[global_vertex_z * _total_vertices_x + global_vertex_x],
 				step_height
 			)
 	
-	# Pre-calculate squared radius to avoid expensive sqrt/length calculations inside the loop
 	var radius_squared: float = float(brush_radius * brush_radius)
 	
 	for gz in range(global_vertex_z - brush_radius, global_vertex_z + brush_radius + 1):
-		if gz < 0 or gz >= _total_vertices_z: continue
+		if gz < 0 or gz >= _total_vertices_z:
+			continue
 		
 		for gx in range(global_vertex_x - brush_radius, global_vertex_x + brush_radius + 1):
-			if gx < 0 or gx >= _total_vertices_x: continue
+			if gx < 0 or gx >= _total_vertices_x:
+				continue
 			
 			var dx: float = float(gx - global_vertex_x)
 			var dz: float = float(gz - global_vertex_z)
+			var dist_sq: float = (dx * dx + dz * dz)
 			
-			if (dx * dx + dz * dz) <= radius_squared:
+			if dist_sq <= radius_squared:
 				var vx_chunk: int = clampi(gx / chunk_size, 0, world_chunks.x - 1)
 				var vz_chunk: int = clampi(gz / chunk_size, 0, world_chunks.y - 1)
 				
@@ -676,33 +673,39 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				var current_h: float = temporary_data[current_index]
 				var new_h: float = current_h
 				
-				# Calculate dynamic increment based on current brush strength
 				var current_increment: float = step_height * brush_strength
+				
+				# Enforce a flat full strength factor by default for hard edges (RAISE, LOWER, FLATTEN)
+				var brush_falloff: float = 1.0
+				
+				# Only apply the soft smoothstep falloff transition specifically for the SMOOTH brush
+				if mode == BrushMode.SMOOTH:
+					var distance_from_center: float = sqrt(dist_sq)
+					var radius_factor: float = distance_from_center / float(brush_radius)
+					brush_falloff = 1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor))
+					brush_falloff = clampf(brush_falloff, 0.0, 1.0)
 				
 				match mode:
 					BrushMode.RAISE:
-						new_h += current_increment
+						new_h += current_increment * brush_falloff
 					BrushMode.LOWER:
-						new_h -= current_increment
+						new_h -= current_increment * brush_falloff
 					BrushMode.FLATTEN:
-						new_h = target_flatten_h
+						new_h = lerpf(current_h, target_flatten_h, brush_falloff)
 					BrushMode.SMOOTH:
-						# [REFAC] Reused centralized neighborhood calculation to maintain DRY principles
 						var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
-						var dynamic_smooth: float = clampf(smooth_factor * brush_strength, 0.0, 1.0)
+						var dynamic_smooth: float = clampf(smooth_factor * brush_strength * brush_falloff, 0.0, 1.0)
 						new_h = lerpf(current_h, average_height, dynamic_smooth)
 
-				# Direct O(1) mutations into global storage (No chunk border splitting required anymore)
 				global_height_data[current_index] = new_h
 				_add_affected_chunks_to_update(gx, gz, chunks_to_update)
 
 	notify_property_list_changed()
 	
-	# Push chunk data segments to specific nodes and queue mesh updates via the new shared API
 	for chunk in chunks_to_update:
-		if not chunk: continue
+		if not chunk:
+			continue
 		_update_single_chunk(chunk.chunk_coord)
-
 
 
 ##@@
