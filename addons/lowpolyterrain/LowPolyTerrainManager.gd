@@ -241,7 +241,7 @@ func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 				if index < chunk_activity_data.size() and chunk_activity_data[index] != target_value:
 					chunk_activity_data[index] = target_value
 					
-					# Direkte Aktualisierung des geänderten Chunks ohne globalen Rebuild
+					# Direct update of the changed without global rebuild
 					var coord := Vector2i(cx, cz)
 					if chunks_dict.has(coord):
 						_update_single_chunk(coord)
@@ -879,7 +879,7 @@ func _update_single_chunk(coord: Vector2i) -> void:
 			chunk.mesh = null
 			chunk.material_override = null
 		else:
-			# Inkrementeller Bau der roten Preview-Fläche
+			# Incremental building of the red preview box
 			var st_box := SurfaceTool.new()
 			st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
 			var w: float = float(chunk_size) * cell_size
@@ -918,19 +918,16 @@ func _update_single_chunk(coord: Vector2i) -> void:
 	var chunk_local_heights := PackedFloat32Array()
 	chunk_local_heights.resize(vert_stride * vert_stride)
 	
-	# Extract a localized sub-array subset out of the global continuous layout array memory
+	# Direct O(1) index mapping without any temporary .slice() memory allocations
 	for lz in range(vert_stride):
 		var global_z: int = (coord.y * chunk_size) + lz
 		var local_offset: int = lz * vert_stride
-		var global_offset: int = global_z * _total_vertices_x + (coord.x * chunk_size)
+		var global_row_start: int = global_z * _total_vertices_x + (coord.x * chunk_size)
 		
-		var slice: PackedFloat32Array = global_height_data.slice(
-			global_offset, global_offset + vert_stride
-		)
-		for i in range(slice.size()):
-			chunk_local_heights[local_offset + i] = slice[i]
+		for i in range(vert_stride):
+			chunk_local_heights[local_offset + i] = global_height_data[global_row_start + i]
 			
-	# Fully re-triangulate and build the visual low-poly terrain mesh geometry
+	# Fully re-triangulate and build the visual low-poly terrain mesh geometry via Delaunay
 	chunk.initialize(
 		coord, chunk_size, cell_size, step_height,
 		chunk_local_heights, jitter_strength, show_chunk_labels,
