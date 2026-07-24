@@ -156,13 +156,13 @@ func _update_read_only_metrics() -> void:
 @export var tool_mode: BrushMode = BrushMode.RAISE
 
 ## The operational radius of the painting brush measured in grid vertices.
-@export_range(1, 50, 1) var brush_radius: int = 2:
+@export_range(1, 250, 1) var brush_radius: int = 2:
 	set(v):
 		brush_radius = v
 		signal_brush_settings_changed.emit()
 
 ## Controls how fast the terrain elevates, lowers, or smooths per stroke.
-@export_range(0.05, 5.0, 0.05) var brush_strength: float = 1.0
+@export_range(0.05, 15.0, 0.05) var brush_strength: float = 1.0
 
 
 
@@ -203,7 +203,8 @@ func is_chunk_active(cx: int, cz: int) -> bool:
 
 ##@@
 
-## Sets activation state of chunks within a world-space radius and requests visual rebuild.
+
+## Sets activation state of chunks within a world-space radius and requests localized visual rebuild.
 func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 	# Convert the vertex-based brush radius into world space meters
 	var radius_meters: float = float(brush_radius) * cell_size
@@ -220,6 +221,7 @@ func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 	
 	var changed: bool = false
 	var target_value: int = 1 if activate else 0
+	var radius_squared: float = radius_meters * radius_meters
 	
 	# Check all chunks within bounding box for actual intersection with the brush sphere
 	for cz in range(min_cz, max_cz + 1):
@@ -238,14 +240,17 @@ func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 			var dist_sq: float = (dist_x * dist_x) + (dist_z * dist_z)
 			
 			# If the chunk area is within the brush sphere, update its activity state
-			if dist_sq <= (radius_meters * radius_meters):
+			if dist_sq <= radius_squared:
 				var index := cz * world_chunks.x + cx
 				if index < chunk_activity_data.size() and chunk_activity_data[index] != target_value:
 					chunk_activity_data[index] = target_value
-					changed = true
 					
-	if changed:
-		_queue_setup()
+					# Direkte Aktualisierung des geänderten Chunks ohne globalen Rebuild
+					var coord := Vector2i(cx, cz)
+					if chunks_dict.has(coord):
+						_update_single_chunk(coord)
+
+
 
 
 
@@ -865,9 +870,11 @@ func _export_terrain_as_gltf() -> void:
 
 ## Synchronizes a single chunk's visibility, height data segments, and mesh generation.
 func _update_single_chunk(coord: Vector2i) -> void:
-	if not chunks_dict.has(coord): return
+	if not chunks_dict.has(coord):
+		return
 	var chunk: LowPolyTerrainChunk = chunks_dict[coord]
-	if not chunk: return
+	if not chunk:
+		return
 	
 	# Process the visibility state of deactivated chunks based on inspector preview rules
 	if not is_chunk_active(coord.x, coord.y):
@@ -875,8 +882,31 @@ func _update_single_chunk(coord: Vector2i) -> void:
 		if not chunk.visible:
 			chunk.mesh = null
 			chunk.material_override = null
+		else:
+			# Inkrementeller Bau der roten Preview-Fläche
+			var st_box := SurfaceTool.new()
+			st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var w: float = float(chunk_size) * cell_size
+			var p0 := Vector3(0, 0.05, 0)
+			var p1 := Vector3(w, 0.05, 0)
+			var p2 := Vector3(w, 0.05, -w)
+			var p3 := Vector3(0, 0.05, -w)
+			
+			st_box.add_vertex(p0)
+			st_box.add_vertex(p1)
+			st_box.add_vertex(p2)
+			st_box.add_vertex(p0)
+			st_box.add_vertex(p2)
+			st_box.add_vertex(p3)
+			chunk.mesh = st_box.commit()
+			
+			var red_mat := StandardMaterial3D.new()
+			red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
+			red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+			red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			chunk.material_override = red_mat
 		
-		# [FIX] Clean up the transient wireframe overlay child node when the chunk gets deactivated
+		# Clean up the transient wireframe overlay child node when the chunk gets deactivated
 		var legacy_wire = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
 		if legacy_wire:
 			legacy_wire.free()
