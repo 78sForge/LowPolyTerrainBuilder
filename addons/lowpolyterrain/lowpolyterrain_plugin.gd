@@ -150,11 +150,11 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> Edit
 			if sc.matches_event(event):
 				# Use clean enum identifiers instead of fragile magic numbers
 				if mode == PluginToolMode.DECREASE_BRUSH_RADIUS:
-					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 250)
+					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
 					return EditorPlugin.AFTER_GUI_INPUT_STOP
 				elif mode == PluginToolMode.INCREASE_BRUSH_RADIUS:
-					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 250)
+					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
 					active_manager.notify_property_list_changed.call_deferred()
 					return EditorPlugin.AFTER_GUI_INPUT_STOP
 				else:

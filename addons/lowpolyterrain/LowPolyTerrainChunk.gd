@@ -240,59 +240,9 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 
 ##@@
 
-## Maps materials and generates an ultra-high performance editor wireframe overlay.
+## Maps materials 
 func _apply_custom_shader() -> void:
 	material_override = custom_material
-	
-	# Clean up any existing wireframe lines first to prevent memory leaks
-	for child in get_children():
-		if child.name == "Chunk_Wireframe_Overlay":
-			child.free()
-			
-	# Stop here if we are not in the editor (allow override if explicitly forced by a test framework)
-	if not Engine.is_editor_hint() and not has_meta("force_editor_features"):
-		return
-	if not mesh:
-		return
-
-
-	
-	# Fetch the active preference from the parent manager dynamically
-	var parent_manager = get_parent()
-	if parent_manager and "show_wireframe" in parent_manager:
-		if not parent_manager.show_wireframe:
-			return # Stop execution if the user turned off the wireframe toggle
-	
-	var st_wire := SurfaceTool.new()
-	st_wire.begin(Mesh.PRIMITIVE_LINES) # Ultra lightweight primitive line rendering
-	
-	var faces: PackedVector3Array = mesh.get_faces()
-	# Loop through all triangles and gather their outer edges cleanly
-	for i in range(0, faces.size(), 3):
-		var v0: Vector3 = faces[i]
-		var v1: Vector3 = faces[i+1]
-		var v2: Vector3 = faces[i+2]
-		
-		# Edge 1
-		st_wire.add_vertex(v0); st_wire.add_vertex(v1)
-		# Edge 2
-		st_wire.add_vertex(v1); st_wire.add_vertex(v2)
-		# Edge 3
-		st_wire.add_vertex(v2); st_wire.add_vertex(v0)
-		
-	var wire_mesh_instance := MeshInstance3D.new()
-	wire_mesh_instance.name = "Chunk_Wireframe_Overlay"
-	wire_mesh_instance.mesh = st_wire.commit()
-	
-	# Configure an ultra-light unshaded material that is gentle on low-end GPUs
-	var wire_mat := StandardMaterial3D.new()
-	wire_mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
-	wire_mat.albedo_color = Color(0.0, 0.0, 0.0, 0.35) # Subtle dark wire edges
-	# [FIX] Removed wire_mat.line_width = 1.0 to eliminate the deprecated Godot 3.x remapping warning
-	
-	wire_mesh_instance.material_override = wire_mat
-	add_child(wire_mesh_instance)
-
 
 
 

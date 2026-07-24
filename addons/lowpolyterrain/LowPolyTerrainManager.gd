@@ -66,10 +66,6 @@ var cell_size: float = 1.0
 @export var show_deactivated_chunks: bool = true:
 	set(v): show_deactivated_chunks = v; _queue_setup()
 
-## If enabled, shows a crisp, lightweight vector wireframe overlay on active chunks in the editor.
-@export var show_wireframe: bool = true:
-	set(v): show_wireframe = v; _queue_setup()
-
 	
 # REAL INSPECTOR BUTTONS: Resolved via safe Lambda Callables to prevent early parsing errors
 ## Click to process and apply changes made to World Chunks, Chunk Size, or Cell Size.
@@ -156,7 +152,7 @@ func _update_read_only_metrics() -> void:
 @export var tool_mode: BrushMode = BrushMode.RAISE
 
 ## The operational radius of the painting brush measured in grid vertices.
-@export_range(1, 250, 1) var brush_radius: int = 2:
+@export_range(1, 50, 1) var brush_radius: int = 2:
 	set(v):
 		brush_radius = v
 		signal_brush_settings_changed.emit()
