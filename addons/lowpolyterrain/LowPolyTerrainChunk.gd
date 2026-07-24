@@ -220,6 +220,150 @@ func generate_mesh() -> void:
 	_apply_custom_shader()
 
 
+
+## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
+## applies slope-damped random displacements, and builds the visual trimesh via fixed grid indexing.
+## Currently not used !!!
+func generate_mesh_non_delaunay() -> void:
+	if height_data.is_empty() or not visible:
+		mesh = null
+		return
+	var vert_count: int = chunk_size + 1
+	
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var c := Color(1.0, 1.0, 1.0)
+	
+	# --- STEP 1: CALCULATE AND DISPLACE VERTEX MATRIX ---
+	var vertices := PackedVector3Array()
+	vertices.resize(vert_count * vert_count)
+	
+	for z in range(vert_count):
+		for x in range(vert_count):
+			var is_edge: bool = (x == 0 or x == chunk_size or z == 0 or z == chunk_size)
+			var is_corner: bool = ((x == 0 or x == chunk_size) and (z == 0 or z == chunk_size))
+			
+			var current_h: float = height_data[x + z * vert_count]
+			
+			# Cross-examination check for completely flat interior spaces
+			var is_flat_center: bool = false
+			if not is_edge:
+				var h_r: float = height_data[(x+1) + z * vert_count]
+				var h_l: float = height_data[(x-1) + z * vert_count]
+				var h_d: float = height_data[x + (z+1) * vert_count]
+				var h_u: float = height_data[x + (z-1) * vert_count]
+				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and \
+				is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
+					is_flat_center = true
+					
+			# Boundary edge decimation designed to bypass the spiderweb artifact pattern
+			var is_flat_edge_point: bool = false
+			if is_edge and not is_corner:
+				if z == 0 or z == chunk_size:
+					var h_left: float = height_data[(x-1) + z * vert_count]
+					var h_right: float = height_data[(x+1) + z * vert_count]
+					if is_equal_approx(current_h, h_left) and is_equal_approx(current_h, h_right):
+						is_flat_edge_point = true
+				elif x == 0 or x == chunk_size:
+					var h_up: float = height_data[x + (z-1) * vert_count]
+					var h_down: float = height_data[x + (z+1) * vert_count]
+					if is_equal_approx(current_h, h_up) and is_equal_approx(current_h, h_down):
+						is_flat_edge_point = true
+			
+			# Radical geometry optimization for planar interior surfaces
+			if is_flat_center:
+				# Store a placeholder vertex; it will be bypassed during face building
+				vertices[x + z * vert_count] = Vector3(x * cell_size, current_h, -z * cell_size)
+				continue
+				
+			if is_flat_edge_point:
+				if (x == 0 or x == chunk_size):
+					if z % 4 != 0: 
+						vertices[x + z * vert_count] = Vector3(x * cell_size, current_h, -z * cell_size)
+						continue
+				else:
+					if x % 4 != 0: 
+						vertices[x + z * vert_count] = Vector3(x * cell_size, current_h, -z * cell_size)
+						continue
+			
+			# --- ADVANCED SLOPE & EDGE AWARE JITTER DAMPENING ---
+			var jitter := Vector3.ZERO
+			if not is_edge and jitter_strength > 0.0:
+				var h_r: float = height_data[clampi(x + 1, 0, chunk_size) + z * vert_count]
+				var h_l: float = height_data[clampi(x - 1, 0, chunk_size) + z * vert_count]
+				var h_d: float = height_data[x + clampi(z + 1, 0, chunk_size) * vert_count]
+				var h_u: float = height_data[x + clampi(z - 1, 0, chunk_size) * vert_count]
+				
+				var diff_x: float = maxf(absf(current_h - h_r), absf(current_h - h_l))
+				var diff_z: float = maxf(absf(current_h - h_d), absf(current_h - h_u))
+				var max_diff: float = maxf(diff_x, diff_z)
+				
+				var true_slope: float = max_diff / cell_size
+				var current_threshold: float = jitter_slope_threshold
+				
+				if is_zero_approx(current_threshold):
+					current_threshold = 0.5
+				
+				# Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
+				var t: float = clampf(true_slope / current_threshold, 0.0, 1.0)
+				var slope_factor: float = t * t * (3.0 - 2.0 * t)
+				
+				# Boundary Distance Damping
+				var dist_to_edge_x: float = minf(x, chunk_size - x)
+				var dist_to_edge_z: float = minf(z, chunk_size - z)
+				var edge_damp: float = clampf(minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0)
+				
+				# Final jitter computation
+				jitter = _get_jitter_offset(x, z) * slope_factor * edge_damp
+
+			var pos_x: float = x * cell_size + jitter.x
+			var pos_z: float = -z * cell_size + jitter.z
+			
+			vertices[x + z * vert_count] = Vector3(pos_x, current_h, pos_z)
+	
+	# --- STEP 2: HIGH-PERFORMANCE FIXED GRID FACE ASSEMBLING ---
+	# Loop through each quad cell and assemble the two triangles cleanly
+	for z in range(chunk_size):
+		for x in range(chunk_size):
+			# Calculate 1D indices for the 4 corners of the quad cell
+			var idx_tl: int = x + z * vert_count
+			var idx_tr: int = (x + 1) + z * vert_count
+			var idx_bl: int = x + (z + 1) * vert_count
+			var idx_br: int = (x + 1) + (z + 1) * vert_count
+			
+			var p_tl: Vector3 = vertices[idx_tl]
+			var p_tr: Vector3 = vertices[idx_tr]
+			var p_bl: Vector3 = vertices[idx_bl]
+			var p_br: Vector3 = vertices[idx_br]
+			
+			# Triangle 1 (Top-Left, Bottom-Left, Top-Right)
+			var n1: Vector3 = (p_bl - p_tl).cross(p_tr - p_tl).normalized()
+			st.set_normal(n1)
+			st.set_color(c)
+			st.add_vertex(p_tl)
+			st.set_normal(n1)
+			st.set_color(c)
+			st.add_vertex(p_bl)
+			st.set_normal(n1)
+			st.set_color(c)
+			st.add_vertex(p_tr)
+			
+			# Triangle 2 (Top-Right, Bottom-Left, Bottom-Right)
+			var n2: Vector3 = (p_br - p_tr).cross(p_bl - p_tr).normalized()
+			st.set_normal(n2)
+			st.set_color(c)
+			st.add_vertex(p_tr)
+			st.set_normal(n2)
+			st.set_color(c)
+			st.add_vertex(p_bl)
+			st.set_normal(n2)
+			st.set_color(c)
+			st.add_vertex(p_br)
+			
+	mesh = st.commit()
+	_apply_custom_shader()
+
+
 ## Generates pseudo-random, mathematically reproducible coordinate shifts using sine trigonometry hashes.
 func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 	if is_zero_approx(jitter_strength): return Vector3.ZERO
@@ -240,7 +384,7 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 
 ##@@
 
-## Maps materials 
+## Maps materials and generates an ultra-high performance editor wireframe overlay.
 func _apply_custom_shader() -> void:
 	material_override = custom_material
 
