@@ -112,9 +112,10 @@ func _on_editor_scene_changed(new_scene_root: Node) -> void:
 func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
 
+
 func _edit(object: Object) -> void:
 	# Disconnect old signal handlers cleanly to prevent double bindings
-	if active_manager:
+	if active_manager and is_instance_valid(active_manager):
 		if active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
 			active_manager.disconnect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
 			
@@ -122,7 +123,7 @@ func _edit(object: Object) -> void:
 		if inspector and inspector.is_connected("property_edited", _on_inspector_property_edited):
 			inspector.disconnect("property_edited", _on_inspector_property_edited)
 
-	if object is LowPolyTerrainManager:
+	if object is LowPolyTerrainManager and object.is_inside_tree():
 		active_manager = object
 		active_manager.set_meta("_edit_lock_", true)
 		active_manager.rebuild_chunks_structure()
@@ -139,13 +140,23 @@ func _edit(object: Object) -> void:
 		_create_3d_brush_gizmo()
 		_show_brush_ui_panel(true)
 		_sync_ui_buttons_with_manager()
+		
+		# [FIX] Force-update the 3D ring mesh and 2D text label to instantly match the newly selected manager
+		_update_gizmo_scale()
 	else:
-		if active_manager:
+		if active_manager and is_instance_valid(active_manager):
 			active_manager.set_meta("_edit_lock_", false)
+			if "is_paint_stroke_active" in active_manager:
+				active_manager.is_paint_stroke_active = false
+				
 		active_manager = null
 		is_drawing = false
+		
+		if mouse_label:
+			mouse_label.visible = false
+			
 		_destroy_3d_brush_gizmo()
-
+		_show_brush_ui_panel(false)
 
 
 func _make_visible(visible: bool) -> void:
