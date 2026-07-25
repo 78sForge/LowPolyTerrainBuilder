@@ -67,6 +67,9 @@ func _enter_tree() -> void:
 	if not main_screen_changed.is_connected(_on_main_screen_changed):
 		main_screen_changed.connect(_on_main_screen_changed)
 
+	# [FIX] Clean connection to the native scene tab change signal
+	if not scene_changed.is_connected(_on_editor_scene_changed):
+		scene_changed.connect(_on_editor_scene_changed)
 
 func _exit_tree() -> void:
 	remove_custom_type("LowPolyTerrainManager")
@@ -79,6 +82,31 @@ func _exit_tree() -> void:
 	# [FIX] Clean up the signal connection on plugin exit
 	if main_screen_changed.is_connected(_on_main_screen_changed):
 		main_screen_changed.disconnect(_on_main_screen_changed)
+		
+	# [FIX] Disconnect on exit to keep memory clean
+	if scene_changed.is_connected(_on_editor_scene_changed):
+		scene_changed.disconnect(_on_editor_scene_changed)
+
+
+
+## Automatically fired by Godot 4.7 when the user switches between open scene tabs.
+func _on_editor_scene_changed(new_scene_root: Node) -> void:
+	# Reset the active manager to put the plugin to sleep
+	if active_manager and is_instance_valid(active_manager):
+		active_manager.set_meta("_edit_lock_", false)
+		if "is_paint_stroke_active" in active_manager:
+			active_manager.is_paint_stroke_active = false
+			
+	active_manager = null
+	is_drawing = false
+	
+	# Instantly clear UI visual fragments
+	if mouse_label:
+		mouse_label.visible = false
+		
+	_destroy_3d_brush_gizmo()
+	_show_brush_ui_panel(false)
+
 
 
 func _handles(object: Object) -> bool:
