@@ -2,8 +2,8 @@
 
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic low-poly landscapes inside the Godot 4 editor.
 
-## ✅ **Update information for v1.0.11 (The Zero-Latency & UI Polish Update):**
-Version 1.0.11 brings fluid editing and practical workflow additions.
+## ✅ **Update information for v1.0.12 (The Zero-Latency & UI Polish Update):**
+Version 1.0.12 brings fluid editing and practical workflow additions.
 Key additions:
 * Fluid Painting: Completely optimized chunk activation and deactivation passes to maintain heavy editor performance on large terrains.
 * Colored Visual Brush Circles: The 3D viewport indicator now dynamically updates its color profile based on the active sculpting mode for instant visual feedback.
