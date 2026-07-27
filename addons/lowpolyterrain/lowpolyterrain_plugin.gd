@@ -644,7 +644,7 @@ func _open_export_dialog_from_plugin() -> void:
 	dialog.file_selected.connect(
 		func(selected_path: String) -> void:
 			active_manager.export_target_path = selected_path
-			active_manager.call("_export_terrain_as_gltf")
+			_execute_gltf_export_pipeline(selected_path)
 			dialog.queue_free()
 	)
 	
@@ -654,3 +654,55 @@ func _open_export_dialog_from_plugin() -> void:
 	if editor_base:
 		editor_base.add_child(dialog)
 		dialog.popup_file_dialog()
+
+
+## Isolated editor-only engine that packages and writes the visual trimesh blocks to disk.
+func _execute_gltf_export_pipeline(target_path: String) -> void:
+	print("Starting GLTF terrain export to: %s" % target_path)
+	
+	var export_root := Node3D.new()
+	export_root.name = "Exported_LowPoly_Terrain"
+	var chunks_exported: int = 0
+	
+	# The plugin iterates through the active manager's chunks directly
+	for coord in active_manager.chunks_dict.keys():
+		if not active_manager.is_chunk_active(coord.x, coord.y):
+			continue
+			
+		var chunk: LowPolyTerrainChunk = active_manager.chunks_dict[coord]
+		if chunk == null or chunk.mesh == null: 
+			continue
+			
+		var chunk_instance := MeshInstance3D.new()
+		chunk_instance.name = "Terrain_Chunk_%d_%d" % [coord.x, coord.y]
+		chunk_instance.mesh = chunk.mesh
+		
+		if chunk.material_override != null:
+			chunk_instance.material_override = chunk.material_override
+			
+		chunk_instance.position = chunk.position
+		export_root.add_child(chunk_instance)
+		chunk_instance.set_owner(export_root)
+		chunks_exported += 1
+		
+	if chunks_exported == 0:
+		print("Export Cancelled: No active chunk meshes found to package.")
+		export_root.free()
+		return
+		
+	var gltf_doc := GLTFDocument.new()
+	var gltf_state := GLTFState.new()
+	gltf_doc.append_from_scene(export_root, gltf_state)
+	
+	var error_code: Error = gltf_doc.write_to_filesystem(gltf_state, target_path)
+	export_root.free()
+	
+	if error_code == OK:
+		print("SUCCESS: Successfully exported %d terrain chunks to GLTF format!" % chunks_exported)
+		
+		# Native call is 100% legal here, since this script runs exclusively within editor RAM
+		var filesystem := EditorInterface.get_resource_filesystem()
+		if filesystem:
+			filesystem.scan()
+	else:
+		print("ERROR: GLTF export failed with engine error code: %d" % error_code)
