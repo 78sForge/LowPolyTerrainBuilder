@@ -157,13 +157,13 @@ func _update_read_only_metrics() -> void:
 @export_storage var tool_mode: BrushMode = BrushMode.RAISE
 
 ## The operational radius of the painting brush measured in grid vertices.
-@export_range(1, 50, 1) var brush_radius: int = 2:
+@export_range(1, 50, 1) var brush_radius: int = 3:
 	set(v):
 		brush_radius = v
 		signal_brush_settings_changed.emit()
 
 ## Controls how fast the terrain elevates, lowers, or smooths per stroke.
-@export_range(0.05, 15.0, 0.05) var brush_strength: float = 1.0
+@export_range(0.05, 15.0, 0.05) var brush_strength: float = 3.0
 
 ## Controls the sharpness of the brush edges. 0.0 is completely sharp/linear, 1.0 is soft smoothstep.
 @export_range(0.0, 1.0, 0.05) var brush_falloff_strength: float = 0.0
