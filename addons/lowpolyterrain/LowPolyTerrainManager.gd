@@ -126,6 +126,67 @@ func _update_read_only_metrics() -> void:
 		notify_property_list_changed()
 
 
+
+
+@export_group("Noise Generation")
+## The minimum and maximum height range for the added noise values.
+@export var noise_height_range: Vector2 = Vector2(-1.0, 1.0)
+
+## The FastNoiseLite resource used to generate organic landscapes (Perlin, Cellular, etc.).
+## Leave empty to add fallback random height values.
+@export var terrain_noise: FastNoiseLite = null
+
+## Click to add random or noise-based height values onto the existing terrain.
+@export_tool_button("Generate Noise Terrain", "Grid")
+var generate_noise_button: Callable = func() -> void: _generate_noise_terrain()
+
+
+## Iterates through the entire flat memory block and adds coordinate-aligned noise heights.
+func _generate_noise_terrain() -> void:
+	print("Adding organic low-poly noise to existing terrain...")
+	
+	# Fallback setup if no noise resource is assigned in the inspector
+	var use_random_fallback: bool = (terrain_noise == null)
+	if use_random_fallback:
+		print("No noise resource found. Adding uniform random distribution within range.")
+		
+	# High-performance local cache of bounds constraints to prevent dynamic dictionary lookups
+	var total_x: int = _total_vertices_x
+	var total_z: int = _total_vertices_z
+	var range_min: float = noise_height_range.x
+	var range_max: float = noise_height_range.y
+	
+	# Seed-independent unique pseudo-random sequence setup for fallback mode
+	var local_rng := RandomNumberGenerator.new()
+	local_rng.randomize()
+	
+	for z in range(total_z):
+		for x in range(total_x):
+			var added_height: float = 0.0
+			
+			if use_random_fallback:
+				added_height = local_rng.randf_range(range_min, range_max)
+			else:
+				# Sample coordinate-aligned seamless noise data space (-1.0 to 1.0 range)
+				var noise_val: float = terrain_noise.get_noise_2d(float(x), float(z))
+				# Normalize into the 0.0 to 1.0 range
+				var normalized_t: float = (noise_val + 1.0) / 2.0
+				# Lerp smoothly into the user-defined inspector limits
+				added_height = lerpf(range_min, range_max, normalized_t)
+				
+			# Map directly to the performance-critical flat array layout (ADDITIVE PASS)
+			var current_index: int = z * total_x + x
+			global_height_data[current_index] += added_height
+			
+	# Synchronize changes across all chunk nodes instantly
+	for coord in chunks_dict.keys():
+		_update_single_chunk(coord)
+		
+	notify_property_list_changed()
+
+
+
+
 @export_group("Terrain Properties")
 ## The exact vertical increment (in meters) applied to vertices when using the Raise, Lower,
 ## or Flatten brushes.
@@ -168,7 +229,7 @@ func _update_read_only_metrics() -> void:
 ## Controls the sharpness of the brush edges. 0.0 is completely sharp/linear, 1.0 is soft smoothstep.
 @export_range(0.0, 1.0, 0.05) var brush_falloff_strength: float = 0.0
 
-
+##@@
 
 @export_group("Terrain Smoothing")
 ## Blending weight factor used during smoothing operations. Higher values result in more
@@ -205,7 +266,6 @@ func is_chunk_active(cx: int, cz: int) -> bool:
 		return true
 	return chunk_activity_data[index] == 1
 
-##@@
 
 
 ## Sets activation state of chunks within a world-space radius and requests localized visual rebuild.
