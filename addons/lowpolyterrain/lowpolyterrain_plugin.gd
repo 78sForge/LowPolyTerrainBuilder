@@ -119,6 +119,10 @@ func _edit(object: Object) -> void:
 		if active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
 			active_manager.disconnect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
 			
+		# Explicitly unbind the custom export signal from the previous manager instance
+		if active_manager.is_connected("signal_export_requested", _open_export_dialog_from_plugin):
+			active_manager.disconnect("signal_export_requested", _open_export_dialog_from_plugin)
+			
 		var inspector := EditorInterface.get_inspector()
 		if inspector and inspector.is_connected("property_edited", _on_inspector_property_edited):
 			inspector.disconnect("property_edited", _on_inspector_property_edited)
@@ -131,6 +135,10 @@ func _edit(object: Object) -> void:
 		# Connect only the custom scaling/hotkey signal
 		if not active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
 			active_manager.connect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
+			
+		# Securely bridge the manager button with the isolated editor plugin UI pipeline
+		if not active_manager.is_connected("signal_export_requested", _open_export_dialog_from_plugin):
+			active_manager.connect("signal_export_requested", _open_export_dialog_from_plugin)
 			
 		# Connect the inspector click hook safely
 		var inspector := EditorInterface.get_inspector()
@@ -157,6 +165,7 @@ func _edit(object: Object) -> void:
 			
 		_destroy_3d_brush_gizmo()
 		_show_brush_ui_panel(false)
+
 
 
 func _make_visible(visible: bool) -> void:
@@ -603,13 +612,45 @@ func _on_manager_property_changed() -> void:
 		
 
 ## Automatically fired by Godot only when a property is actively modified in the Inspector.
+## Updates the editor properties and intercepts the inspector export button trigger cleanly.
 func _on_inspector_property_edited(property_name: String) -> void:
 	if not active_manager or not brush_gizmo: return
 	
-	# Handle explicit sculpting property updates cleanly without full array frame-spam
+	# Intercept the export button press event before it can trigger inside a runtime context
+	if property_name == "export_gltf_button":
+		_open_export_dialog_from_plugin()
+		return
+		
 	if property_name == "tool_mode" or property_name == "brush_radius" or property_name == "brush_strength":
 		# 1. Update the 3D visual circle mesh and floating text label
 		_update_gizmo_scale()
 		
 		# 2. Force the toolbar radio buttons to depress the correct tool icon instantly
 		_sync_ui_buttons_with_manager()
+
+
+## Opens a native editor save dialog. Safe from release build compilation errors since
+## this entire script is automatically stripped by Godot during the export process.
+func _open_export_dialog_from_plugin() -> void:
+	if not active_manager or not is_instance_valid(active_manager):
+		return
+		
+	var dialog := EditorFileDialog.new()
+	dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	dialog.add_filter("*.gltf", "GLTF 3D Asset")
+	dialog.current_path = active_manager.export_target_path
+	
+	dialog.file_selected.connect(
+		func(selected_path: String) -> void:
+			active_manager.export_target_path = selected_path
+			active_manager.call("_export_terrain_as_gltf")
+			dialog.queue_free()
+	)
+	
+	dialog.canceled.connect(func() -> void: dialog.queue_free())
+	
+	var editor_base: Control = EditorInterface.get_base_control()
+	if editor_base:
+		editor_base.add_child(dialog)
+		dialog.popup_file_dialog()

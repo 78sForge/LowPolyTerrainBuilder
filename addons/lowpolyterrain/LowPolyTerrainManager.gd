@@ -7,6 +7,8 @@ class_name LowPolyTerrainManager
 
 ## signals
 signal signal_brush_settings_changed
+## Signal to notify the editor plugin when the user requests a terrain export.
+signal signal_export_requested
 
 # Centralized structural constants for advanced Inspector paths
 const GROUP_DIMENSIONS := "World Dimensions (Requires Apply)"
@@ -339,42 +341,11 @@ var _total_vertices_z: int = 0
 ## as a GLTF file.
 @export var export_target_path: String = "res://terrain_export.gltf"
 
-## Click to open a native Editor Save Dialog where you can choose a folder and name
+# Click to open a native Editor Save Dialog where you can choose a folder and name
 ## a new GLTF file.
 @export_tool_button("Choose Path & Export Terrain", "Save")
-var export_gltf_button: Callable:
-	get: return func() -> void: if has_method("_open_export_dialog"): call("_open_export_dialog")
+var export_gltf_button: Callable = func() -> void: signal_export_requested.emit()
 
-
-## Spawns an integrated Editor FileDialog configured exclusively for naming new assets.
-func _open_export_dialog() -> void:
-	if not Engine.is_editor_hint(): return
-	
-	# Instantiate an native editor-themed dialog window
-	var dialog := EditorFileDialog.new()
-	
-	# Configure the window to allow entering non-existent filenames for saving
-	dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
-	dialog.access = EditorFileDialog.ACCESS_RESOURCES
-	dialog.add_filter("*.gltf", "GLTF 3D Asset")
-	
-	# Pre-fill with the currently set path to save time
-	dialog.current_path = export_target_path
-	
-	# Connect the success signal using the clean Godot 4.7+ Callable approach
-	dialog.file_selected.connect(
-		func(selected_path: String) -> void:
-			export_target_path = selected_path
-			_export_terrain_as_gltf()
-			dialog.queue_free()
-	)
-	
-	# Automatically clean up RAM if the user cancels or closes the window
-	dialog.canceled.connect(func() -> void: dialog.queue_free())
-	
-	# Inject the window into the active Godot Editor UI tree to display it instantly
-	EditorInterface.get_base_control().add_child(dialog)
-	dialog.popup_file_dialog()
 
 
 # --- Internal Operational Logic & Cool-downs ---
@@ -896,6 +867,10 @@ func _bake_live_collisions_as_child() -> void:
 
 ## Bundles all active visual chunk meshes into a dynamic node tree and exports them as a clean GLTF asset.
 func _export_terrain_as_gltf() -> void:
+	# Guard clause ensuring editor-only execution blocks compiler crashes in release builds
+	if not Engine.is_editor_hint():
+		return
+		
 	if export_target_path.strip_edges().is_empty():
 		print("Export Cancelled: Please specify a valid target path in the inspector.")
 		return
@@ -961,7 +936,6 @@ func _export_terrain_as_gltf() -> void:
 				editor_interface.scan()
 	else:
 		print("ERROR: GLTF export failed with engine error code: %d" % error_code)
-
 
 
 ## Synchronizes a single chunk's visibility, height data segments, and mesh generation.
