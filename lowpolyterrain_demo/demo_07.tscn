@@ -722,7 +722,6 @@ metadata/_edit_lock_ = true
 [node name="Terrain_Assets" type="Node3D" parent="LowPolyTerrainManager" unique_id=1484267434]
 
 [node name="LowPolyTerrainManager_Collisions" type="Node3D" parent="." unique_id=1722681299]
-visible = false
 
 [node name="Static_Chunk_13_0" type="StaticBody3D" parent="LowPolyTerrainManager_Collisions" unique_id=1088111368 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 0, 190)
