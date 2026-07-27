@@ -142,9 +142,9 @@ func _update_read_only_metrics() -> void:
 var generate_noise_button: Callable = func() -> void: _generate_noise_terrain()
 
 
-## Iterates through the entire flat memory block and adds coordinate-aligned noise heights.
+## Iterates through the active terrain matrix and adds coordinate-aligned noise heights.
 func _generate_noise_terrain() -> void:
-	print("Adding organic low-poly noise to existing terrain...")
+	print("Adding organic low-poly noise to active chunks...")
 	
 	# Fallback setup if no noise resource is assigned in the inspector
 	var use_random_fallback: bool = (terrain_noise == null)
@@ -155,6 +155,7 @@ func _generate_noise_terrain() -> void:
 	var total_x: int = _total_vertices_x
 	var total_z: int = _total_vertices_z
 	var amp: float = noise_amplitude
+	var c_size: int = chunk_size
 	
 	# Seed-independent unique pseudo-random sequence setup for fallback mode
 	var local_rng := RandomNumberGenerator.new()
@@ -162,8 +163,15 @@ func _generate_noise_terrain() -> void:
 	
 	for z in range(total_z):
 		for x in range(total_x):
-			var added_height: float = 0.0
+			# Determine which chunk this vertex belongs to using fast casting logic
+			var cx: int = clampi(x / c_size, 0, world_chunks.x - 1)
+			var cz: int = clampi(z / c_size, 0, world_chunks.y - 1)
 			
+			# Safeguard: Skip height manipulation completely if the target chunk is deactivated
+			if not is_chunk_active(cx, cz):
+				continue
+				
+			var added_height: float = 0.0
 			if use_random_fallback:
 				# Balanced random distribution from -amplitude to +amplitude
 				added_height = local_rng.randf_range(-amp, amp)
@@ -182,6 +190,7 @@ func _generate_noise_terrain() -> void:
 		_update_single_chunk(coord)
 		
 	notify_property_list_changed()
+
 
 
 
