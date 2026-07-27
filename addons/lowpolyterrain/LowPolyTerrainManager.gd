@@ -912,15 +912,13 @@ func _update_single_chunk(coord: Vector2i) -> void:
 			red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 			chunk.material_override = red_mat
 		
-		# Clean up the transient wireframe overlay child node when the chunk gets deactivated
-		var legacy_wire = chunk.get_node_or_null("Chunk_Wireframe_Overlay")
-		if legacy_wire:
-			legacy_wire.free()
-			
-		if chunk.visible:
-			# Forward the label visibility toggle state so deactivated previews can render them
-			if chunk.has_method("update_label_visibility"):
-				chunk.update_label_visibility(show_chunk_labels)
+		# EDITOR-ONLY COSMETICS: Avoid lookups for labels during gameplay execution
+		if Engine.is_editor_hint():
+			if chunk.visible:
+				# Forward the label visibility toggle state so deactivated previews can render them
+				if chunk.has_method("update_label_visibility"):
+					chunk.update_label_visibility(show_chunk_labels)
+					
 		return
 		
 	chunk.visible = true
