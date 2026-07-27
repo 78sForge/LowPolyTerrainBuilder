@@ -371,7 +371,6 @@ func _apply_default_shader_fallback() -> void:
 	var standardMat := StandardMaterial3D.new()
 	custom_material = standardMat
 
-
 func _ready() -> void:
 	# Synchronize active operational variables with serialized preview settings on load to
 	# guarantee structural persistence
@@ -398,8 +397,14 @@ func _ready() -> void:
 		var asset_container := Node3D.new()
 		asset_container.name = "Terrain_Assets"
 		add_child(asset_container)
-		if get_tree() and get_tree().edited_scene_root:
-			asset_container.set_owner(get_tree().edited_scene_root)
+		
+		# SAFE RUNTIME LOOKUP: Fetches the main loop as a generic Object. Using a dynamic string
+		# query bypasses the compiler type-check entirely, preventing release export crashes.
+		var main_loop: Object = Engine.get_main_loop()
+		if main_loop:
+			var scene_root: Variant = main_loop.get("edited_scene_root")
+			if scene_root:
+				asset_container.set_owner(scene_root)
 			
 	chunks_dict.clear()
 	
@@ -412,6 +417,9 @@ func _ready() -> void:
 		chunk_activity_data.fill(1)
 		
 	rebuild_chunks_structure()
+
+
+
 
 
 func _queue_setup() -> void:
