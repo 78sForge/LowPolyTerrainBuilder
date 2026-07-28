@@ -148,52 +148,68 @@ var generate_noise_button: Callable = func() -> void: _generate_noise_terrain()
 func _generate_noise_terrain() -> void:
 	print("Adding organic low-poly noise to active chunks...")
 	
+	# [GLOBAL UNDO] Register structural snapshot before running the generator logic
+	var old_state: PackedFloat32Array = global_height_data.duplicate()
+	
 	# Fallback setup if no noise resource is assigned in the inspector
 	var use_random_fallback: bool = (terrain_noise == null)
 	if use_random_fallback:
 		print("No noise resource found. Adding balanced random heights via amplitude.")
 		
-	# High-performance local cache of bounds constraints to prevent dynamic dictionary lookups
 	var total_x: int = _total_vertices_x
 	var total_z: int = _total_vertices_z
 	var amp: float = noise_amplitude
 	var c_size: int = chunk_size
 	
-	# Seed-independent unique pseudo-random sequence setup for fallback mode
 	var local_rng := RandomNumberGenerator.new()
 	local_rng.randomize()
 	
 	for z in range(total_z):
 		for x in range(total_x):
-			# Determine which chunk this vertex belongs to using fast casting logic
 			var cx: int = clampi(x / c_size, 0, world_chunks.x - 1)
 			var cz: int = clampi(z / c_size, 0, world_chunks.y - 1)
 			
-			# Safeguard: Skip height manipulation completely if the target chunk is deactivated
 			if not is_chunk_active(cx, cz):
 				continue
 				
 			var added_height: float = 0.0
 			if use_random_fallback:
-				# Balanced random distribution from -amplitude to +amplitude
 				added_height = local_rng.randf_range(-amp, amp)
 			else:
-				# Sample coordinate-aligned seamless noise data space (-1.0 to 1.0 range)
 				var noise_val: float = terrain_noise.get_noise_2d(float(x), float(z))
-				# Directly scale the raw noise to guarantee a zero-centered mean displacement
 				added_height = noise_val * amp
 				
-			# Map directly to the performance-critical flat array layout (ADDITIVE PASS)
 			var current_index: int = z * total_x + x
 			global_height_data[current_index] += added_height
 			
-	# Synchronize changes across all chunk nodes instantly
 	for coord in chunks_dict.keys():
 		_update_single_chunk(coord)
 		
+	# [GLOBAL UNDO] Securely fetch manager and commit history entry inside editor workspace
+	if Engine.is_editor_hint():
+		if _active_undo_redo_manager == null:
+			var ei: Object = Engine.get_singleton("EditorInterface")
+			if ei and ei.has_method("get_undo_redo"):
+				_active_undo_redo_manager = ei.call("get_undo_redo")
+				
+		if _active_undo_redo_manager:
+			_active_undo_redo_manager.create_action("Generate Noise Terrain")
+			_active_undo_redo_manager.add_do_method(
+				self, 
+				_apply_historical_snapshot.get_method(), 
+				global_height_data.duplicate()
+			)
+			_active_undo_redo_manager.add_undo_method(
+				self, 
+				_apply_historical_snapshot.get_method(), 
+				old_state
+			)
+			# [FIXED] Enclosed inside the valid pointer block to completely prevent early runtime crashes
+			_active_undo_redo_manager.commit_action()
+		
 	notify_property_list_changed()
 
-
+	
 
 
 
@@ -357,6 +373,12 @@ var _last_paint_time: float = 0.0
 # Persistent sculpting data to lock the initial flatten height across frames
 var is_paint_stroke_active: bool = false
 var locked_flatten_height: float = 0.0
+
+
+# --- HIGH-PERFORMANCE SPARSE DELTA STORAGE FOR SCULPTING UNDO/REDO ---
+var _undo_sparse_delta: Dictionary = {} # Format: { global_index (int): old_height (float) }
+var _active_undo_redo_manager: Object = null
+
 
 
 # --- AUTOMATIC INITIALIZATION PIPELINE ---
@@ -633,6 +655,9 @@ func rebuild_chunks_structure() -> void:
 func _smooth_entire_terrain() -> void:
 	print("Smoothing global terrain (%d passes, completely fluid)..." % smooth_iterations)
 	
+	# [GLOBAL UNDO] Register structural snapshot before running the smoothing loops
+	var old_state: PackedFloat32Array = global_height_data.duplicate()
+	
 	for iteration in range(smooth_iterations):
 		# High-performance C++ array duplication for rapid read isolations
 		var temporary_data: PackedFloat32Array = global_height_data.duplicate()
@@ -642,16 +667,37 @@ func _smooth_entire_terrain() -> void:
 				var current_index: int = gz * _total_vertices_x + gx
 				var current_height: float = temporary_data[current_index]
 				
-				# [REFAC] Extracted redundant unrolled neighbor checks into a unified helper method
 				var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
 				global_height_data[current_index] = lerpf(current_height, average_height, smooth_factor)
 
-
-	# Synchronize and push fresh data blocks directly into the active chunks using our dry update loop
+	# Synchronize and push fresh data blocks directly into the active chunks
 	for coord in chunks_dict.keys():
 		_update_single_chunk(coord)
 		
+	# [GLOBAL UNDO] Securely fetch manager and commit history entry inside editor workspace
+	if Engine.is_editor_hint():
+		if _active_undo_redo_manager == null:
+			var ei: Object = Engine.get_singleton("EditorInterface")
+			if ei and ei.has_method("get_undo_redo"):
+				_active_undo_redo_manager = ei.call("get_undo_redo")
+				
+		if _active_undo_redo_manager:
+			_active_undo_redo_manager.create_action("Smooth Entire Terrain")
+			_active_undo_redo_manager.add_do_method(
+				self, 
+				_apply_historical_snapshot.get_method(), 
+				global_height_data.duplicate()
+			)
+			_active_undo_redo_manager.add_undo_method(
+				self, 
+				_apply_historical_snapshot.get_method(), 
+				old_state
+			)
+			# [FIXED] Enclosed inside the valid pointer block to completely prevent early runtime crashes
+			_active_undo_redo_manager.commit_action()
+		
 	notify_property_list_changed()
+
 
 
 ##@@
@@ -768,6 +814,12 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 						var average_height: float = _calculate_average_neighbor_height(gx, gz, temporary_data)
 						var dynamic_smooth: float = clampf(smooth_factor * brush_strength * final_falloff, 0.0, 1.0)
 						new_h = lerpf(current_h, average_height, dynamic_smooth)
+
+				# [PERFORMANCE UNDO] Capture the historical vertex state before writing the mutation
+				if Engine.is_editor_hint() and _undo_sparse_delta != null:
+					if not _undo_sparse_delta.has(current_index):
+						_undo_sparse_delta[current_index] = current_h
+
 
 				global_height_data[current_index] = new_h
 				_add_affected_chunks_to_update(gx, gz, chunks_to_update)
@@ -964,3 +1016,88 @@ func _calculate_average_neighbor_height(gx: int, gz: int, data: PackedFloat32Arr
 		valid_neighbors += 1
 		
 	return sum_heights / float(valid_neighbors) if valid_neighbors > 0 else data[gz * _total_vertices_x + gx]
+
+
+
+
+## Marks the official initiation frame of an editor paint brush interaction sequence.
+func stroke_started(editor_ur: Object) -> void:
+	if not Engine.is_editor_hint(): return
+	_active_undo_redo_manager = editor_ur
+	_undo_sparse_delta.clear()
+
+
+## Registers the finalized thin delta package directly into the native engine history.
+func stroke_finished() -> void:
+	if not Engine.is_editor_hint() or _active_undo_redo_manager == null or _undo_sparse_delta.is_empty():
+		return
+		
+	# Build precise, compressed primitive arrays for the native Undo pipeline
+	var affected_indices := PackedInt32Array()
+	var old_heights := PackedFloat32Array()
+	var new_heights := PackedFloat32Array()
+	
+	var total_elements: int = _undo_sparse_delta.size()
+	affected_indices.resize(total_elements)
+	old_heights.resize(total_elements)
+	new_heights.resize(total_elements)
+	
+	var cursor: int = 0
+	for idx in _undo_sparse_delta.keys():
+		affected_indices[cursor] = idx
+		old_heights[cursor] = _undo_sparse_delta[idx]
+		new_heights[cursor] = global_height_data[idx]
+		cursor += 1
+		
+	# Register inside Godot's Undo system using minimal memory footprint primitives
+	_active_undo_redo_manager.create_action("Terrain Sculpt Step")
+	# Godot 4 API: Object, Method-Name (via Callable extracted), Argument 1, Argument 2
+	_active_undo_redo_manager.add_do_method(self, _apply_sparse_delta.get_method(), affected_indices, new_heights)
+	_active_undo_redo_manager.add_undo_method(self, _apply_sparse_delta.get_method(), affected_indices, old_heights)
+	_active_undo_redo_manager.commit_action()
+
+
+	_undo_sparse_delta.clear()
+
+
+## High-speed targeted mutation callback invoked by the engine's central undo/redo pipeline.
+func _apply_sparse_delta(indices: PackedInt32Array, heights: PackedFloat32Array) -> void:
+	if indices.is_empty() or indices.size() != heights.size(): 
+		return
+		
+	var unique_chunks_to_rebuild: Array[Vector2i] = []
+	
+	# Apply only the modified slices back to the flat global data array
+	for i in range(indices.size()):
+		var global_index: int = indices[i]
+		global_height_data[global_index] = heights[i]
+		
+		# Reverse-engineer the chunk coordinates from the flat global index to optimize updates
+		var gz: int = global_index / _total_vertices_x
+		var gx: int = global_index % _total_vertices_x
+		
+		var cx: int = clampi(gx / chunk_size, 0, world_chunks.x - 1)
+		var cz: int = clampi(gz / chunk_size, 0, world_chunks.y - 1)
+		var chunk_coord_vec := Vector2i(cx, cz)
+		
+		if not chunk_coord_vec in unique_chunks_to_rebuild:
+			unique_chunks_to_rebuild.append(chunk_coord_vec)
+			
+	# Visually update only the specific chunk nodes that were actually modified by this delta
+	for coord in unique_chunks_to_rebuild:
+		_update_single_chunk(coord)
+		
+	notify_property_list_changed()
+
+
+
+## Native callback targeted by the engine loop during reverse or forward history evaluations.
+func _apply_historical_snapshot(target_matrix: PackedFloat32Array) -> void:
+	if target_matrix.is_empty(): return
+	global_height_data = target_matrix.duplicate()
+	
+	# Full matrix structural re-triangulation synchronizations
+	for coord in chunks_dict.keys():
+		_update_single_chunk(coord)
+		
+	notify_property_list_changed()

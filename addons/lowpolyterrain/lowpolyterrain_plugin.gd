@@ -234,16 +234,23 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_drawing = event.pressed
 			
+			# [UNDO/REDO INTERCEPT] Handle stroke lifecycle management inside the editor workspace
+			if is_drawing and active_manager:
+				var manager_undo_redo: EditorUndoRedoManager = get_undo_redo()
+				if active_manager.has_method("stroke_started"):
+					active_manager.stroke_started(manager_undo_redo)
+			
 			# When the user releases the left mouse button, reset the session cache in the manager
 			# needed for FLATTEN mode where is_paint_stroke_active is set to true
 			if not is_drawing and active_manager:
 				active_manager.is_paint_stroke_active = false
+				if active_manager.has_method("stroke_finished"):
+					active_manager.stroke_finished()
 				
 			if is_drawing:
 				_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
 				return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 
-				
 	return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
 
 # New 2D label reference inside the plugin script
