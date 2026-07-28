@@ -192,8 +192,10 @@ func _generate_noise_terrain() -> void:
 			if ei and ei.has_method("get_undo_redo"):
 				_active_undo_redo_manager = ei.call("get_undo_redo")
 				
+			
 		if _active_undo_redo_manager:
-			_active_undo_redo_manager.create_action("Generate Noise Terrain")
+			# Pass 'self' as 3rd arg (custom_context) to secure scene tab focus
+			_active_undo_redo_manager.create_action("Generate Noise Terrain", 0, self)
 			_active_undo_redo_manager.add_do_method(
 				self, 
 				_apply_historical_snapshot.get_method(), 
@@ -204,8 +206,10 @@ func _generate_noise_terrain() -> void:
 				_apply_historical_snapshot.get_method(), 
 				old_state
 			)
-			# [FIXED] Enclosed inside the valid pointer block to completely prevent early runtime crashes
 			_active_undo_redo_manager.commit_action()
+
+
+
 		
 	notify_property_list_changed()
 
@@ -520,30 +524,42 @@ func _migrate_grid_data() -> void:
 	new_activity_data.resize(world_chunks.x * world_chunks.y)
 	new_activity_data.fill(1)
 	
+	# 1. MIGRATE CHUNK ACTIVITY LAYER DATA Safely
 	for cz in range(world_chunks.y):
 		for cx in range(world_chunks.x):
 			var new_chunk_idx: int = cz * world_chunks.x + cx
 			if cx < old_chunks_x and cz < old_chunks_y and not old_activity_data.is_empty():
 				var old_chunk_idx: int = cz * old_chunks_x + cx
-				new_activity_data[new_chunk_idx] = old_activity_data[old_chunk_idx]
+				if old_chunk_idx < old_activity_data.size():
+					new_activity_data[new_chunk_idx] = old_activity_data[old_chunk_idx]
 	
 	chunk_activity_data = new_activity_data
 	
-	# Direct coordinate block-copy intersection pipeline
+	# 2. FIXED INDEX LOOKUP: Enforce hard clamps against historical matrix bounds
 	for z in range(_total_vertices_z):
+		var is_valid_z: bool = (z < old_vertices_z)
+		var new_row_offset: int = z * _total_vertices_x
+		var old_row_offset: int = z * old_vertices_x
+		
 		for x in range(_total_vertices_x):
-			var new_index: int = (z * _total_vertices_x) + x
+			var new_index: int = new_row_offset + x
 			
-			if x < old_vertices_x and z < old_vertices_z and not old_height_data.is_empty():
-				var old_index: int = (z * old_vertices_x) + x
-				new_height_data[new_index] = old_height_data[old_index]
+			# Enforce multi-layered structural validation checks to fully block memory leaks
+			if is_valid_z and x < old_vertices_x and not old_height_data.is_empty():
+				var old_index: int = old_row_offset + x
+				if old_index >= 0 and old_index < old_height_data.size():
+					new_height_data[new_index] = old_height_data[old_index]
+				else:
+					new_height_data[new_index] = 0.0
 			else:
 				new_height_data[new_index] = 0.0
 				
 	global_height_data = new_height_data
 	
+	# 3. REBUILD INFRASTRUCTURE SYSTEM
 	rebuild_chunks_structure()
 	signal_brush_settings_changed.emit()
+
 
 ##@@
 
@@ -682,7 +698,8 @@ func _smooth_entire_terrain() -> void:
 				_active_undo_redo_manager = ei.call("get_undo_redo")
 				
 		if _active_undo_redo_manager:
-			_active_undo_redo_manager.create_action("Smooth Entire Terrain")
+			# Pass 'self' as 4th arg (custom_context) to bind action to the active scene tab
+			_active_undo_redo_manager.create_action("Smooth Entire Terrain", 0, self)
 			_active_undo_redo_manager.add_do_method(
 				self, 
 				_apply_historical_snapshot.get_method(), 
@@ -693,8 +710,8 @@ func _smooth_entire_terrain() -> void:
 				_apply_historical_snapshot.get_method(), 
 				old_state
 			)
-			# [FIXED] Enclosed inside the valid pointer block to completely prevent early runtime crashes
 			_active_undo_redo_manager.commit_action()
+
 		
 	notify_property_list_changed()
 
@@ -1020,11 +1037,18 @@ func _calculate_average_neighbor_height(gx: int, gz: int, data: PackedFloat32Arr
 
 
 
-## Marks the official initiation frame of an editor paint brush interaction sequence.
+
+## Marks the official initiation frame of an editor interaction sequence.
 func stroke_started(editor_ur: Object) -> void:
 	if not Engine.is_editor_hint(): return
+	
+	# Cache the engine manager reference securely to prevent early execution leaks
 	_active_undo_redo_manager = editor_ur
-	_undo_sparse_delta.clear()
+	
+	# Only clear paint stroke dictionary if the brush layout is actively painting
+	if is_paint_stroke_active:
+		print("###### CLEAR _undo_sparse_delta")
+		_undo_sparse_delta.clear()
 
 
 ## Registers the finalized thin delta package directly into the native engine history.
@@ -1050,11 +1074,22 @@ func stroke_finished() -> void:
 		cursor += 1
 		
 	# Register inside Godot's Undo system using minimal memory footprint primitives
-	_active_undo_redo_manager.create_action("Terrain Sculpt Step")
-	# Godot 4 API: Object, Method-Name (via Callable extracted), Argument 1, Argument 2
-	_active_undo_redo_manager.add_do_method(self, _apply_sparse_delta.get_method(), affected_indices, new_heights)
-	_active_undo_redo_manager.add_undo_method(self, _apply_sparse_delta.get_method(), affected_indices, old_heights)
+	# Pass 'self' as 4th arg (custom_context) to secure scene tab focus during paint strokes
+	_active_undo_redo_manager.create_action("Terrain Sculpt Step", 0, self)
+	_active_undo_redo_manager.add_do_method(
+		self, 
+		_apply_sparse_delta.get_method(), 
+		affected_indices, 
+		new_heights
+	)
+	_active_undo_redo_manager.add_undo_method(
+		self, 
+		_apply_sparse_delta.get_method(), 
+		affected_indices, 
+		old_heights
+	)
 	_active_undo_redo_manager.commit_action()
+
 
 
 	_undo_sparse_delta.clear()

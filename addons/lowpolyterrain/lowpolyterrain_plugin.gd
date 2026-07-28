@@ -132,6 +132,10 @@ func _edit(object: Object) -> void:
 		active_manager.set_meta("_edit_lock_", true)
 		active_manager.rebuild_chunks_structure()
 		
+		# [CRITICAL FIX] Force-inject the active UndoRedo manager immediately upon selection
+		if active_manager.has_method("stroke_started"):
+			active_manager.stroke_started(get_undo_redo())
+		
 		# Connect only the custom scaling/hotkey signal
 		if not active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
 			active_manager.connect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
