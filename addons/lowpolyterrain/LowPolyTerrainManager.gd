@@ -1042,13 +1042,12 @@ func _calculate_average_neighbor_height(gx: int, gz: int, data: PackedFloat32Arr
 func stroke_started(editor_ur: Object) -> void:
 	if not Engine.is_editor_hint(): return
 	
-	# Cache the engine manager reference securely to prevent early execution leaks
+	# Securely cache the central engine manager reference
 	_active_undo_redo_manager = editor_ur
 	
-	# Only clear paint stroke dictionary if the brush layout is actively painting
-	if is_paint_stroke_active:
-		print("###### CLEAR _undo_sparse_delta")
-		_undo_sparse_delta.clear()
+	# Reset the sparse delta matrix to ensure a clean state for the upcoming stroke
+	_undo_sparse_delta.clear()
+
 
 
 ## Registers the finalized thin delta package directly into the native engine history.
