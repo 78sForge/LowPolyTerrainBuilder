@@ -61,6 +61,8 @@ script = ExtResource("1_wmqro")
 chunk_activity_data = PackedByteArray(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
 preview_world_chunks = Vector2i(2, 10)
 preview_cell_size = 5.0
+show_chunk_labels = true
+show_deactivated_chunks = false
 jitter_slope_threshold = 0.05
 custom_material = SubResource("ShaderMaterial_wstkb")
 brush_strength = 15.0
@@ -76,6 +78,7 @@ metadata/_edit_lock_ = true
 [node name="LowPolyTerrainManager2" type="Node3D" parent="." unique_id=938409956]
 script = ExtResource("1_wmqro")
 chunk_activity_data = PackedByteArray(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+show_chunk_labels = true
 custom_material = SubResource("ShaderMaterial_s18m5")
 tool_mode = 2
 brush_radius = 1

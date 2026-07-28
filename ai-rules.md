@@ -16,7 +16,7 @@
   architecture pipelines without permission.
 * **Code Only:** When updating files, output the full modified code block or precise diffs 
   without conversational filler.
-* **Additional format constrainst:** Limit each line of documentation to a maximum of 
+* **Additional format constraints:** Limit each line of documentation to a maximum of 
   100 characters to enable better readability. Except for table formattings in order to 
   avoid broken tables.
 
@@ -45,7 +45,29 @@
 * **Boundary Decimation:** Boundary edges must never receive random spatial noise or jitter to 
   keep chunk seams perfectly blended (use the `index % 4 != 0` constraint).
 
-## 5. Performance Optimization Standards (CRITICAL)
+## 5. Strict Release Capability & Production Build Isolation
+* **Core Directive:** All generated tools- und plugin-code must be fully ready for production 
+  exports (Release Mode). Code failing or crashing upon export is strictly forbidden.
+* **Rendering Pipeline Agnosticism:** All code and shaders MUST run flawlessly across all Godot 
+  rendering backends: Forward+, Mobile, and Compatibility. Avoid backend-exclusive features.
+* **Critical Bug Prevention (godotengine/godot#91713):** Referencing editor-only classes 
+  (e.g., `EditorInterface`, `EditorPlugin`, `EditorScript`) without strict runtime guards 
+  causes complete registration failure or hard crashes in exported release builds.
+* **Strict API Isolation:** Every single piece of editor-specific logic or singleton access 
+  MUST be wrapped inside an `Engine.is_editor_hint()` condition.
+* **Type Leakage Constraint:** Never declare static types or class variables using `Editor*` 
+  classes within scripts attached to nodes inside game-runtime scenes.
+* **GDScript Isolation Example:**
+  ```gdscript
+  if Engine.is_editor_hint():
+	  var ei: Object = Engine.get_singleton("EditorInterface")
+	  if ei:
+		  print(ei.get_selected_paths())
+  ```
+* **Resource Cleanup:** Plugins must explicitly free or unregister all allocated resources, 
+  custom types, and singletons within `_exit_tree()` to eliminate runtime memory leaks.
+
+## 6. Performance Optimization Standards (CRITICAL)
 * **Zero-Latency Target:** All algorithms, brush strokes, and loops must be strictly optimized 
   for real-time execution to guarantee zero-latency editor painting and peak runtime FPS.
 * **Optimized Math & Type Casting:** Avoid un-typed arrays or dynamic lookups in loops. Use 
@@ -53,7 +75,7 @@
 * **Efficient Memory Allocation:** Minimize allocations inside process loops. Reuse objects, 
   leverage distance-culling, and disable distant colliders natively (`disabled = true`).
 
-## 6. Automated Testing Rules (GUT Framework)
+## 7. Automated Testing Rules (GUT Framework)
 * **Framework:** All internal automated test scripts must strictly use the **Godot Unit Test 
   (GUT)** framework.
 * **Validation Protocols:** When writing or updating tests, ensure you adhere to the three main 
