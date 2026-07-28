@@ -291,6 +291,9 @@ func _create_3d_brush_gizmo() -> void:
 		var editor_base: Control = EditorInterface.get_base_control()
 		if editor_base:
 			editor_base.add_child(mouse_label)
+			
+		# [FIX] Enforce hidden status on initial creation to prevent top-left corner leaks
+		mouse_label.visible = false
 	
 	_update_gizmo_scale()
 
