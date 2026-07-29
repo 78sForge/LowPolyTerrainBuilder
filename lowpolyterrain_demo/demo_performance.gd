@@ -10,6 +10,17 @@ extends Node3D
 @onready var pivot: Node3D = $Pivot
 
 
+func get_total_child_count(node: Node) -> int:
+	var count = 0
+	for child in node.get_children():
+		count += 1
+		count += get_total_child_count(child)
+	return count
+
+func _ready() -> void:
+	var noOfChildren = get_total_child_count(self)
+	printt("Number of children: ", noOfChildren)
+
 func _process(delta: float) -> void:
 	pivot.rotate_y(delta * 0.1)
 	
