@@ -627,19 +627,21 @@ func rebuild_chunks_structure() -> void:
 		for cx in range(world_chunks.x):
 			var coord := Vector2i(cx, cz)
 			
-			if not chunks_dict.has(coord):
-				var new_chunk := LowPolyTerrainChunk.new()
-				new_chunk.name = "Chunk_%d_%d" % [cx, cz]
-				new_chunk.chunk_coord = coord
-				add_child(new_chunk)
-				chunks_dict[coord] = new_chunk
-			
-			# Assign the correct spatial 3D position BEFORE evaluating the activity status
-			chunks_dict[coord].position = Vector3(
-				float(cx * chunk_size) * cell_size,
-				0.0,
-				float(-cz * chunk_size) * cell_size
-			)
+			# AT RUNTIME: Only add chunk to dict if active
+			if is_chunk_active(cx, cz) or Engine.is_editor_hint():
+				if not chunks_dict.has(coord):
+					var new_chunk := LowPolyTerrainChunk.new()
+					new_chunk.name = "Chunk_%d_%d" % [cx, cz]
+					new_chunk.chunk_coord = coord
+					add_child(new_chunk)
+					chunks_dict[coord] = new_chunk
+				
+				# Assign the correct spatial 3D position BEFORE evaluating the activity status
+				chunks_dict[coord].position = Vector3(
+					float(cx * chunk_size) * cell_size,
+					0.0,
+					float(-cz * chunk_size) * cell_size
+				)
 			
 			# If the chunk is deactivated but show_deactivated_chunks is enabled, 
 			# we generate a flat box collision mesh for raycasting directly inside the update engine
