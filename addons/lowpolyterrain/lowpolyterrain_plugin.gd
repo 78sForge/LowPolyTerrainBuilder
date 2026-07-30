@@ -99,11 +99,12 @@ func _on_editor_scene_changed(new_scene_root: Node) -> void:
 			
 	active_manager = null
 	is_drawing = false
-	
+	_faces_cache.clear()
+
 	# Instantly clear UI visual fragments
 	if mouse_label:
 		mouse_label.visible = false
-		
+
 	_destroy_3d_brush_gizmo()
 	_show_brush_ui_panel(false)
 
@@ -130,7 +131,10 @@ func _edit(object: Object) -> void:
 	if object is LowPolyTerrainManager and object.is_inside_tree():
 		active_manager = object
 		active_manager.set_meta("_edit_lock_", true)
-		active_manager.rebuild_chunks_structure()
+		# [E3] Only rebuilds when the chunk structure is actually missing. Selecting the
+		# manager no longer regenerates every chunk mesh in the world.
+		active_manager.ensure_chunks_built()
+		_faces_cache.clear()
 		
 		# [CRITICAL FIX] Force-inject the active UndoRedo manager immediately upon selection
 		if active_manager.has_method("stroke_started"):
@@ -363,49 +367,52 @@ func _destroy_3d_brush_gizmo() -> void:
 		mouse_label = null
 
 
-## Casts a mouse ray against chunk dimensions using accelerated AABB segment pre-testing.
+# [E2] De-indexed triangle soup per chunk, keyed by coordinate. ArrayMesh.get_faces() allocates
+# a full copy of the geometry on every call, and the picking loop used to call it for every
+# ray-crossed chunk on every single mouse motion event.
+var _faces_cache: Dictionary = {}
+
+# [E2] Frame guard: high polling-rate mice emit several motion events per rendered frame, and
+# re-running the whole picking pass for each of them buys nothing visible.
+var _last_gizmo_frame: int = -1
+
+# Reused across frames so the picking pass allocates nothing per call.
+var _terrain_pick: Dictionary = {}
+
+
+## Casts a mouse ray against the terrain and places the brush gizmo on the nearest hit.
 func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
 	if not brush_gizmo or not active_manager:
 		return
-	
+
+	var current_frame: int = Engine.get_process_frames()
+	if current_frame == _last_gizmo_frame:
+		return
+	_last_gizmo_frame = current_frame
+
 	var ray_origin: Vector3 = camera.project_ray_origin(mouse_pos)
 	var ray_dir: Vector3 = camera.project_ray_normal(mouse_pos)
 	
-	var closest_hit: float = INF
-	var world_hit_point: Vector3 = Vector3.ZERO
-	var found_hit: bool = false
-	
-	# Iterate through all instantiated terrain chunks managed by the central matrix
-	for chunk in active_manager.chunks_dict.values():
-		if not chunk or not chunk.is_inside_tree() or not chunk.mesh:
-			continue
-		
-		# Transform the ray directly into the local coordinate space of the current chunk
-		var inv_transform: Transform3D = chunk.global_transform.inverse()
-		var local_origin: Vector3 = inv_transform * ray_origin
-		var local_ray_end: Vector3 = local_origin + (inv_transform.basis * ray_dir) * 5000.0
-		
-		# Ultra-fast AABB segment pre-test to reject distant chunks in O(1) time
-		if not chunk.mesh.get_aabb().intersects_segment(local_origin, local_ray_end):
-			continue
-			
-		# Extract the exact physical triangles only for chunks that pass the bounding box check
-		var faces: PackedVector3Array = chunk.mesh.get_faces()
-		for i in range(0, faces.size(), 3):
-			var intersect = Geometry3D.ray_intersects_triangle(
-				local_origin, 
-				inv_transform.basis * ray_dir, 
-				faces[i], 
-				faces[i+1], 
-				faces[i+2]
-			)
-			if intersect != null:
-				var dist: float = local_origin.distance_to(intersect)
-				if dist < closest_hit:
-					closest_hit = dist
-					world_hit_point = chunk.global_transform * intersect
-					found_hit = true
-					
+	# The terrain pass lives in LowPolyTerrainPicking so it can be unit tested; GUT cannot
+	# instantiate an EditorPlugin. Cache and result dictionary are passed in and reused, so
+	# this allocates nothing per frame.
+	var found_hit: bool = LowPolyTerrainPicking.raycast_terrain(
+		active_manager, ray_origin, ray_dir, _faces_cache, _terrain_pick
+	)
+	var closest_hit: float = float(_terrain_pick["distance"])
+	var world_hit_point: Vector3 = _terrain_pick["point"]
+
+	# The SERVERS backend draws deactivated chunks without any pickable geometry, so their
+	# flat preview plane is intersected analytically instead. In MESH_NODES the clickable red
+	# quads still exist as real meshes and were already covered by the loop above.
+	if active_manager.terrain_backend == LowPolyTerrainManager.TerrainBackend.SERVERS:
+		var pick: Dictionary = LowPolyTerrainPicking.pick_deactivated_chunk(
+			active_manager, ray_origin, ray_dir
+		)
+		if bool(pick["hit"]) and float(pick["distance"]) < closest_hit:
+			world_hit_point = pick["point"]
+			found_hit = true
+
 	if found_hit:
 		brush_gizmo.visible = true
 		brush_gizmo.global_position = world_hit_point
@@ -678,23 +685,24 @@ func _execute_gltf_export_pipeline(target_path: String) -> void:
 	export_root.name = "Exported_LowPoly_Terrain"
 	var chunks_exported: int = 0
 	
-	# The plugin iterates through the active manager's chunks directly
-	for coord in active_manager.chunks_dict.keys():
+	# The plugin iterates through the active manager's chunks via the backend-agnostic accessors
+	for coord: Vector2i in active_manager.get_chunk_coords():
 		if not active_manager.is_chunk_active(coord.x, coord.y):
 			continue
-			
-		var chunk: LowPolyTerrainChunk = active_manager.chunks_dict[coord]
-		if chunk == null or chunk.mesh == null: 
+
+		var chunk_mesh: ArrayMesh = active_manager.get_chunk_mesh(coord)
+		if chunk_mesh == null:
 			continue
-			
+
 		var chunk_instance := MeshInstance3D.new()
 		chunk_instance.name = "Terrain_Chunk_%d_%d" % [coord.x, coord.y]
-		chunk_instance.mesh = chunk.mesh
-		
-		if chunk.material_override != null:
-			chunk_instance.material_override = chunk.material_override
-			
-		chunk_instance.position = chunk.position
+		chunk_instance.mesh = chunk_mesh
+
+		var chunk_material: Material = active_manager.get_chunk_material(coord)
+		if chunk_material != null:
+			chunk_instance.material_override = chunk_material
+
+		chunk_instance.position = active_manager.get_chunk_local_position(coord)
 		export_root.add_child(chunk_instance)
 		chunk_instance.set_owner(export_root)
 		chunks_exported += 1

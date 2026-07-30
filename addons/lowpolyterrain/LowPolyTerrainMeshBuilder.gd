@@ -1,0 +1,343 @@
+@tool
+extends RefCounted
+class_name LowPolyTerrainMeshBuilder
+
+## Stateless geometry factory shared by every terrain backend. Gathers geofenced points,
+## performs dynamic edge decimation, injects slope-aware vertex jittering, and triangulates
+## organic low-poly meshes via Delaunay.
+##
+## This class holds no instance state whatsoever. Both the MeshInstance3D based chunk nodes
+## and the RenderingServer based backend call the very same static functions, which guarantees
+## that the produced geometry is bit-identical across backends.
+
+
+## Core geometry generation engine. Parses the heightmap grid, runs decimation rules,
+## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
+## Returns null when the supplied data cannot produce any triangle.
+static func build_chunk_mesh(
+	chunk_coord: Vector2i,
+	chunk_size: int,
+	cell_size: float,
+	height_data: PackedFloat32Array,
+	jitter_strength: float,
+	jitter_slope_threshold: float
+) -> ArrayMesh:
+	if height_data.is_empty():
+		return null
+	var vert_count: int = chunk_size + 1
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var c := Color(1.0, 1.0, 1.0)
+
+	# --- STEP 1: PRE-ALLOCATE ARRAYS TO ELIMINATE RE-ALLOCATION LATENCY ---
+	var max_points: int = vert_count * vert_count
+	var points_2d := PackedVector2Array()
+	var points_3d := PackedVector3Array()
+
+	points_2d.resize(max_points)
+	points_3d.resize(max_points)
+
+	# Tracker index for direct O(1) array insertions
+	var active_count: int = 0
+
+	for z in range(vert_count):
+		for x in range(vert_count):
+			var is_edge: bool = (x == 0 or x == chunk_size or z == 0 or z == chunk_size)
+			var is_corner: bool = (
+				(x == 0 or x == chunk_size) and (z == 0 or z == chunk_size)
+			)
+
+			var current_h: float = height_data[x + z * vert_count]
+
+			# Cross-examination check for completely flat interior spaces
+			var is_flat_center: bool = false
+			if not is_edge:
+				var h_r: float = height_data[(x+1) + z * vert_count]
+				var h_l: float = height_data[(x-1) + z * vert_count]
+				var h_d: float = height_data[x + (z+1) * vert_count]
+				var h_u: float = height_data[x + (z-1) * vert_count]
+				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and \
+				is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
+					is_flat_center = true
+
+			# Boundary edge decimation designed to bypass the spiderweb artifact pattern
+			var is_flat_edge_point: bool = false
+			if is_edge and not is_corner:
+				if z == 0 or z == chunk_size:
+					var h_left: float = height_data[(x-1) + z * vert_count]
+					var h_right: float = height_data[(x+1) + z * vert_count]
+					if is_equal_approx(current_h, h_left) and is_equal_approx(current_h, h_right):
+						is_flat_edge_point = true
+				elif x == 0 or x == chunk_size:
+					var h_up: float = height_data[x + (z-1) * vert_count]
+					var h_down: float = height_data[x + (z+1) * vert_count]
+					if is_equal_approx(current_h, h_up) and is_equal_approx(current_h, h_down):
+						is_flat_edge_point = true
+
+			# Radical geometry optimization for planar interior surfaces
+			if is_flat_center:
+				continue
+
+			if is_flat_edge_point:
+				if (x == 0 or x == chunk_size):
+					if z % 4 != 0: continue
+				else:
+					if x % 4 != 0: continue
+
+			# --- ADVANCED SLOPE & EDGE AWARE JITTER DAMPENING ---
+			var jitter := Vector3.ZERO
+			if not is_edge and jitter_strength > 0.0:
+				var h_r: float = height_data[clampi(x + 1, 0, chunk_size) + z * vert_count]
+				var h_l: float = height_data[clampi(x - 1, 0, chunk_size) + z * vert_count]
+				var h_d: float = height_data[x + clampi(z + 1, 0, chunk_size) * vert_count]
+				var h_u: float = height_data[x + clampi(z - 1, 0, chunk_size) * vert_count]
+
+				var diff_x: float = maxf(absf(current_h - h_r), absf(current_h - h_l))
+				var diff_z: float = maxf(absf(current_h - h_d), absf(current_h - h_u))
+				var max_diff: float = maxf(diff_x, diff_z)
+
+				var true_slope: float = max_diff / cell_size
+				var current_threshold: float = jitter_slope_threshold
+
+				if is_zero_approx(current_threshold):
+					current_threshold = 0.5
+
+				# Non-linear damping via Cubic Hermite Interpolation (Smoothstep)
+				var t: float = clampf(true_slope / current_threshold, 0.0, 1.0)
+				var slope_factor: float = t * t * (3.0 - 2.0 * t)
+
+				# Boundary Distance Damping
+				var dist_to_edge_x: float = minf(x, chunk_size - x)
+				var dist_to_edge_z: float = minf(z, chunk_size - z)
+				var edge_damp: float = clampf(
+					minf(dist_to_edge_x, dist_to_edge_z) / 2.0, 0.0, 1.0
+				)
+
+				# Final jitter computation combining both attenuation factors
+				jitter = get_jitter_offset(
+					chunk_coord, chunk_size, cell_size, jitter_strength, x, z
+				) * slope_factor * edge_damp
+
+			var pos_x: float = x * cell_size + jitter.x
+			var pos_z: float = -z * cell_size + jitter.z
+
+			# Direct O(1) assignment into the pre-allocated memory blocks
+			points_2d[active_count] = Vector2(pos_x, pos_z)
+			points_3d[active_count] = Vector3(pos_x, current_h, pos_z)
+			active_count += 1
+
+	# Shrink arrays down to the actual active Delaunay points in a single operation
+	points_2d.resize(active_count)
+	points_3d.resize(active_count)
+
+	# --- STEP 2: GODOT DELAUNAY TRIANGULATION ---
+	var triangles: PackedInt32Array = Geometry2D.triangulate_delaunay(points_2d)
+	if triangles.size() == 0:
+		return null
+
+	# --- STEP 3: ASSEMBLE MESH GEOMETRY ---
+
+	# CRITICAL FOR LOW-POLY: Setting the smooth group to -1 disables vertex normal blending.
+	# This forces the SurfaceTool to isolate each triangle's face normal later on,
+	# ensuring crisp, distinct, and perfectly flat shading boundaries.
+	st.set_smooth_group(-1)
+
+	# Iterate through the Delaunay triangulation index array in steps of 3 (one triangle at a time)
+	for i in range(0, triangles.size(), 3):
+		# Fetch the original lookup indices generated by the Delaunay algorithm
+		var idx0: int = triangles[i]
+		var idx1: int = triangles[i+1]
+		var idx2: int = triangles[i+2]
+
+		# Retrieve the 2D positions of the vertices to perform winding order checks
+		var v0_2d: Vector2 = points_2d[idx0]
+		var v1_2d: Vector2 = points_2d[idx1]
+		var v2_2d: Vector2 = points_2d[idx2]
+
+		# Calculate 2D direction vectors for two adjacent edges of the triangle
+		var edge1: Vector2 = v1_2d - v0_2d
+		var edge2: Vector2 = v2_2d - v0_2d
+
+		# Perform a 2D cross-product (determinant) to evaluate the winding direction.
+		# A negative result indicates a clockwise winding order, which causes backface culling
+		# to hide the triangle since Godot expects a counter-clockwise order by default.
+		var cross_2d: float = edge1.x * edge2.y - edge1.y * edge2.x
+
+		# If the triangle is wound clockwise, flip two vertex indices to enforce a
+		# counter-clockwise order, making the face point upwards and render correctly.
+		if cross_2d < 0.0:
+			var temp: int = idx1
+			idx1 = idx2
+			idx2 = temp
+
+		# Fetch the final 3D world coordinates for the correctly ordered vertices
+		var p0: Vector3 = points_3d[idx0]
+		var p1: Vector3 = points_3d[idx1]
+		var p2: Vector3 = points_3d[idx2]
+
+		# Calculate the total bounding size of the terrain chunk for UV normalization
+		var max_size: float = chunk_size * cell_size
+
+		# Map the 3D world positions into a normalized 0.0 to 1.0 UV coordinate range.
+		# This prevents shader fallbacks and errors in the Compatibility (OpenGL) renderer.
+		var uv0 := Vector2(p0.x / max_size, -p0.z / max_size)
+		var uv1 := Vector2(p1.x / max_size, -p1.z / max_size)
+		var uv2 := Vector2(p2.x / max_size, -p2.z / max_size)
+
+		# Push Vertex 0 data into the SurfaceTool format stack
+		st.set_color(c)
+		st.set_uv(uv0)
+		st.add_vertex(p0)
+
+		# Push Vertex 1 data into the SurfaceTool format stack
+		st.set_color(c)
+		st.set_uv(uv1)
+		st.add_vertex(p1)
+
+		# Push Vertex 2 data into the SurfaceTool format stack
+		st.set_color(c)
+		st.set_uv(uv2)
+		st.add_vertex(p2)
+
+	# Automatically generate face normals. Because smooth group is set to -1,
+	# vertices at shared boundaries will not blend, preserving the low-poly appearance.
+	st.generate_normals()
+
+	# Generate tangent vectors. This is mandatory for stable lighting calculation
+	# and custom shader support within the Compatibility Mode backend.
+	st.generate_tangents()
+
+	# Optimize the mesh structure by generating an index buffer and merging vertices
+	# that share identical position, normal, UV, and color values. Since group -1
+	# splits normals per face, this safely reduces GPU vertex load without breaking flat shading.
+	st.index()
+
+	# Commit the built geometric arrays into a rendering-ready Mesh resource
+	return st.commit()
+
+
+## Generates pseudo-random, mathematically reproducible coordinate shifts using sine trigonometry
+## hashes. Boundary vertices must never receive this offset, which the caller enforces.
+static func get_jitter_offset(
+	chunk_coord: Vector2i,
+	chunk_size: int,
+	cell_size: float,
+	jitter_strength: float,
+	local_x: int,
+	local_z: int
+) -> Vector3:
+	if is_zero_approx(jitter_strength): return Vector3.ZERO
+	var global_gx: int = chunk_coord.x * chunk_size + local_x
+	var global_gz: int = chunk_coord.y * chunk_size + local_z
+	var hash_x: float = sin(float(global_gx) * 12.9898 + float(global_gz) * 78.233) * 43758.5453
+	var hash_z: float = sin(float(global_gx) * 37.719  + float(global_gz) * 11.135) * 43758.5453
+	var random_x: float = (hash_x - floorf(hash_x)) * 2.0 - 1.0
+	var random_z: float = (hash_z - floorf(hash_z)) * 2.0 - 1.0
+
+	# NOTE: Jitter strength multiplication now executes directly within the base calculator
+	return Vector3(
+		random_x * cell_size * jitter_strength,
+		0.0,
+		-random_z * cell_size * jitter_strength
+	)
+
+
+## Vertical offset of the flat preview quad drawn for deactivated chunks. Kept slightly above
+## zero so the quad never z-fights with neighbouring terrain resting at height zero.
+const PREVIEW_PLANE_Y: float = 0.05
+
+
+## Builds the flat quad used as the editor preview for a deactivated chunk. The result is
+## geometry-identical for every deactivated chunk of a given size, so a single instance of this
+## mesh can be shared across all of them.
+static func build_deactivated_preview_mesh(chunk_size: int, cell_size: float) -> ArrayMesh:
+	var st_box := SurfaceTool.new()
+	st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var w: float = float(chunk_size) * cell_size
+	var p0 := Vector3(0, PREVIEW_PLANE_Y, 0)
+	var p1 := Vector3(w, PREVIEW_PLANE_Y, 0)
+	var p2 := Vector3(w, PREVIEW_PLANE_Y, -w)
+	var p3 := Vector3(0, PREVIEW_PLANE_Y, -w)
+
+	st_box.add_vertex(p0)
+	st_box.add_vertex(p1)
+	st_box.add_vertex(p2)
+	st_box.add_vertex(p0)
+	st_box.add_vertex(p2)
+	st_box.add_vertex(p3)
+	return st_box.commit()
+
+
+## Vertical offset of the chunk boundary grid overlay.
+const GRID_PLANE_Y: float = 0.05
+
+
+## Builds the whole chunk boundary grid as a SINGLE line mesh.
+##
+## This replaces the former per-chunk Label3D overlay. One mesh and one material cover the
+## entire terrain no matter how many chunks it has, whereas the labels cost one node, one mesh
+## and one material each. Lines also stay legible at any zoom level, while label text shrank
+## exactly when the terrain got large enough to actually need the orientation.
+static func build_chunk_grid_mesh(
+	world_chunks: Vector2i,
+	chunk_size: int,
+	cell_size: float
+) -> ArrayMesh:
+	if world_chunks.x <= 0 or world_chunks.y <= 0 or chunk_size <= 0:
+		return null
+
+	var meters: float = float(chunk_size) * cell_size
+	if is_zero_approx(meters):
+		return null
+
+	var width: float = float(world_chunks.x) * meters
+	var depth: float = float(world_chunks.y) * meters
+
+	var verts := PackedVector3Array()
+	verts.resize(((world_chunks.x + 1) + (world_chunks.y + 1)) * 2)
+	var cursor: int = 0
+
+	# Boundaries running along Z, one per chunk column plus the closing edge.
+	for cx in range(world_chunks.x + 1):
+		var x: float = float(cx) * meters
+		verts[cursor] = Vector3(x, GRID_PLANE_Y, 0.0)
+		cursor += 1
+		verts[cursor] = Vector3(x, GRID_PLANE_Y, -depth)
+		cursor += 1
+
+	# Boundaries running along X, one per chunk row plus the closing edge.
+	for cz in range(world_chunks.y + 1):
+		var z: float = -float(cz) * meters
+		verts[cursor] = Vector3(0.0, GRID_PLANE_Y, z)
+		cursor += 1
+		verts[cursor] = Vector3(width, GRID_PLANE_Y, z)
+		cursor += 1
+
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+	return mesh
+
+
+## Builds the material for the chunk boundary grid. Unshaded and depth-test free, so the grid
+## reads through hills instead of disappearing inside them, matching the old label behaviour.
+static func build_chunk_grid_material() -> StandardMaterial3D:
+	var grid_mat := StandardMaterial3D.new()
+	grid_mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
+	grid_mat.albedo_color = Color.YELLOW
+	grid_mat.no_depth_test = true
+	grid_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return grid_mat
+
+
+## Builds the semi-transparent red material applied to deactivated chunk previews.
+static func build_deactivated_preview_material() -> StandardMaterial3D:
+	var red_mat := StandardMaterial3D.new()
+	red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
+	red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+	red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return red_mat

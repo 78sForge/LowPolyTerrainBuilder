@@ -129,7 +129,7 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 			
 	chunk.initialize(
 		Vector2i(0,0), manager.chunk_size, manager.cell_size, manager.step_height,
-		chunk_local_heights, manager.jitter_strength, manager.show_chunk_labels,
+		chunk_local_heights, manager.jitter_strength,
 		manager.jitter_slope_threshold, manager.custom_material
 	)
 	
@@ -328,3 +328,152 @@ func test_material_assignment_stability() -> void:
 	manager._update_single_chunk(Vector2i(0,0))
 	
 	assert_eq(chunk.material_override, test_mat, "Custom material mapping failed on incremental single-chunk update.")
+
+
+##@@
+# --- BAKED COLLIDER CULLING ---
+# These assert the ACTUAL disabled flags rather than the culling bookkeeping. Checking only
+# the bookkeeping is what let the first pass silently leave every collider switched on.
+
+
+func _count_enabled_baked_shapes() -> int:
+	var container: Node = manager.get_parent().get_node_or_null(manager.name + "_Collisions")
+	if container == null:
+		return -1
+	var count: int = 0
+	for body in container.get_children():
+		for child in body.get_children():
+			if child is CollisionShape3D and not child.disabled:
+				count += 1
+	return count
+
+
+func test_first_culling_pass_disables_everything_outside_the_radius() -> void:
+	manager._bake_live_collisions_as_child()
+	assert_eq(_count_enabled_baked_shapes(), 4, "Precondition: baking enables all 4 chunks.")
+
+	# A 2 metre radius at the origin reaches only chunk (0,0) of this 10 metre grid.
+	manager.update_collision_culling(Vector3.ZERO, 2.0)
+	# disabled is written through set_deferred(), so the flags land at the end of the frame.
+	await get_tree().process_frame
+
+	assert_eq(_count_enabled_baked_shapes(), 1,
+		"The very first pass must already switch off every chunk outside the radius.")
+
+
+func test_culling_follows_a_moving_centre_across_baked_chunks() -> void:
+	manager._bake_live_collisions_as_child()
+
+	manager.update_collision_culling(Vector3.ZERO, 2.0)
+	await get_tree().process_frame
+	var container: Node = manager.get_parent().get_node_or_null(manager.name + "_Collisions")
+	var near: CollisionShape3D = manager._find_baked_collision_shape(Vector2i(0, 0))
+	var far: CollisionShape3D = manager._find_baked_collision_shape(Vector2i(1, 1))
+	assert_false(near.disabled, "The chunk under the centre must be enabled.")
+	assert_true(far.disabled, "The distant chunk must be disabled.")
+
+	# Walk to the opposite corner of the 2x2 grid.
+	manager.update_collision_culling(Vector3(18.0, 0.0, -18.0), 2.0)
+	await get_tree().process_frame
+
+	assert_true(near.disabled, "The chunk left behind must be switched off again.")
+	assert_false(far.disabled, "The newly reached chunk must be switched on.")
+
+
+##@@
+# --- BAKED COLLIDER NAMING ---
+
+
+func test_baked_collision_shapes_carry_their_chunk_coordinate() -> void:
+	manager._bake_live_collisions_as_child()
+	var container: Node = manager.get_parent().get_node_or_null(manager.name + "_Collisions")
+	assert_not_null(container, "Precondition: the collision container exists.")
+
+	for cz in range(manager.world_chunks.y):
+		for cx in range(manager.world_chunks.x):
+			var body: Node = container.get_node_or_null("Static_Chunk_%d_%d" % [cx, cz])
+			assert_not_null(body, "Chunk (%d,%d) must have a baked body." % [cx, cz])
+			assert_not_null(body.get_node_or_null("Chunk_%d_%d_Col" % [cx, cz]),
+				"The shape of chunk (%d,%d) must be named after its coordinate." % [cx, cz])
+
+
+func test_culling_resolves_shapes_by_type_not_by_name() -> void:
+	manager._bake_live_collisions_as_child()
+
+	var found: CollisionShape3D = manager._find_baked_collision_shape(Vector2i(0, 0))
+	assert_not_null(found, "The renamed shape must still be resolvable.")
+	assert_eq(found.name, "Chunk_0_0_Col", "Precondition: the new naming is in place.")
+
+	# Scenes baked before the rename still carry the old name, so the lookup must not depend
+	# on it. Simulate such a legacy node and make sure it is still found.
+	manager._culling_shape_cache.clear()
+	found.name = "CollisionShape3D"
+	var legacy: CollisionShape3D = manager._find_baked_collision_shape(Vector2i(0, 0))
+	assert_not_null(legacy, "A pre-rename shape must keep working with the culling lookup.")
+
+
+##@@
+# --- CHUNK BOUNDARY GRID OVERLAY ---
+# Replaced the former per-chunk Label3D overlay. The builder is pure and runtime-safe, so the
+# geometry can be asserted here even though the overlay node itself is editor-only.
+
+
+func test_chunk_grid_mesh_spans_every_boundary_once() -> void:
+	var grid: ArrayMesh = LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(
+		Vector2i(2, 3), 10, 1.0)
+	assert_not_null(grid, "The grid builder must produce a mesh.")
+
+	assert_eq(grid.surface_get_primitive_type(0), Mesh.PRIMITIVE_LINES,
+		"The overlay must be a line mesh, not triangles.")
+
+	# One boundary per column and per row, plus the closing edge on each axis, two verts each.
+	var expected_vertices: int = ((2 + 1) + (3 + 1)) * 2
+	var verts: PackedVector3Array = grid.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	assert_eq(verts.size(), expected_vertices,
+		"A 2x3 chunk world needs exactly %d line vertices." % expected_vertices)
+
+
+func test_chunk_grid_mesh_covers_the_full_world_bounds() -> void:
+	var grid: ArrayMesh = LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(
+		Vector2i(2, 2), 10, 1.0)
+	var bounds: AABB = grid.get_aabb()
+
+	# 2 chunks of 10 cells at 1 metre each spans 20 metres, and Z runs negative.
+	assert_almost_eq(bounds.position.x, 0.0, 0.0001, "Grid must start at the world origin in X.")
+	assert_almost_eq(bounds.size.x, 20.0, 0.0001, "Grid must span the full world width.")
+	assert_almost_eq(bounds.position.z, -20.0, 0.0001, "Grid must reach the far Z edge.")
+	assert_almost_eq(bounds.size.z, 20.0, 0.0001, "Grid must span the full world depth.")
+
+
+func test_chunk_grid_cost_is_independent_of_chunk_count() -> void:
+	# The point of replacing the labels: one mesh for the whole terrain instead of one per
+	# chunk. Vertex count must grow with the grid PERIMETER, not with the chunk count.
+	var small: ArrayMesh = LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(
+		Vector2i(10, 10), 8, 1.0)
+	var large: ArrayMesh = LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(
+		Vector2i(100, 100), 8, 1.0)
+
+	var small_verts: int = (small.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var large_verts: int = (large.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+
+	assert_eq(small_verts, 44, "A 100-chunk world needs 44 line vertices.")
+	assert_eq(large_verts, 404, "A 10000-chunk world needs 404 line vertices.")
+	assert_eq(small.get_surface_count(), 1, "One surface regardless of chunk count.")
+	assert_eq(large.get_surface_count(), 1, "One surface regardless of chunk count.")
+
+
+func test_chunk_grid_builder_rejects_degenerate_dimensions() -> void:
+	assert_null(LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(Vector2i(0, 5), 10, 1.0),
+		"A zero-width world must not produce a mesh.")
+	assert_null(LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(Vector2i(5, 5), 0, 1.0),
+		"A zero chunk size must not produce a mesh.")
+	assert_null(LowPolyTerrainMeshBuilder.build_chunk_grid_mesh(Vector2i(5, 5), 10, 0.0),
+		"A zero cell size must not produce a mesh.")
+
+
+func test_chunk_grid_material_reads_through_terrain() -> void:
+	var mat: StandardMaterial3D = LowPolyTerrainMeshBuilder.build_chunk_grid_material()
+	assert_eq(mat.shading_mode, StandardMaterial3D.SHADING_MODE_UNSHADED,
+		"An overlay must not be lit.")
+	assert_true(mat.no_depth_test,
+		"The grid must read through hills instead of vanishing inside them.")
