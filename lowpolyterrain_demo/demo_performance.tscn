@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://dxq4p56omxx80" path="res://addons/lowpolyterrain/LowPolyTerrainManager.gd" id="2_m1ry2"]
 [ext_resource type="Shader" uid="uid://dpv1oxfbrelpl" path="res://addons/lowpolyterrain/shader/fast_terrain_and_cliff.gdshader" id="3_xca6p"]
 [ext_resource type="Shader" uid="uid://uwt87eq326hs" path="res://addons/lowpolyterrain/shader/water.gdshader" id="4_rguu7"]
+[ext_resource type="PackedScene" uid="uid://rc5wx465t55m" path="res://lowpolyterrain_demo/performance_monitor.tscn" id="5_uvjrp"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_m1ry2"]
 sky_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
@@ -77,46 +78,6 @@ environment = SubResource("Environment_rguu7")
 transform = Transform3D(-0.8660254, -0.43301278, 0.25, 0, 0.49999997, 0.86602545, -0.50000006, 0.75, -0.43301266, 0, 0, 0)
 shadow_enabled = true
 
-[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=59298655]
-
-[node name="Control" type="Control" parent="CanvasLayer" unique_id=896247402]
-layout_mode = 3
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-
-[node name="MarginContainer" type="MarginContainer" parent="CanvasLayer/Control" unique_id=1313192839]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
-theme_override_constants/margin_left = 50
-theme_override_constants/margin_top = 50
-
-[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/Control/MarginContainer" unique_id=1775872978]
-layout_mode = 2
-
-[node name="LabelFPS" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=132763607]
-layout_mode = 2
-text = "FPS"
-
-[node name="LabelRAM" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=1782897960]
-layout_mode = 2
-
-[node name="LabelNodeCount" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=1955447937]
-layout_mode = 2
-
-[node name="LabelDrawCalls" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=263738193]
-layout_mode = 2
-
-[node name="LabelProcessTime" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=214667643]
-layout_mode = 2
-
-[node name="LabelPhysicsTime" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=1761535766]
-layout_mode = 2
-
-[node name="LabelPrimitivesCount" type="Label" parent="CanvasLayer/Control/MarginContainer/VBoxContainer" unique_id=1221520606]
-layout_mode = 2
-
 [node name="Pivot" type="Node3D" parent="." unique_id=205002579]
 
 [node name="Camera3D" type="Camera3D" parent="Pivot" unique_id=1045533353]
@@ -145,3 +106,5 @@ metadata/_edit_lock_ = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 600, -170, -600)
 mesh = SubResource("PlaneMesh_bosie")
 surface_material_override/0 = SubResource("ShaderMaterial_uvjrp")
+
+[node name="PerformanceMonitor" parent="." unique_id=2049248689 instance=ExtResource("5_uvjrp")]

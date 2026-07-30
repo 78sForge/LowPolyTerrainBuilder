@@ -1,0 +1,93 @@
+[gd_scene format=3 uid="uid://rc5wx465t55m"]
+
+[ext_resource type="Script" uid="uid://4x7skfvsgrwv" path="res://lowpolyterrain_demo/performance_monitor.gd" id="1_5f25c"]
+
+[node name="PerformanceMonitor" type="CanvasLayer" unique_id=2049248689]
+script = ExtResource("1_5f25c")
+
+[node name="Control" type="Control" parent="." unique_id=2120615126]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="Control" unique_id=107368893]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+theme_override_constants/margin_left = 50
+theme_override_constants/margin_top = 50
+
+[node name="HBox" type="HBoxContainer" parent="Control/MarginContainer" unique_id=317188371]
+layout_mode = 2
+
+[node name="VBoxLabel" type="VBoxContainer" parent="Control/MarginContainer/HBox" unique_id=1102004982]
+layout_mode = 2
+
+[node name="LabelFPS" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=1542701115]
+layout_mode = 2
+text = "FPS"
+
+[node name="LabelRAM" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=1185145261]
+layout_mode = 2
+text = "RAM [MB]"
+
+[node name="LabelNodeCount" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=1238395956]
+layout_mode = 2
+text = "NodeCount"
+
+[node name="LabelDrawCalls" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=1211444968]
+layout_mode = 2
+text = "DrawCalls"
+
+[node name="LabelProcessTime" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=1638313831]
+layout_mode = 2
+text = "ProcessTime [ms]"
+
+[node name="LabelPhysicsTime" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=560013062]
+layout_mode = 2
+text = "PhysicsTime [ms]"
+
+[node name="LabelPrimitivesCount" type="Label" parent="Control/MarginContainer/HBox/VBoxLabel" unique_id=2093994594]
+layout_mode = 2
+text = "PrimitivesCount"
+
+[node name="VBoxValue" type="VBoxContainer" parent="Control/MarginContainer/HBox" unique_id=120560274]
+layout_mode = 2
+
+[node name="ValueFPS" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=879194376]
+layout_mode = 2
+text = "FPS"
+horizontal_alignment = 2
+
+[node name="ValueRAM" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=1670860485]
+layout_mode = 2
+text = "RAM"
+horizontal_alignment = 2
+
+[node name="ValueNodeCount" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=1532369897]
+layout_mode = 2
+text = "NodeCount"
+horizontal_alignment = 2
+
+[node name="ValueDrawCalls" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=1637702887]
+layout_mode = 2
+text = "DrawCalls"
+horizontal_alignment = 2
+
+[node name="ValueProcessTime" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=1596069946]
+layout_mode = 2
+text = "ProcessTime"
+horizontal_alignment = 2
+
+[node name="ValuePhysicsTime" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=782201622]
+layout_mode = 2
+text = "PhysicsTime"
+horizontal_alignment = 2
+
+[node name="ValuePrimitivesCount" type="Label" parent="Control/MarginContainer/HBox/VBoxValue" unique_id=1316319752]
+layout_mode = 2
+text = "PrimitivesCount"
+horizontal_alignment = 2
