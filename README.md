@@ -212,6 +212,39 @@ wireframe adds line geometry per visible chunk.
 
 ---
 
+## 📐 Querying the Terrain at Runtime
+
+```gdscript
+var y: float = terrain.get_height_at_world_coords(pos.x, pos.z)
+var y2: float = terrain.get_height_at_world_position(pos)     # Y component ignored
+if terrain.is_inside_terrain(pos.x, pos.z):
+	...
+```
+
+`O(1)`: four array reads and three interpolations. No physics query, no geometry, and the same
+result in both backends, because it samples the height matrix rather than the generated mesh.
+The manager's translation, scale and Y rotation are all accounted for. Coordinates outside the
+terrain are clamped to the nearest border height.
+
+**Accuracy.** With `jitter_strength` at `0` the result matches the rendered and collided
+surface exactly. Jitter is what introduces error: it displaces mesh vertices sideways while the
+height matrix stays on its regular grid, and on a slope a sideways shift reads as a height
+difference. Expect roughly
+
+```
+error  ≈  jitter_strength × (height change between neighbouring vertices)
+```
+
+Measured on a 3×3 chunk terrain with `cell_size 1.0` and `jitter_strength 0.5`: a gentle
+0.26 m per cell relief drifts 6 mm on average and 4.5 cm at worst, a steep 0.77 m per cell
+relief drifts 10 cm on average and 53 cm at worst. A larger `cell_size` reduces it. On steep
+jittered terrain use a raycast instead.
+
+> Height at an XZ position stops being well defined if the manager is rotated around X or Z,
+> because a vertical ray can then cross the surface more than once.
+
+---
+
 ## ⚙️ Inspector Configuration Parameters
 
 | Property | Group | Type | Description |

@@ -331,6 +331,126 @@ func test_material_assignment_stability() -> void:
 
 
 ##@@
+# --- WORLD SPACE HEIGHT QUERY ---
+
+
+func test_world_height_matches_the_grid_on_exact_vertices() -> void:
+	manager.set_height_at(3, 4, 7.25)
+	# cell_size is 1.0 here, and Z runs negative in world space.
+	assert_almost_eq(manager.get_height_at_world_coords(3.0, -4.0), 7.25, 0.0001,
+		"A query straight on a vertex must return that vertex's stored height.")
+
+
+func test_world_height_interpolates_between_vertices() -> void:
+	manager.set_height_at(0, 0, 0.0)
+	manager.set_height_at(1, 0, 10.0)
+
+	assert_almost_eq(manager.get_height_at_world_coords(0.5, 0.0), 5.0, 0.0001,
+		"Halfway between two vertices must return their average.")
+	assert_almost_eq(manager.get_height_at_world_coords(0.25, 0.0), 2.5, 0.0001,
+		"A quarter along must interpolate linearly.")
+
+
+func test_world_height_clamps_outside_the_terrain() -> void:
+	manager.set_height_at(0, 0, 4.0)
+
+	# Far outside on both axes must fall back to the nearest border vertex.
+	assert_almost_eq(manager.get_height_at_world_coords(-500.0, 500.0), 4.0, 0.0001,
+		"Outside the terrain the nearest border height must be returned.")
+
+
+func test_world_height_follows_the_manager_transform() -> void:
+	manager.set_height_at(3, 4, 2.0)
+	manager.position = Vector3(100.0, 25.0, -50.0)
+
+	# The sample is taken in local space and handed back in world space, so the manager's own
+	# elevation has to show up in the result.
+	assert_almost_eq(manager.get_height_at_world_coords(103.0, -54.0), 27.0, 0.0001,
+		"A moved manager must report world heights, not local ones.")
+
+	manager.position = Vector3.ZERO
+	manager.scale = Vector3(1.0, 3.0, 1.0)
+	assert_almost_eq(manager.get_height_at_world_coords(3.0, -4.0), 6.0, 0.0001,
+		"A vertically scaled manager must scale the reported height too.")
+
+
+func test_world_height_position_wrapper_ignores_y() -> void:
+	manager.set_height_at(2, 2, 5.5)
+	var from_coords: float = manager.get_height_at_world_coords(2.0, -2.0)
+	var from_position: float = manager.get_height_at_world_position(Vector3(2.0, 999.0, -2.0))
+	assert_almost_eq(from_position, from_coords, 0.0001,
+		"The convenience wrapper must ignore the Y component it is handed.")
+
+
+func test_is_inside_terrain_reports_the_grid_bounds() -> void:
+	# 2 chunks of 10 cells at 1 metre each spans 0..20 metres, Z negative.
+	assert_true(manager.is_inside_terrain(10.0, -10.0), "The centre must be inside.")
+	assert_true(manager.is_inside_terrain(0.0, 0.0), "The origin corner must be inside.")
+	assert_true(manager.is_inside_terrain(20.0, -20.0), "The far corner must be inside.")
+	assert_false(manager.is_inside_terrain(20.5, -10.0), "Just past the east edge is outside.")
+	assert_false(manager.is_inside_terrain(-0.5, -10.0), "Just past the west edge is outside.")
+	assert_false(manager.is_inside_terrain(10.0, 0.5), "Positive Z is outside the grid.")
+
+
+## Builds a deterministic relief and returns the worst deviation from the real mesh surface,
+## together with the largest height step between neighbouring vertices.
+func _measure_height_query_drift() -> Dictionary:
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			manager.set_height_at(gx, gz, sin(float(gx) * 0.4) * 3.0 + cos(float(gz) * 0.3) * 2.0)
+	manager.rebuild_chunks_structure()
+
+	var max_step: float = 0.0
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x - 1):
+			max_step = maxf(max_step,
+				absf(manager.get_height_at(gx + 1, gz) - manager.get_height_at(gx, gz)))
+
+	var cache: Dictionary = {}
+	var result: Dictionary = {}
+	var worst: float = 0.0
+	var samples: int = 0
+
+	for i in range(40):
+		var wx: float = 3.0 + float(i) * 0.35
+		var wz: float = -3.0 - float(i) * 0.28
+		if not LowPolyTerrainPicking.raycast_terrain(
+				manager, Vector3(wx, 200.0, wz), Vector3.DOWN, cache, result):
+			continue
+		samples += 1
+		worst = maxf(worst, absf(
+			manager.get_height_at_world_coords(wx, wz) - (result["point"] as Vector3).y))
+
+	return { "worst": worst, "max_step": max_step, "samples": samples }
+
+
+func test_world_height_is_exact_without_jitter() -> void:
+	# Jitter is the ONLY reason the matrix sample and the mesh can disagree: without it the
+	# mesh vertices sit exactly on the grid the matrix describes.
+	manager.jitter_strength = 0.0
+	var measured: Dictionary = _measure_height_query_drift()
+
+	assert_gt(int(measured["samples"]), 20, "Enough rays must have hit to mean anything.")
+	assert_lt(float(measured["worst"]), 0.001,
+		"Without jitter the query must match the real surface, but drifted %.4f m."
+		% measured["worst"])
+
+
+func test_world_height_drift_stays_within_the_documented_bound() -> void:
+	# With jitter the error scales with jitter_strength times the height step between
+	# neighbouring vertices, because a sideways vertex shift reads as a height difference on
+	# a slope. Measured worst case was about 1.4x that product; 2.5x is the guard rail.
+	manager.jitter_strength = 0.5
+	var measured: Dictionary = _measure_height_query_drift()
+
+	var bound: float = 2.5 * manager.jitter_strength * float(measured["max_step"])
+	assert_gt(int(measured["samples"]), 20, "Enough rays must have hit to mean anything.")
+	assert_lt(float(measured["worst"]), bound,
+		"Drift %.3f m exceeded the documented bound of %.3f m (max step %.3f m per cell)."
+		% [measured["worst"], bound, measured["max_step"]])
+
+
+##@@
 # --- BAKED COLLIDER CULLING ---
 # These assert the ACTUAL disabled flags rather than the culling bookkeeping. Checking only
 # the bookkeeping is what let the first pass silently leave every collider switched on.
