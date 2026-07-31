@@ -61,6 +61,21 @@ const FULL_STRENGTH_DISTANCE_CELLS: float = 0.25
 ## Brush position of the previous sculpting frame, for the movement measure above.
 var _last_paint_position: Vector3 = Vector3.ZERO
 
+## Opacity of the brush disc. Kept low deliberately: the ring marks where the brush sits, and
+## the terrain being sculpted has to stay readable underneath it.
+const BRUSH_FILL_ALPHA: float = 0.15
+
+## Opacity of the brush outline, which is what actually carries the tool colour.
+const BRUSH_OUTLINE_ALPHA: float = 0.95
+
+## Segment count of the brush circle. Higher than the disc alone needed, because the outline
+## now defines the silhouette and a coarse one reads as a polygon rather than a circle.
+const BRUSH_RING_SEGMENTS: int = 64
+
+# Split across two surfaces so the outline can stay opaque while the disc is barely there.
+var _brush_fill_material: StandardMaterial3D = null
+var _brush_outline_material: StandardMaterial3D = null
+
 # Transient 3D mesh instance used as a visual preview tool inside the editor viewport
 var brush_gizmo: MeshInstance3D = null
 
@@ -479,6 +494,17 @@ func _hide_brush_visuals() -> void:
 	if brush_gizmo and brush_gizmo.visible:
 		brush_gizmo.visible = false
 
+## Shared setup for both brush materials: unlit, alpha blended, visible through the terrain and
+## from either side, so the ring reads the same however the camera is angled.
+func _new_brush_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.no_depth_test = true
+	return mat
+
+
 func _create_3d_brush_gizmo() -> void:
 	if not active_manager or brush_gizmo: 
 		return
@@ -487,13 +513,12 @@ func _create_3d_brush_gizmo() -> void:
 	brush_gizmo.name = "DEBUG_BrushGizmo_Transient"
 	active_manager.add_child(brush_gizmo)
 	
-	var gizmo_material := StandardMaterial3D.new()
-	gizmo_material.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
-	gizmo_material.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-	gizmo_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	gizmo_material.no_depth_test = true
-	brush_gizmo.material_override = gizmo_material
-	
+	# Two materials rather than one material_override, because the disc and its outline need
+	# different alpha. material_override applies to every surface at once, so the split has to
+	# happen through per-surface overrides; see _update_gizmo_scale().
+	_brush_fill_material = _new_brush_material()
+	_brush_outline_material = _new_brush_material()
+
 	# Instantiate the 2D canvas label on top of the editor base viewport
 	if not mouse_label:
 		mouse_label = Label.new()
@@ -570,33 +595,53 @@ func _update_gizmo_scale() -> void:
 	var mode_idx: int = active_manager.resolve_brush_mode(_shift_held)
 	var current_radius: float = float(active_manager.brush_radius) * active_manager.cell_size
 
-	var mat: StandardMaterial3D = ring_mesh.material_override
-	if mat:
-		if BRUSH_COLORS.has(mode_idx):
-			mat.albedo_color = BRUSH_COLORS[mode_idx]
-		else:
-			mat.albedo_color = FallBackColor
+	var tool_color: Color = BRUSH_COLORS[mode_idx] if BRUSH_COLORS.has(mode_idx) else FallBackColor
+
+	# The outline carries the colour, the disc only hints at the area. Splitting the alpha this
+	# way is what makes the terrain under the brush readable while sculpting it.
+	if _brush_outline_material:
+		_brush_outline_material.albedo_color = Color(
+			tool_color.r, tool_color.g, tool_color.b, BRUSH_OUTLINE_ALPHA
+		)
+	if _brush_fill_material:
+		_brush_fill_material.albedo_color = Color(
+			tool_color.r, tool_color.g, tool_color.b, BRUSH_FILL_ALPHA
+		)
 
 	if mouse_label:
 		mouse_label.text = _build_brush_label(active_manager, mode_idx, _shift_held)
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var segments: int = 36
-	var center_vertex := Vector3(0.0, 0.03, 0.0)
-	
-	for i in range(segments):
-		var theta0: float = (float(i) / float(segments)) * TAU
-		var theta1: float = (float(i + 1) / float(segments)) * TAU
-		
-		var p0 := Vector3(sin(theta0) * current_radius, 0.03, cos(theta0) * current_radius)
-		var p1 := Vector3(sin(theta1) * current_radius, 0.03, cos(theta1) * current_radius)
-		
-		st.add_vertex(center_vertex)
-		st.add_vertex(p0)
-		st.add_vertex(p1)
-		
-	ring_mesh.mesh = st.commit()
+	var plane_y: float = 0.03
+	var center_vertex := Vector3(0.0, plane_y, 0.0)
+
+	var fill := SurfaceTool.new()
+	fill.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var outline := SurfaceTool.new()
+	outline.begin(Mesh.PRIMITIVE_LINE_STRIP)
+
+	for i in range(BRUSH_RING_SEGMENTS):
+		var theta0: float = (float(i) / float(BRUSH_RING_SEGMENTS)) * TAU
+		var theta1: float = (float(i + 1) / float(BRUSH_RING_SEGMENTS)) * TAU
+
+		var p0 := Vector3(sin(theta0) * current_radius, plane_y, cos(theta0) * current_radius)
+		var p1 := Vector3(sin(theta1) * current_radius, plane_y, cos(theta1) * current_radius)
+
+		fill.add_vertex(center_vertex)
+		fill.add_vertex(p0)
+		fill.add_vertex(p1)
+
+		outline.add_vertex(p0)
+
+	# Repeat the first point so the line strip closes instead of leaving a gap.
+	outline.add_vertex(Vector3(0.0, plane_y, current_radius))
+
+	# Surface 0 is the disc, surface 1 the outline. Committed in that order because the
+	# per-surface material overrides below address them by index.
+	var mesh: ArrayMesh = fill.commit()
+	outline.commit(mesh)
+	ring_mesh.mesh = mesh
+	ring_mesh.set_surface_override_material(0, _brush_fill_material)
+	ring_mesh.set_surface_override_material(1, _brush_outline_material)
 
 
 
@@ -611,7 +656,11 @@ func _destroy_3d_brush_gizmo() -> void:
 			brush_gizmo.get_parent().remove_child(brush_gizmo)
 		brush_gizmo.free()
 		brush_gizmo = null
-		
+
+	# Dropped with the instance they belonged to; _create_3d_brush_gizmo() makes fresh ones.
+	_brush_fill_material = null
+	_brush_outline_material = null
+
 	if mouse_label:
 		if mouse_label.get_parent():
 			mouse_label.get_parent().remove_child(mouse_label)
