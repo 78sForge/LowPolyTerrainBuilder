@@ -839,7 +839,7 @@ noise_amplitude = 10.0
 terrain_noise = SubResource("FastNoiseLite_bosie")
 custom_material = SubResource("ShaderMaterial_r4d1u")
 tool_mode = 4
-brush_radius = 11
+brush_radius = 32
 brush_strength = 4.6
 brush_falloff_strength = 1.0
 smooth_factor = 1.0
@@ -862,6 +862,7 @@ transform = Transform3D(1, 0, 0, 0, 0.7241719, 0.68961954, 0, -0.68961954, 0.724
 
 [node name="Water" type="Node3D" parent="." unique_id=1517476593 node_paths=PackedStringArray("collision_cull_targets") groups=["Water"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -150, -20, 150)
+visible = false
 script = ExtResource("1_csyv0")
 terrain_backend = 1
 chunk_activity_data = PackedByteArray("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==")
@@ -903,1803 +904,1803 @@ surface_material_override/0 = SubResource("StandardMaterial3D_j1uoq")
 shape = SubResource("SphereShape3D_bosie")
 debug_color = Color(17.976582, 0, 11.285828, 0.41960785)
 
-[node name="Terrain_Collisions" type="Node3D" parent="." unique_id=2072693964]
+[node name="Terrain_Collisions" type="Node3D" parent="." unique_id=902001961]
 
-[node name="Static_Chunk_0_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1603399197 groups=["Wall"]]
+[node name="Static_Chunk_0_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1772565501 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_0" unique_id=454836977]
+[node name="Chunk_0_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_0" unique_id=1713706977]
 shape = SubResource("ConcavePolygonShape3D_j1uoq")
 
-[node name="Static_Chunk_1_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1012449955 groups=["Wall"]]
+[node name="Static_Chunk_1_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1013732795 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_0" unique_id=1844206642]
+[node name="Chunk_1_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_0" unique_id=1235083582]
 shape = SubResource("ConcavePolygonShape3D_r4d1u")
 
-[node name="Static_Chunk_2_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1504038851 groups=["Wall"]]
+[node name="Static_Chunk_2_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=41830778 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_0" unique_id=1489961379]
+[node name="Chunk_2_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_0" unique_id=1172811207]
 shape = SubResource("ConcavePolygonShape3D_3vlrg")
 
-[node name="Static_Chunk_3_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1482799878 groups=["Wall"]]
+[node name="Static_Chunk_3_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=156191782 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_0" unique_id=1228664564]
+[node name="Chunk_3_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_0" unique_id=796977313]
 shape = SubResource("ConcavePolygonShape3D_fjcqk")
 
-[node name="Static_Chunk_4_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1035598382 groups=["Wall"]]
+[node name="Static_Chunk_4_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1082814651 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_0" unique_id=1169028449]
+[node name="Chunk_4_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_0" unique_id=569652201]
 shape = SubResource("ConcavePolygonShape3D_ob7rc")
 
-[node name="Static_Chunk_5_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1212225713 groups=["Wall"]]
+[node name="Static_Chunk_5_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1723523032 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_0" unique_id=1811969470]
+[node name="Chunk_5_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_0" unique_id=1165680384]
 shape = SubResource("ConcavePolygonShape3D_te6np")
 
-[node name="Static_Chunk_6_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=574393838 groups=["Wall"]]
+[node name="Static_Chunk_6_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1267878010 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_0" unique_id=904128162]
+[node name="Chunk_6_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_0" unique_id=302901020]
 shape = SubResource("ConcavePolygonShape3D_vcgpx")
 
-[node name="Static_Chunk_7_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=45262005 groups=["Wall"]]
+[node name="Static_Chunk_7_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=879223198 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_0" unique_id=230687037]
+[node name="Chunk_7_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_0" unique_id=858265115]
 shape = SubResource("ConcavePolygonShape3D_21rs1")
 
-[node name="Static_Chunk_8_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1736464505 groups=["Wall"]]
+[node name="Static_Chunk_8_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=672875360 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_0" unique_id=785550452]
+[node name="Chunk_8_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_0" unique_id=523888570]
 shape = SubResource("ConcavePolygonShape3D_ui7rl")
 
-[node name="Static_Chunk_9_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=669431745 groups=["Wall"]]
+[node name="Static_Chunk_9_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=751554453 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_0" unique_id=1090010697]
+[node name="Chunk_9_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_0" unique_id=1396997875]
 shape = SubResource("ConcavePolygonShape3D_55vt0")
 
-[node name="Static_Chunk_10_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1134091149 groups=["Wall"]]
+[node name="Static_Chunk_10_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1061736898 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_0" unique_id=1175523697]
+[node name="Chunk_10_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_0" unique_id=1881290425]
 shape = SubResource("ConcavePolygonShape3D_4byq1")
 
-[node name="Static_Chunk_11_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1460555033 groups=["Wall"]]
+[node name="Static_Chunk_11_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1864522602 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_0" unique_id=1079055470]
+[node name="Chunk_11_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_0" unique_id=716935445]
 shape = SubResource("ConcavePolygonShape3D_ciy1g")
 
-[node name="Static_Chunk_12_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1725780632 groups=["Wall"]]
+[node name="Static_Chunk_12_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=436365441 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_0" unique_id=1614040541]
+[node name="Chunk_12_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_0" unique_id=2090907905]
 shape = SubResource("ConcavePolygonShape3D_dgkvb")
 
-[node name="Static_Chunk_13_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1837865443 groups=["Wall"]]
+[node name="Static_Chunk_13_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1646050684 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_0" unique_id=1658683139]
+[node name="Chunk_13_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_0" unique_id=1257265541]
 shape = SubResource("ConcavePolygonShape3D_vq42o")
 
-[node name="Static_Chunk_14_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1116097665 groups=["Wall"]]
+[node name="Static_Chunk_14_0" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1329537464 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_0" unique_id=319121882]
+[node name="Chunk_14_0_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_0" unique_id=803961127]
 shape = SubResource("ConcavePolygonShape3D_81fqo")
 
-[node name="Static_Chunk_0_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1957689221 groups=["Wall"]]
+[node name="Static_Chunk_0_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1227427613 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_1" unique_id=821650263]
+[node name="Chunk_0_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_1" unique_id=306344559]
 shape = SubResource("ConcavePolygonShape3D_vbip8")
 
-[node name="Static_Chunk_1_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2133852441 groups=["Wall"]]
+[node name="Static_Chunk_1_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1458742716 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_1" unique_id=1796049790]
+[node name="Chunk_1_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_1" unique_id=1158905480]
 shape = SubResource("ConcavePolygonShape3D_a15va")
 
-[node name="Static_Chunk_2_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=852576834 groups=["Wall"]]
+[node name="Static_Chunk_2_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=717263088 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_1" unique_id=1070979752]
+[node name="Chunk_2_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_1" unique_id=1759862357]
 shape = SubResource("ConcavePolygonShape3D_qmdiw")
 
-[node name="Static_Chunk_3_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=61079204 groups=["Wall"]]
+[node name="Static_Chunk_3_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=684915338 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_1" unique_id=342834012]
+[node name="Chunk_3_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_1" unique_id=288365538]
 shape = SubResource("ConcavePolygonShape3D_7cdru")
 
-[node name="Static_Chunk_4_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1965445392 groups=["Wall"]]
+[node name="Static_Chunk_4_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1073140121 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_1" unique_id=1610423104]
+[node name="Chunk_4_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_1" unique_id=1747228785]
 shape = SubResource("ConcavePolygonShape3D_0rmkp")
 
-[node name="Static_Chunk_5_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=757162674 groups=["Wall"]]
+[node name="Static_Chunk_5_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=23398008 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_1" unique_id=810379776]
+[node name="Chunk_5_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_1" unique_id=255409487]
 shape = SubResource("ConcavePolygonShape3D_kfo1b")
 
-[node name="Static_Chunk_6_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1475716680 groups=["Wall"]]
+[node name="Static_Chunk_6_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=539034808 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_1" unique_id=1175264253]
+[node name="Chunk_6_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_1" unique_id=265204166]
 shape = SubResource("ConcavePolygonShape3D_3n26b")
 
-[node name="Static_Chunk_7_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2027186620 groups=["Wall"]]
+[node name="Static_Chunk_7_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1880858150 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_1" unique_id=887234787]
+[node name="Chunk_7_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_1" unique_id=231729214]
 shape = SubResource("ConcavePolygonShape3D_l4r37")
 
-[node name="Static_Chunk_8_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1336602409 groups=["Wall"]]
+[node name="Static_Chunk_8_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1511261576 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_1" unique_id=332745258]
+[node name="Chunk_8_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_1" unique_id=1656417267]
 shape = SubResource("ConcavePolygonShape3D_58ude")
 
-[node name="Static_Chunk_9_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=78432827 groups=["Wall"]]
+[node name="Static_Chunk_9_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2140785272 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_1" unique_id=1923399969]
+[node name="Chunk_9_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_1" unique_id=17305462]
 shape = SubResource("ConcavePolygonShape3D_nqhqv")
 
-[node name="Static_Chunk_10_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1697188362 groups=["Wall"]]
+[node name="Static_Chunk_10_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1296612937 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_1" unique_id=669980476]
+[node name="Chunk_10_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_1" unique_id=932474346]
 shape = SubResource("ConcavePolygonShape3D_11ib2")
 
-[node name="Static_Chunk_11_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2012981339 groups=["Wall"]]
+[node name="Static_Chunk_11_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=243887264 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_1" unique_id=1597826819]
+[node name="Chunk_11_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_1" unique_id=191294190]
 shape = SubResource("ConcavePolygonShape3D_v1r6k")
 
-[node name="Static_Chunk_12_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=713788118 groups=["Wall"]]
+[node name="Static_Chunk_12_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1356854925 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_1" unique_id=1508336254]
+[node name="Chunk_12_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_1" unique_id=1960189463]
 shape = SubResource("ConcavePolygonShape3D_jd3n2")
 
-[node name="Static_Chunk_13_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=230063414 groups=["Wall"]]
+[node name="Static_Chunk_13_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=104070368 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_1" unique_id=1016460299]
+[node name="Chunk_13_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_1" unique_id=1801716072]
 shape = SubResource("ConcavePolygonShape3D_1ecs6")
 
-[node name="Static_Chunk_14_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1736511104 groups=["Wall"]]
+[node name="Static_Chunk_14_1" type="StaticBody3D" parent="Terrain_Collisions" unique_id=190707291 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_1" unique_id=531139441]
+[node name="Chunk_14_1_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_1" unique_id=261206994]
 shape = SubResource("ConcavePolygonShape3D_tieg2")
 
-[node name="Static_Chunk_0_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1224916556 groups=["Wall"]]
+[node name="Static_Chunk_0_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2025117216 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_2" unique_id=862081808]
+[node name="Chunk_0_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_2" unique_id=467726643]
 shape = SubResource("ConcavePolygonShape3D_4uys0")
 
-[node name="Static_Chunk_1_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1464637298 groups=["Wall"]]
+[node name="Static_Chunk_1_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=441553441 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_2" unique_id=1910970429]
+[node name="Chunk_1_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_2" unique_id=1979023177]
 shape = SubResource("ConcavePolygonShape3D_5uvlu")
 
-[node name="Static_Chunk_2_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=930567079 groups=["Wall"]]
+[node name="Static_Chunk_2_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=727138163 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_2" unique_id=191199415]
+[node name="Chunk_2_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_2" unique_id=60384250]
 shape = SubResource("ConcavePolygonShape3D_ywena")
 
-[node name="Static_Chunk_3_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1724452312 groups=["Wall"]]
+[node name="Static_Chunk_3_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=863850091 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_2" unique_id=2055513177]
+[node name="Chunk_3_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_2" unique_id=1212931162]
 shape = SubResource("ConcavePolygonShape3D_47oy2")
 
-[node name="Static_Chunk_4_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1544008839 groups=["Wall"]]
+[node name="Static_Chunk_4_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1764249663 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_2" unique_id=1989445768]
+[node name="Chunk_4_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_2" unique_id=186861577]
 shape = SubResource("ConcavePolygonShape3D_lem78")
 
-[node name="Static_Chunk_5_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=200302385 groups=["Wall"]]
+[node name="Static_Chunk_5_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=615608593 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_2" unique_id=1902843312]
+[node name="Chunk_5_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_2" unique_id=1516752942]
 shape = SubResource("ConcavePolygonShape3D_w1b48")
 
-[node name="Static_Chunk_6_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=29263358 groups=["Wall"]]
+[node name="Static_Chunk_6_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1551093848 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_2" unique_id=28009700]
+[node name="Chunk_6_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_2" unique_id=877945778]
 shape = SubResource("ConcavePolygonShape3D_c70h6")
 
-[node name="Static_Chunk_7_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=832616132 groups=["Wall"]]
+[node name="Static_Chunk_7_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=509629634 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_2" unique_id=830969779]
+[node name="Chunk_7_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_2" unique_id=1016468165]
 shape = SubResource("ConcavePolygonShape3D_1ia5k")
 
-[node name="Static_Chunk_8_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=285843036 groups=["Wall"]]
+[node name="Static_Chunk_8_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1855326279 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_2" unique_id=910975879]
+[node name="Chunk_8_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_2" unique_id=224923593]
 shape = SubResource("ConcavePolygonShape3D_v4tyf")
 
-[node name="Static_Chunk_9_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1541136577 groups=["Wall"]]
+[node name="Static_Chunk_9_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=978426735 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_2" unique_id=2046810878]
+[node name="Chunk_9_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_2" unique_id=1756381074]
 shape = SubResource("ConcavePolygonShape3D_5763r")
 
-[node name="Static_Chunk_10_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=978653186 groups=["Wall"]]
+[node name="Static_Chunk_10_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1749541334 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_2" unique_id=201205287]
+[node name="Chunk_10_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_2" unique_id=620817848]
 shape = SubResource("ConcavePolygonShape3D_ospft")
 
-[node name="Static_Chunk_11_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1628438747 groups=["Wall"]]
+[node name="Static_Chunk_11_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1402657958 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_2" unique_id=595983897]
+[node name="Chunk_11_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_2" unique_id=1527102248]
 shape = SubResource("ConcavePolygonShape3D_vqqp4")
 
-[node name="Static_Chunk_12_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=657474448 groups=["Wall"]]
+[node name="Static_Chunk_12_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1210354041 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_2" unique_id=2019337741]
+[node name="Chunk_12_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_2" unique_id=551449542]
 shape = SubResource("ConcavePolygonShape3D_m3ip4")
 
-[node name="Static_Chunk_13_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=904468334 groups=["Wall"]]
+[node name="Static_Chunk_13_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1668642287 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_2" unique_id=2093658861]
+[node name="Chunk_13_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_2" unique_id=322725527]
 shape = SubResource("ConcavePolygonShape3D_tnvh2")
 
-[node name="Static_Chunk_14_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=339286588 groups=["Wall"]]
+[node name="Static_Chunk_14_2" type="StaticBody3D" parent="Terrain_Collisions" unique_id=295407939 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_2" unique_id=340111171]
+[node name="Chunk_14_2_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_2" unique_id=2140296102]
 shape = SubResource("ConcavePolygonShape3D_dc8i8")
 
-[node name="Static_Chunk_0_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=702159112 groups=["Wall"]]
+[node name="Static_Chunk_0_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1511614855 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_3" unique_id=78387833]
+[node name="Chunk_0_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_3" unique_id=1020431771]
 shape = SubResource("ConcavePolygonShape3D_jtvr0")
 
-[node name="Static_Chunk_1_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1407542810 groups=["Wall"]]
+[node name="Static_Chunk_1_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1950239067 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_3" unique_id=509501880]
+[node name="Chunk_1_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_3" unique_id=2146340809]
 shape = SubResource("ConcavePolygonShape3D_aoj6m")
 
-[node name="Static_Chunk_2_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2141847639 groups=["Wall"]]
+[node name="Static_Chunk_2_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=250012396 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_3" unique_id=25521055]
+[node name="Chunk_2_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_3" unique_id=570435205]
 shape = SubResource("ConcavePolygonShape3D_wvirk")
 
-[node name="Static_Chunk_3_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2094492606 groups=["Wall"]]
+[node name="Static_Chunk_3_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1957557661 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_3" unique_id=241759966]
+[node name="Chunk_3_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_3" unique_id=1667405829]
 shape = SubResource("ConcavePolygonShape3D_35wnh")
 
-[node name="Static_Chunk_4_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1928219065 groups=["Wall"]]
+[node name="Static_Chunk_4_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=503838437 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_3" unique_id=374741594]
+[node name="Chunk_4_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_3" unique_id=368928175]
 shape = SubResource("ConcavePolygonShape3D_3xsik")
 
-[node name="Static_Chunk_5_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=242457318 groups=["Wall"]]
+[node name="Static_Chunk_5_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=164473043 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_3" unique_id=645546948]
+[node name="Chunk_5_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_3" unique_id=2093562690]
 shape = SubResource("ConcavePolygonShape3D_47qlf")
 
-[node name="Static_Chunk_6_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1146631880 groups=["Wall"]]
+[node name="Static_Chunk_6_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=253783442 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_3" unique_id=1013457787]
+[node name="Chunk_6_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_3" unique_id=539233905]
 shape = SubResource("ConcavePolygonShape3D_0au1f")
 
-[node name="Static_Chunk_7_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1629783611 groups=["Wall"]]
+[node name="Static_Chunk_7_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1126394727 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_3" unique_id=588676692]
+[node name="Chunk_7_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_3" unique_id=1340399772]
 shape = SubResource("ConcavePolygonShape3D_2g6di")
 
-[node name="Static_Chunk_8_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1608610343 groups=["Wall"]]
+[node name="Static_Chunk_8_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1458617040 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_3" unique_id=940946395]
+[node name="Chunk_8_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_3" unique_id=614785285]
 shape = SubResource("ConcavePolygonShape3D_6j20f")
 
-[node name="Static_Chunk_9_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=545011240 groups=["Wall"]]
+[node name="Static_Chunk_9_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1840984162 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_3" unique_id=1069058151]
+[node name="Chunk_9_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_3" unique_id=1422863057]
 shape = SubResource("ConcavePolygonShape3D_w7soi")
 
-[node name="Static_Chunk_10_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1375850434 groups=["Wall"]]
+[node name="Static_Chunk_10_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1198914328 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_3" unique_id=1232036715]
+[node name="Chunk_10_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_3" unique_id=470237236]
 shape = SubResource("ConcavePolygonShape3D_mf6ya")
 
-[node name="Static_Chunk_11_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=763933337 groups=["Wall"]]
+[node name="Static_Chunk_11_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1582280285 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_3" unique_id=1086731932]
+[node name="Chunk_11_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_3" unique_id=903071922]
 shape = SubResource("ConcavePolygonShape3D_2a6hx")
 
-[node name="Static_Chunk_12_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=25391287 groups=["Wall"]]
+[node name="Static_Chunk_12_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=677069829 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_3" unique_id=1224567984]
+[node name="Chunk_12_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_3" unique_id=1065799242]
 shape = SubResource("ConcavePolygonShape3D_6o6kd")
 
-[node name="Static_Chunk_13_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1485198452 groups=["Wall"]]
+[node name="Static_Chunk_13_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=955307969 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_3" unique_id=1322695092]
+[node name="Chunk_13_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_3" unique_id=690201542]
 shape = SubResource("ConcavePolygonShape3D_lj1a6")
 
-[node name="Static_Chunk_14_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=725463792 groups=["Wall"]]
+[node name="Static_Chunk_14_3" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1371533991 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_3" unique_id=526882393]
+[node name="Chunk_14_3_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_3" unique_id=569961482]
 shape = SubResource("ConcavePolygonShape3D_psfy7")
 
-[node name="Static_Chunk_0_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=247016695 groups=["Wall"]]
+[node name="Static_Chunk_0_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1150851356 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_4" unique_id=403614878]
+[node name="Chunk_0_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_4" unique_id=299988138]
 shape = SubResource("ConcavePolygonShape3D_2l20p")
 
-[node name="Static_Chunk_1_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1813032127 groups=["Wall"]]
+[node name="Static_Chunk_1_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=358548726 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_4" unique_id=264429809]
+[node name="Chunk_1_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_4" unique_id=2014609298]
 shape = SubResource("ConcavePolygonShape3D_gftig")
 
-[node name="Static_Chunk_2_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1392254591 groups=["Wall"]]
+[node name="Static_Chunk_2_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1563961978 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_4" unique_id=1230787978]
+[node name="Chunk_2_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_4" unique_id=2133984155]
 shape = SubResource("ConcavePolygonShape3D_yw4u7")
 
-[node name="Static_Chunk_3_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1502146517 groups=["Wall"]]
+[node name="Static_Chunk_3_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=37957566 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_4" unique_id=752187900]
+[node name="Chunk_3_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_4" unique_id=561744932]
 shape = SubResource("ConcavePolygonShape3D_a26jr")
 
-[node name="Static_Chunk_4_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1037715650 groups=["Wall"]]
+[node name="Static_Chunk_4_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1806570750 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_4" unique_id=837892651]
+[node name="Chunk_4_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_4" unique_id=1784558850]
 shape = SubResource("ConcavePolygonShape3D_deymw")
 
-[node name="Static_Chunk_5_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=393715217 groups=["Wall"]]
+[node name="Static_Chunk_5_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2013036062 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_4" unique_id=1371507705]
+[node name="Chunk_5_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_4" unique_id=1220106669]
 shape = SubResource("ConcavePolygonShape3D_2e4me")
 
-[node name="Static_Chunk_6_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1682541009 groups=["Wall"]]
+[node name="Static_Chunk_6_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=728746958 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_4" unique_id=1916000209]
+[node name="Chunk_6_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_4" unique_id=699721344]
 shape = SubResource("ConcavePolygonShape3D_5qekt")
 
-[node name="Static_Chunk_7_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=66548708 groups=["Wall"]]
+[node name="Static_Chunk_7_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=128075707 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_4" unique_id=1930212013]
+[node name="Chunk_7_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_4" unique_id=1909147651]
 shape = SubResource("ConcavePolygonShape3D_4j28g")
 
-[node name="Static_Chunk_8_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=202466781 groups=["Wall"]]
+[node name="Static_Chunk_8_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=205096627 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_4" unique_id=489026338]
+[node name="Chunk_8_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_4" unique_id=251166307]
 shape = SubResource("ConcavePolygonShape3D_pasy2")
 
-[node name="Static_Chunk_9_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1628255750 groups=["Wall"]]
+[node name="Static_Chunk_9_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1935773901 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_4" unique_id=879605064]
+[node name="Chunk_9_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_4" unique_id=1706152845]
 shape = SubResource("ConcavePolygonShape3D_e306h")
 
-[node name="Static_Chunk_10_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=682710719 groups=["Wall"]]
+[node name="Static_Chunk_10_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=656107504 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_4" unique_id=970985628]
+[node name="Chunk_10_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_4" unique_id=1075452548]
 shape = SubResource("ConcavePolygonShape3D_34qcn")
 
-[node name="Static_Chunk_11_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=233617592 groups=["Wall"]]
+[node name="Static_Chunk_11_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=807799933 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_4" unique_id=718168102]
+[node name="Chunk_11_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_4" unique_id=491870743]
 shape = SubResource("ConcavePolygonShape3D_bgrfr")
 
-[node name="Static_Chunk_12_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=435439360 groups=["Wall"]]
+[node name="Static_Chunk_12_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=636533071 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_4" unique_id=15114687]
+[node name="Chunk_12_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_4" unique_id=1675321423]
 shape = SubResource("ConcavePolygonShape3D_8lwil")
 
-[node name="Static_Chunk_13_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=247740540 groups=["Wall"]]
+[node name="Static_Chunk_13_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=131496720 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_4" unique_id=1925673418]
+[node name="Chunk_13_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_4" unique_id=1707176990]
 shape = SubResource("ConcavePolygonShape3D_bf2m8")
 
-[node name="Static_Chunk_14_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1184401337 groups=["Wall"]]
+[node name="Static_Chunk_14_4" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1478967524 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_4" unique_id=1546902809]
+[node name="Chunk_14_4_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_4" unique_id=1759091517]
 shape = SubResource("ConcavePolygonShape3D_h1sye")
 
-[node name="Static_Chunk_0_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1392288581 groups=["Wall"]]
+[node name="Static_Chunk_0_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=875616747 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_5" unique_id=1692717656]
+[node name="Chunk_0_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_5" unique_id=538638439]
 shape = SubResource("ConcavePolygonShape3D_mndqs")
 
-[node name="Static_Chunk_1_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=575720091 groups=["Wall"]]
+[node name="Static_Chunk_1_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=807124865 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_5" unique_id=573546250]
+[node name="Chunk_1_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_5" unique_id=62098833]
 shape = SubResource("ConcavePolygonShape3D_f6x30")
 
-[node name="Static_Chunk_2_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=354819043 groups=["Wall"]]
+[node name="Static_Chunk_2_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1272146444 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_5" unique_id=1677182821]
+[node name="Chunk_2_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_5" unique_id=1424582130]
 shape = SubResource("ConcavePolygonShape3D_4gcgk")
 
-[node name="Static_Chunk_3_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1623699971 groups=["Wall"]]
+[node name="Static_Chunk_3_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=769129409 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_5" unique_id=430519050]
+[node name="Chunk_3_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_5" unique_id=1772203933]
 shape = SubResource("ConcavePolygonShape3D_fg0fu")
 
-[node name="Static_Chunk_4_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1673277798 groups=["Wall"]]
+[node name="Static_Chunk_4_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=678912121 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_5" unique_id=2087576768]
+[node name="Chunk_4_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_5" unique_id=1031560961]
 shape = SubResource("ConcavePolygonShape3D_pllp5")
 
-[node name="Static_Chunk_5_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1077158777 groups=["Wall"]]
+[node name="Static_Chunk_5_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2050161497 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_5" unique_id=136389296]
+[node name="Chunk_5_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_5" unique_id=65788114]
 shape = SubResource("ConcavePolygonShape3D_ff80m")
 
-[node name="Static_Chunk_6_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=124143799 groups=["Wall"]]
+[node name="Static_Chunk_6_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=132619935 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_5" unique_id=325700215]
+[node name="Chunk_6_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_5" unique_id=74852062]
 shape = SubResource("ConcavePolygonShape3D_uha27")
 
-[node name="Static_Chunk_7_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1236688932 groups=["Wall"]]
+[node name="Static_Chunk_7_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2074709335 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_5" unique_id=402484822]
+[node name="Chunk_7_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_5" unique_id=290262654]
 shape = SubResource("ConcavePolygonShape3D_rlyef")
 
-[node name="Static_Chunk_8_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2027557597 groups=["Wall"]]
+[node name="Static_Chunk_8_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1429206377 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_5" unique_id=1558706594]
+[node name="Chunk_8_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_5" unique_id=614525970]
 shape = SubResource("ConcavePolygonShape3D_go5co")
 
-[node name="Static_Chunk_9_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=133438727 groups=["Wall"]]
+[node name="Static_Chunk_9_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=808557763 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_5" unique_id=416606223]
+[node name="Chunk_9_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_5" unique_id=1192590877]
 shape = SubResource("ConcavePolygonShape3D_5mnsc")
 
-[node name="Static_Chunk_10_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1497592462 groups=["Wall"]]
+[node name="Static_Chunk_10_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=153540153 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_5" unique_id=855204886]
+[node name="Chunk_10_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_5" unique_id=1588905737]
 shape = SubResource("ConcavePolygonShape3D_7gp4y")
 
-[node name="Static_Chunk_11_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=638891462 groups=["Wall"]]
+[node name="Static_Chunk_11_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=469751280 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_5" unique_id=812646301]
+[node name="Chunk_11_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_5" unique_id=1585133572]
 shape = SubResource("ConcavePolygonShape3D_2yigs")
 
-[node name="Static_Chunk_12_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1929280135 groups=["Wall"]]
+[node name="Static_Chunk_12_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1022710042 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_5" unique_id=505975984]
+[node name="Chunk_12_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_5" unique_id=1517940512]
 shape = SubResource("ConcavePolygonShape3D_70wfc")
 
-[node name="Static_Chunk_13_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=863847646 groups=["Wall"]]
+[node name="Static_Chunk_13_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1633972923 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_5" unique_id=1592403474]
+[node name="Chunk_13_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_5" unique_id=1524797843]
 shape = SubResource("ConcavePolygonShape3D_f0hge")
 
-[node name="Static_Chunk_14_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2055139330 groups=["Wall"]]
+[node name="Static_Chunk_14_5" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2128173082 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_5" unique_id=718212798]
+[node name="Chunk_14_5_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_5" unique_id=544344503]
 shape = SubResource("ConcavePolygonShape3D_1sq1y")
 
-[node name="Static_Chunk_0_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1672553661 groups=["Wall"]]
+[node name="Static_Chunk_0_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=79989620 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_6" unique_id=548594260]
+[node name="Chunk_0_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_6" unique_id=218020751]
 shape = SubResource("ConcavePolygonShape3D_xw3nv")
 
-[node name="Static_Chunk_1_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1831888863 groups=["Wall"]]
+[node name="Static_Chunk_1_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=614942218 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_6" unique_id=1264607176]
+[node name="Chunk_1_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_6" unique_id=1101417023]
 shape = SubResource("ConcavePolygonShape3D_5tt3w")
 
-[node name="Static_Chunk_2_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1803832706 groups=["Wall"]]
+[node name="Static_Chunk_2_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=831433926 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_6" unique_id=1272468788]
+[node name="Chunk_2_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_6" unique_id=964199153]
 shape = SubResource("ConcavePolygonShape3D_fhqt3")
 
-[node name="Static_Chunk_3_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1089444895 groups=["Wall"]]
+[node name="Static_Chunk_3_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1214508202 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_6" unique_id=975837545]
+[node name="Chunk_3_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_6" unique_id=1417780075]
 shape = SubResource("ConcavePolygonShape3D_c4l7k")
 
-[node name="Static_Chunk_4_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=278057886 groups=["Wall"]]
+[node name="Static_Chunk_4_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=725101153 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_6" unique_id=1300384206]
+[node name="Chunk_4_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_6" unique_id=266004722]
 shape = SubResource("ConcavePolygonShape3D_bwl0v")
 
-[node name="Static_Chunk_5_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1155604869 groups=["Wall"]]
+[node name="Static_Chunk_5_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=154555746 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_6" unique_id=68806644]
+[node name="Chunk_5_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_6" unique_id=782048587]
 shape = SubResource("ConcavePolygonShape3D_gmpvr")
 
-[node name="Static_Chunk_6_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1138166303 groups=["Wall"]]
+[node name="Static_Chunk_6_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=606023861 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_6" unique_id=1778378243]
+[node name="Chunk_6_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_6" unique_id=888439534]
 shape = SubResource("ConcavePolygonShape3D_yekia")
 
-[node name="Static_Chunk_7_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=511755211 groups=["Wall"]]
+[node name="Static_Chunk_7_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1332972526 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_6" unique_id=118193553]
+[node name="Chunk_7_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_6" unique_id=1730655719]
 shape = SubResource("ConcavePolygonShape3D_sbqy8")
 
-[node name="Static_Chunk_8_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1790391002 groups=["Wall"]]
+[node name="Static_Chunk_8_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1679363306 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_6" unique_id=366867541]
+[node name="Chunk_8_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_6" unique_id=328652511]
 shape = SubResource("ConcavePolygonShape3D_1n2do")
 
-[node name="Static_Chunk_9_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1857762478 groups=["Wall"]]
+[node name="Static_Chunk_9_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=594998639 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_6" unique_id=841104400]
+[node name="Chunk_9_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_6" unique_id=62025521]
 shape = SubResource("ConcavePolygonShape3D_1ux74")
 
-[node name="Static_Chunk_10_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1454043952 groups=["Wall"]]
+[node name="Static_Chunk_10_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1860559651 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_6" unique_id=964556082]
+[node name="Chunk_10_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_6" unique_id=1645852918]
 shape = SubResource("ConcavePolygonShape3D_6lnch")
 
-[node name="Static_Chunk_11_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1262619502 groups=["Wall"]]
+[node name="Static_Chunk_11_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1467896381 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_6" unique_id=2089352127]
+[node name="Chunk_11_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_6" unique_id=337443241]
 shape = SubResource("ConcavePolygonShape3D_1fd88")
 
-[node name="Static_Chunk_12_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=226669186 groups=["Wall"]]
+[node name="Static_Chunk_12_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=535731356 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_6" unique_id=1415999861]
+[node name="Chunk_12_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_6" unique_id=1052933000]
 shape = SubResource("ConcavePolygonShape3D_6es6b")
 
-[node name="Static_Chunk_13_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1296318359 groups=["Wall"]]
+[node name="Static_Chunk_13_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1797124769 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_6" unique_id=333355190]
+[node name="Chunk_13_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_6" unique_id=1666359922]
 shape = SubResource("ConcavePolygonShape3D_0ur6a")
 
-[node name="Static_Chunk_14_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=38779068 groups=["Wall"]]
+[node name="Static_Chunk_14_6" type="StaticBody3D" parent="Terrain_Collisions" unique_id=95654067 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_6" unique_id=836118401]
+[node name="Chunk_14_6_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_6" unique_id=1853782964]
 shape = SubResource("ConcavePolygonShape3D_at6m3")
 
-[node name="Static_Chunk_0_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=211134371 groups=["Wall"]]
+[node name="Static_Chunk_0_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=569409429 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_7" unique_id=725849368]
+[node name="Chunk_0_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_7" unique_id=1074761462]
 shape = SubResource("ConcavePolygonShape3D_0ndfc")
 
-[node name="Static_Chunk_1_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=662097934 groups=["Wall"]]
+[node name="Static_Chunk_1_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1600909845 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_7" unique_id=1437876558]
+[node name="Chunk_1_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_7" unique_id=1465708289]
 shape = SubResource("ConcavePolygonShape3D_2qhxl")
 
-[node name="Static_Chunk_2_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1107317281 groups=["Wall"]]
+[node name="Static_Chunk_2_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1385589544 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_7" unique_id=689525511]
+[node name="Chunk_2_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_7" unique_id=1806007911]
 shape = SubResource("ConcavePolygonShape3D_sxfd6")
 
-[node name="Static_Chunk_3_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1585093211 groups=["Wall"]]
+[node name="Static_Chunk_3_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1395797802 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_7" unique_id=1175014148]
+[node name="Chunk_3_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_7" unique_id=172408543]
 shape = SubResource("ConcavePolygonShape3D_l4byw")
 
-[node name="Static_Chunk_4_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=888955997 groups=["Wall"]]
+[node name="Static_Chunk_4_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1190593319 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_7" unique_id=134799983]
+[node name="Chunk_4_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_7" unique_id=214161937]
 shape = SubResource("ConcavePolygonShape3D_c0614")
 
-[node name="Static_Chunk_5_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1701326741 groups=["Wall"]]
+[node name="Static_Chunk_5_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=360369911 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_7" unique_id=296095608]
+[node name="Chunk_5_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_7" unique_id=2028080833]
 shape = SubResource("ConcavePolygonShape3D_sudkv")
 
-[node name="Static_Chunk_6_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1981500287 groups=["Wall"]]
+[node name="Static_Chunk_6_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1675367863 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_7" unique_id=1298830164]
+[node name="Chunk_6_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_7" unique_id=755033799]
 shape = SubResource("ConcavePolygonShape3D_gbjj8")
 
-[node name="Static_Chunk_7_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=901128795 groups=["Wall"]]
+[node name="Static_Chunk_7_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1782231694 groups=["Wall"]]
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_7" unique_id=1389891591]
+[node name="Chunk_7_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_7" unique_id=613432788]
 shape = SubResource("ConcavePolygonShape3D_tprll")
 
-[node name="Static_Chunk_8_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1783367118 groups=["Wall"]]
+[node name="Static_Chunk_8_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1902328381 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_7" unique_id=382988001]
+[node name="Chunk_8_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_7" unique_id=769893259]
 shape = SubResource("ConcavePolygonShape3D_doyx5")
 
-[node name="Static_Chunk_9_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=305755736 groups=["Wall"]]
+[node name="Static_Chunk_9_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2092726439 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_7" unique_id=1335055528]
+[node name="Chunk_9_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_7" unique_id=375051669]
 shape = SubResource("ConcavePolygonShape3D_60k5n")
 
-[node name="Static_Chunk_10_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1846333487 groups=["Wall"]]
+[node name="Static_Chunk_10_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=430325400 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_7" unique_id=1703832929]
+[node name="Chunk_10_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_7" unique_id=292013543]
 shape = SubResource("ConcavePolygonShape3D_u6usw")
 
-[node name="Static_Chunk_11_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=885583827 groups=["Wall"]]
+[node name="Static_Chunk_11_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1866937400 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_7" unique_id=329494937]
+[node name="Chunk_11_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_7" unique_id=1458726608]
 shape = SubResource("ConcavePolygonShape3D_jk1gx")
 
-[node name="Static_Chunk_12_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2037098149 groups=["Wall"]]
+[node name="Static_Chunk_12_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=634099103 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_7" unique_id=326641598]
+[node name="Chunk_12_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_7" unique_id=1159524492]
 shape = SubResource("ConcavePolygonShape3D_wbbhd")
 
-[node name="Static_Chunk_13_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1636683711 groups=["Wall"]]
+[node name="Static_Chunk_13_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1697951211 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_7" unique_id=1487129554]
+[node name="Chunk_13_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_7" unique_id=257564523]
 shape = SubResource("ConcavePolygonShape3D_e2ocv")
 
-[node name="Static_Chunk_14_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=117058960 groups=["Wall"]]
+[node name="Static_Chunk_14_7" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1847762613 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, 0)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_7" unique_id=1668888543]
+[node name="Chunk_14_7_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_7" unique_id=1552825533]
 shape = SubResource("ConcavePolygonShape3D_na6jr")
 
-[node name="Static_Chunk_0_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=972985083 groups=["Wall"]]
+[node name="Static_Chunk_0_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=165873257 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_8" unique_id=1693511983]
+[node name="Chunk_0_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_8" unique_id=556701803]
 shape = SubResource("ConcavePolygonShape3D_3i01x")
 
-[node name="Static_Chunk_1_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=521054958 groups=["Wall"]]
+[node name="Static_Chunk_1_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1091987016 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_8" unique_id=944222548]
+[node name="Chunk_1_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_8" unique_id=2118063350]
 shape = SubResource("ConcavePolygonShape3D_gt0vk")
 
-[node name="Static_Chunk_2_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=118567636 groups=["Wall"]]
+[node name="Static_Chunk_2_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1797081369 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_8" unique_id=1324805554]
+[node name="Chunk_2_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_8" unique_id=256890599]
 shape = SubResource("ConcavePolygonShape3D_561pf")
 
-[node name="Static_Chunk_3_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1768161156 groups=["Wall"]]
+[node name="Static_Chunk_3_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2098530326 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_8" unique_id=607763466]
+[node name="Chunk_3_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_8" unique_id=1957779372]
 shape = SubResource("ConcavePolygonShape3D_fxo2p")
 
-[node name="Static_Chunk_4_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=787358337 groups=["Wall"]]
+[node name="Static_Chunk_4_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=448586190 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_8" unique_id=1006684939]
+[node name="Chunk_4_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_8" unique_id=1285216030]
 shape = SubResource("ConcavePolygonShape3D_8t6ae")
 
-[node name="Static_Chunk_5_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=912398388 groups=["Wall"]]
+[node name="Static_Chunk_5_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1783210660 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_8" unique_id=686350414]
+[node name="Chunk_5_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_8" unique_id=2029978069]
 shape = SubResource("ConcavePolygonShape3D_f1jcc")
 
-[node name="Static_Chunk_6_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1986604005 groups=["Wall"]]
+[node name="Static_Chunk_6_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=738570816 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_8" unique_id=1213421977]
+[node name="Chunk_6_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_8" unique_id=931485218]
 shape = SubResource("ConcavePolygonShape3D_i6l45")
 
-[node name="Static_Chunk_7_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1792075195 groups=["Wall"]]
+[node name="Static_Chunk_7_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2138080956 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_8" unique_id=141416789]
+[node name="Chunk_7_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_8" unique_id=1502141374]
 shape = SubResource("ConcavePolygonShape3D_feu7n")
 
-[node name="Static_Chunk_8_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1175898625 groups=["Wall"]]
+[node name="Static_Chunk_8_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1594831980 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_8" unique_id=1830556834]
+[node name="Chunk_8_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_8" unique_id=490945138]
 shape = SubResource("ConcavePolygonShape3D_g7c7w")
 
-[node name="Static_Chunk_9_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1967450512 groups=["Wall"]]
+[node name="Static_Chunk_9_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=942443738 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_8" unique_id=412724593]
+[node name="Chunk_9_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_8" unique_id=122856259]
 shape = SubResource("ConcavePolygonShape3D_cs0jy")
 
-[node name="Static_Chunk_10_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=147191286 groups=["Wall"]]
+[node name="Static_Chunk_10_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1476509905 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_8" unique_id=1023785432]
+[node name="Chunk_10_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_8" unique_id=957308057]
 shape = SubResource("ConcavePolygonShape3D_1i83b")
 
-[node name="Static_Chunk_11_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=797032117 groups=["Wall"]]
+[node name="Static_Chunk_11_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=881433138 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_8" unique_id=1734445235]
+[node name="Chunk_11_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_8" unique_id=903892905]
 shape = SubResource("ConcavePolygonShape3D_ipo0o")
 
-[node name="Static_Chunk_12_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1809022342 groups=["Wall"]]
+[node name="Static_Chunk_12_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=781064927 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_8" unique_id=348120754]
+[node name="Chunk_12_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_8" unique_id=965468441]
 shape = SubResource("ConcavePolygonShape3D_knob0")
 
-[node name="Static_Chunk_13_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=542326861 groups=["Wall"]]
+[node name="Static_Chunk_13_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1742879341 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_8" unique_id=1089898857]
+[node name="Chunk_13_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_8" unique_id=151336703]
 shape = SubResource("ConcavePolygonShape3D_wif8b")
 
-[node name="Static_Chunk_14_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=508307017 groups=["Wall"]]
+[node name="Static_Chunk_14_8" type="StaticBody3D" parent="Terrain_Collisions" unique_id=249471239 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -20)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_8" unique_id=51377174]
+[node name="Chunk_14_8_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_8" unique_id=2005483098]
 shape = SubResource("ConcavePolygonShape3D_xrfe3")
 
-[node name="Static_Chunk_0_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1913649381 groups=["Wall"]]
+[node name="Static_Chunk_0_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1090678169 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_9" unique_id=940299833]
+[node name="Chunk_0_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_9" unique_id=1582273822]
 shape = SubResource("ConcavePolygonShape3D_ld1ps")
 
-[node name="Static_Chunk_1_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2056186234 groups=["Wall"]]
+[node name="Static_Chunk_1_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=633353904 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_9" unique_id=1362305562]
+[node name="Chunk_1_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_9" unique_id=288115718]
 shape = SubResource("ConcavePolygonShape3D_wjpv3")
 
-[node name="Static_Chunk_2_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1681335561 groups=["Wall"]]
+[node name="Static_Chunk_2_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2034343276 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_9" unique_id=1474599240]
+[node name="Chunk_2_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_9" unique_id=1346380077]
 shape = SubResource("ConcavePolygonShape3D_q8snk")
 
-[node name="Static_Chunk_3_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1138128020 groups=["Wall"]]
+[node name="Static_Chunk_3_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1897613150 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_9" unique_id=191378744]
+[node name="Chunk_3_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_9" unique_id=380432502]
 shape = SubResource("ConcavePolygonShape3D_x2bql")
 
-[node name="Static_Chunk_4_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=593669982 groups=["Wall"]]
+[node name="Static_Chunk_4_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1936250273 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_9" unique_id=2061275451]
+[node name="Chunk_4_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_9" unique_id=459428949]
 shape = SubResource("ConcavePolygonShape3D_lt1s2")
 
-[node name="Static_Chunk_5_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=676562186 groups=["Wall"]]
+[node name="Static_Chunk_5_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1540427975 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_9" unique_id=1321633309]
+[node name="Chunk_5_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_9" unique_id=695614666]
 shape = SubResource("ConcavePolygonShape3D_swdmx")
 
-[node name="Static_Chunk_6_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1909831674 groups=["Wall"]]
+[node name="Static_Chunk_6_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1288532471 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_9" unique_id=723331390]
+[node name="Chunk_6_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_9" unique_id=150160624]
 shape = SubResource("ConcavePolygonShape3D_ugvck")
 
-[node name="Static_Chunk_7_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1783030129 groups=["Wall"]]
+[node name="Static_Chunk_7_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1708947856 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_9" unique_id=1176186303]
+[node name="Chunk_7_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_9" unique_id=1871233484]
 shape = SubResource("ConcavePolygonShape3D_66uv6")
 
-[node name="Static_Chunk_8_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=154520998 groups=["Wall"]]
+[node name="Static_Chunk_8_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=652909274 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_9" unique_id=683583968]
+[node name="Chunk_8_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_9" unique_id=1044952136]
 shape = SubResource("ConcavePolygonShape3D_31s42")
 
-[node name="Static_Chunk_9_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1746617463 groups=["Wall"]]
+[node name="Static_Chunk_9_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1843491181 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_9" unique_id=1681689428]
+[node name="Chunk_9_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_9" unique_id=1683905130]
 shape = SubResource("ConcavePolygonShape3D_tw8tq")
 
-[node name="Static_Chunk_10_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1584662570 groups=["Wall"]]
+[node name="Static_Chunk_10_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1764753181 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_9" unique_id=135413624]
+[node name="Chunk_10_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_9" unique_id=1075298413]
 shape = SubResource("ConcavePolygonShape3D_2mvly")
 
-[node name="Static_Chunk_11_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=157732127 groups=["Wall"]]
+[node name="Static_Chunk_11_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=94979467 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_9" unique_id=870847745]
+[node name="Chunk_11_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_9" unique_id=425774248]
 shape = SubResource("ConcavePolygonShape3D_cdr74")
 
-[node name="Static_Chunk_12_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=268244234 groups=["Wall"]]
+[node name="Static_Chunk_12_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2047641846 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_9" unique_id=1065734425]
+[node name="Chunk_12_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_9" unique_id=114180858]
 shape = SubResource("ConcavePolygonShape3D_4txar")
 
-[node name="Static_Chunk_13_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1223397241 groups=["Wall"]]
+[node name="Static_Chunk_13_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1501549927 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_9" unique_id=1685934813]
+[node name="Chunk_13_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_9" unique_id=55213183]
 shape = SubResource("ConcavePolygonShape3D_3cni0")
 
-[node name="Static_Chunk_14_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=596762100 groups=["Wall"]]
+[node name="Static_Chunk_14_9" type="StaticBody3D" parent="Terrain_Collisions" unique_id=396640467 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -40)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_9" unique_id=753953460]
+[node name="Chunk_14_9_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_9" unique_id=837616064]
 shape = SubResource("ConcavePolygonShape3D_850si")
 
-[node name="Static_Chunk_0_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1030030036 groups=["Wall"]]
+[node name="Static_Chunk_0_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2027218876 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_10" unique_id=1426194200]
+[node name="Chunk_0_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_10" unique_id=1159321843]
 shape = SubResource("ConcavePolygonShape3D_t6tod")
 
-[node name="Static_Chunk_1_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=613188571 groups=["Wall"]]
+[node name="Static_Chunk_1_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2104886370 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_10" unique_id=593841360]
+[node name="Chunk_1_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_10" unique_id=1806275258]
 shape = SubResource("ConcavePolygonShape3D_pk1kr")
 
-[node name="Static_Chunk_2_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=475519758 groups=["Wall"]]
+[node name="Static_Chunk_2_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=477631592 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_10" unique_id=876287957]
+[node name="Chunk_2_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_10" unique_id=634636806]
 shape = SubResource("ConcavePolygonShape3D_m1qtq")
 
-[node name="Static_Chunk_3_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=653034154 groups=["Wall"]]
+[node name="Static_Chunk_3_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=646233244 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_10" unique_id=857062570]
+[node name="Chunk_3_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_10" unique_id=1582197415]
 shape = SubResource("ConcavePolygonShape3D_1xn2n")
 
-[node name="Static_Chunk_4_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1942325681 groups=["Wall"]]
+[node name="Static_Chunk_4_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1095577844 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_10" unique_id=1220529525]
+[node name="Chunk_4_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_10" unique_id=1942197595]
 shape = SubResource("ConcavePolygonShape3D_en7t1")
 
-[node name="Static_Chunk_5_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=429788910 groups=["Wall"]]
+[node name="Static_Chunk_5_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=606231907 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_10" unique_id=1860290281]
+[node name="Chunk_5_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_10" unique_id=1833568838]
 shape = SubResource("ConcavePolygonShape3D_ou6de")
 
-[node name="Static_Chunk_6_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=939112961 groups=["Wall"]]
+[node name="Static_Chunk_6_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1040198440 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_10" unique_id=749564131]
+[node name="Chunk_6_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_10" unique_id=1852624303]
 shape = SubResource("ConcavePolygonShape3D_lqpft")
 
-[node name="Static_Chunk_7_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1355711376 groups=["Wall"]]
+[node name="Static_Chunk_7_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1028945262 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_10" unique_id=106026820]
+[node name="Chunk_7_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_10" unique_id=1175369124]
 shape = SubResource("ConcavePolygonShape3D_xk6a3")
 
-[node name="Static_Chunk_8_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=605868806 groups=["Wall"]]
+[node name="Static_Chunk_8_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1069022754 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_10" unique_id=1779660837]
+[node name="Chunk_8_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_10" unique_id=1060910817]
 shape = SubResource("ConcavePolygonShape3D_p5lth")
 
-[node name="Static_Chunk_9_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=895262080 groups=["Wall"]]
+[node name="Static_Chunk_9_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1599497586 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_10" unique_id=1841043473]
+[node name="Chunk_9_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_10" unique_id=1768614057]
 shape = SubResource("ConcavePolygonShape3D_ij3hn")
 
-[node name="Static_Chunk_10_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=763407289 groups=["Wall"]]
+[node name="Static_Chunk_10_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=669665426 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_10" unique_id=205738095]
+[node name="Chunk_10_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_10" unique_id=338322731]
 shape = SubResource("ConcavePolygonShape3D_g7udc")
 
-[node name="Static_Chunk_11_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1398998423 groups=["Wall"]]
+[node name="Static_Chunk_11_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=314792399 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_10" unique_id=188345750]
+[node name="Chunk_11_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_10" unique_id=329640896]
 shape = SubResource("ConcavePolygonShape3D_dkkvy")
 
-[node name="Static_Chunk_12_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=251273295 groups=["Wall"]]
+[node name="Static_Chunk_12_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1523521763 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_10" unique_id=1208571284]
+[node name="Chunk_12_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_10" unique_id=560440917]
 shape = SubResource("ConcavePolygonShape3D_noptr")
 
-[node name="Static_Chunk_13_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=237469714 groups=["Wall"]]
+[node name="Static_Chunk_13_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2096361014 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_10" unique_id=1042700953]
+[node name="Chunk_13_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_10" unique_id=319415256]
 shape = SubResource("ConcavePolygonShape3D_dmt4a")
 
-[node name="Static_Chunk_14_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1837211600 groups=["Wall"]]
+[node name="Static_Chunk_14_10" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1684425703 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -60)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_10" unique_id=435047058]
+[node name="Chunk_14_10_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_10" unique_id=1016188529]
 shape = SubResource("ConcavePolygonShape3D_q6g6c")
 
-[node name="Static_Chunk_0_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1110317697 groups=["Wall"]]
+[node name="Static_Chunk_0_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1844671589 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_11" unique_id=410314031]
+[node name="Chunk_0_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_11" unique_id=1205392651]
 shape = SubResource("ConcavePolygonShape3D_qo66s")
 
-[node name="Static_Chunk_1_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1000518969 groups=["Wall"]]
+[node name="Static_Chunk_1_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1037782135 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_11" unique_id=1550452516]
+[node name="Chunk_1_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_11" unique_id=1981513723]
 shape = SubResource("ConcavePolygonShape3D_1qn4m")
 
-[node name="Static_Chunk_2_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1828173107 groups=["Wall"]]
+[node name="Static_Chunk_2_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1802629997 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_11" unique_id=658077336]
+[node name="Chunk_2_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_11" unique_id=1548620877]
 shape = SubResource("ConcavePolygonShape3D_p6yk3")
 
-[node name="Static_Chunk_3_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=932711031 groups=["Wall"]]
+[node name="Static_Chunk_3_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1730387438 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_11" unique_id=884300493]
+[node name="Chunk_3_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_11" unique_id=1975024461]
 shape = SubResource("ConcavePolygonShape3D_75eso")
 
-[node name="Static_Chunk_4_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=427774589 groups=["Wall"]]
+[node name="Static_Chunk_4_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2118141403 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_11" unique_id=1922041530]
+[node name="Chunk_4_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_11" unique_id=554926728]
 shape = SubResource("ConcavePolygonShape3D_agfel")
 
-[node name="Static_Chunk_5_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1483469002 groups=["Wall"]]
+[node name="Static_Chunk_5_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1716442648 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_11" unique_id=270606346]
+[node name="Chunk_5_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_11" unique_id=1431849727]
 shape = SubResource("ConcavePolygonShape3D_3q8u7")
 
-[node name="Static_Chunk_6_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=152866895 groups=["Wall"]]
+[node name="Static_Chunk_6_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=271700759 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_11" unique_id=1328200914]
+[node name="Chunk_6_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_11" unique_id=430813541]
 shape = SubResource("ConcavePolygonShape3D_74c7m")
 
-[node name="Static_Chunk_7_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=243545969 groups=["Wall"]]
+[node name="Static_Chunk_7_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=824613314 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_11" unique_id=102963807]
+[node name="Chunk_7_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_11" unique_id=319021143]
 shape = SubResource("ConcavePolygonShape3D_s186q")
 
-[node name="Static_Chunk_8_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=866285134 groups=["Wall"]]
+[node name="Static_Chunk_8_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2146951243 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_11" unique_id=1695907570]
+[node name="Chunk_8_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_11" unique_id=1966920025]
 shape = SubResource("ConcavePolygonShape3D_e60ox")
 
-[node name="Static_Chunk_9_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2045116130 groups=["Wall"]]
+[node name="Static_Chunk_9_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=459969234 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_11" unique_id=407280019]
+[node name="Chunk_9_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_11" unique_id=305767639]
 shape = SubResource("ConcavePolygonShape3D_nhr4n")
 
-[node name="Static_Chunk_10_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1013299709 groups=["Wall"]]
+[node name="Static_Chunk_10_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2069232002 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_11" unique_id=1603523493]
+[node name="Chunk_10_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_11" unique_id=812792008]
 shape = SubResource("ConcavePolygonShape3D_s663w")
 
-[node name="Static_Chunk_11_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=974084267 groups=["Wall"]]
+[node name="Static_Chunk_11_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1373126943 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_11" unique_id=1621972237]
+[node name="Chunk_11_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_11" unique_id=447094307]
 shape = SubResource("ConcavePolygonShape3D_je4x8")
 
-[node name="Static_Chunk_12_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1923250980 groups=["Wall"]]
+[node name="Static_Chunk_12_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1016229182 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_11" unique_id=1843914763]
+[node name="Chunk_12_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_11" unique_id=138999439]
 shape = SubResource("ConcavePolygonShape3D_vhqtw")
 
-[node name="Static_Chunk_13_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2067571194 groups=["Wall"]]
+[node name="Static_Chunk_13_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1782603874 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_11" unique_id=1132337809]
+[node name="Chunk_13_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_11" unique_id=296705881]
 shape = SubResource("ConcavePolygonShape3D_0kmi4")
 
-[node name="Static_Chunk_14_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1651217575 groups=["Wall"]]
+[node name="Static_Chunk_14_11" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2051643956 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -80)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_11" unique_id=781838035]
+[node name="Chunk_14_11_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_11" unique_id=1624524966]
 shape = SubResource("ConcavePolygonShape3D_mrquw")
 
-[node name="Static_Chunk_0_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1127053136 groups=["Wall"]]
+[node name="Static_Chunk_0_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=383952353 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_12" unique_id=1033194370]
+[node name="Chunk_0_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_12" unique_id=858124214]
 shape = SubResource("ConcavePolygonShape3D_pefcq")
 
-[node name="Static_Chunk_1_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1628344024 groups=["Wall"]]
+[node name="Static_Chunk_1_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=823250804 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_12" unique_id=1884559269]
+[node name="Chunk_1_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_12" unique_id=20323481]
 shape = SubResource("ConcavePolygonShape3D_x6tlt")
 
-[node name="Static_Chunk_2_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1227497477 groups=["Wall"]]
+[node name="Static_Chunk_2_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1820930917 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_12" unique_id=91583195]
+[node name="Chunk_2_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_12" unique_id=16572450]
 shape = SubResource("ConcavePolygonShape3D_8jv26")
 
-[node name="Static_Chunk_3_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=132185562 groups=["Wall"]]
+[node name="Static_Chunk_3_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1805716433 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_12" unique_id=585701635]
+[node name="Chunk_3_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_12" unique_id=1233371139]
 shape = SubResource("ConcavePolygonShape3D_chsbi")
 
-[node name="Static_Chunk_4_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=548343637 groups=["Wall"]]
+[node name="Static_Chunk_4_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=524930240 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_12" unique_id=539450678]
+[node name="Chunk_4_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_12" unique_id=36945611]
 shape = SubResource("ConcavePolygonShape3D_w4kyd")
 
-[node name="Static_Chunk_5_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1305963415 groups=["Wall"]]
+[node name="Static_Chunk_5_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=931404235 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_12" unique_id=624313794]
+[node name="Chunk_5_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_12" unique_id=340851934]
 shape = SubResource("ConcavePolygonShape3D_ebi46")
 
-[node name="Static_Chunk_6_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1026046745 groups=["Wall"]]
+[node name="Static_Chunk_6_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=69966276 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_12" unique_id=1473347860]
+[node name="Chunk_6_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_12" unique_id=1641079681]
 shape = SubResource("ConcavePolygonShape3D_w5p4w")
 
-[node name="Static_Chunk_7_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1597008537 groups=["Wall"]]
+[node name="Static_Chunk_7_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=246822665 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_12" unique_id=179499154]
+[node name="Chunk_7_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_12" unique_id=1737226281]
 shape = SubResource("ConcavePolygonShape3D_wq80d")
 
-[node name="Static_Chunk_8_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1844898123 groups=["Wall"]]
+[node name="Static_Chunk_8_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1937525454 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_12" unique_id=1305429053]
+[node name="Chunk_8_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_12" unique_id=1095555972]
 shape = SubResource("ConcavePolygonShape3D_0qgyk")
 
-[node name="Static_Chunk_9_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=496604836 groups=["Wall"]]
+[node name="Static_Chunk_9_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1599129484 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_12" unique_id=1146457563]
+[node name="Chunk_9_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_12" unique_id=1959562598]
 shape = SubResource("ConcavePolygonShape3D_l0oq3")
 
-[node name="Static_Chunk_10_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=345626138 groups=["Wall"]]
+[node name="Static_Chunk_10_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=191971788 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_12" unique_id=698060666]
+[node name="Chunk_10_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_12" unique_id=520484131]
 shape = SubResource("ConcavePolygonShape3D_tpjeg")
 
-[node name="Static_Chunk_11_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=202916196 groups=["Wall"]]
+[node name="Static_Chunk_11_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1167715952 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_12" unique_id=95073316]
+[node name="Chunk_11_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_12" unique_id=1618457237]
 shape = SubResource("ConcavePolygonShape3D_6wiwn")
 
-[node name="Static_Chunk_12_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=293960551 groups=["Wall"]]
+[node name="Static_Chunk_12_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=747938490 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_12" unique_id=1325052633]
+[node name="Chunk_12_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_12" unique_id=1763451788]
 shape = SubResource("ConcavePolygonShape3D_ptk65")
 
-[node name="Static_Chunk_13_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=929752990 groups=["Wall"]]
+[node name="Static_Chunk_13_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1841715367 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_12" unique_id=532793607]
+[node name="Chunk_13_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_12" unique_id=1035671295]
 shape = SubResource("ConcavePolygonShape3D_f65gk")
 
-[node name="Static_Chunk_14_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1804591569 groups=["Wall"]]
+[node name="Static_Chunk_14_12" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1690060644 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -100)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_12" unique_id=1345234641]
+[node name="Chunk_14_12_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_12" unique_id=55802085]
 shape = SubResource("ConcavePolygonShape3D_xuchs")
 
-[node name="Static_Chunk_0_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1899221930 groups=["Wall"]]
+[node name="Static_Chunk_0_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1494471529 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_13" unique_id=1458257893]
+[node name="Chunk_0_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_13" unique_id=1727178364]
 shape = SubResource("ConcavePolygonShape3D_kr8lq")
 
-[node name="Static_Chunk_1_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=316710159 groups=["Wall"]]
+[node name="Static_Chunk_1_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1817918062 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_13" unique_id=2105907069]
+[node name="Chunk_1_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_13" unique_id=1177039184]
 shape = SubResource("ConcavePolygonShape3D_mf3w1")
 
-[node name="Static_Chunk_2_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=632777444 groups=["Wall"]]
+[node name="Static_Chunk_2_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=21615002 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_13" unique_id=1466504210]
+[node name="Chunk_2_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_13" unique_id=818453893]
 shape = SubResource("ConcavePolygonShape3D_0ypyg")
 
-[node name="Static_Chunk_3_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1467877066 groups=["Wall"]]
+[node name="Static_Chunk_3_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2068948008 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_13" unique_id=585030048]
+[node name="Chunk_3_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_13" unique_id=1586349839]
 shape = SubResource("ConcavePolygonShape3D_78h1c")
 
-[node name="Static_Chunk_4_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=196894828 groups=["Wall"]]
+[node name="Static_Chunk_4_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=14146504 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_13" unique_id=1330457179]
+[node name="Chunk_4_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_13" unique_id=913841204]
 shape = SubResource("ConcavePolygonShape3D_8oivr")
 
-[node name="Static_Chunk_5_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1208725317 groups=["Wall"]]
+[node name="Static_Chunk_5_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1890044176 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_13" unique_id=1283422549]
+[node name="Chunk_5_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_13" unique_id=19126023]
 shape = SubResource("ConcavePolygonShape3D_76dko")
 
-[node name="Static_Chunk_6_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1523401438 groups=["Wall"]]
+[node name="Static_Chunk_6_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=661953307 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_13" unique_id=1508409216]
+[node name="Chunk_6_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_13" unique_id=619409950]
 shape = SubResource("ConcavePolygonShape3D_wjg38")
 
-[node name="Static_Chunk_7_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=792363497 groups=["Wall"]]
+[node name="Static_Chunk_7_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1609975137 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_13" unique_id=349060844]
+[node name="Chunk_7_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_13" unique_id=629405753]
 shape = SubResource("ConcavePolygonShape3D_angop")
 
-[node name="Static_Chunk_8_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1249295823 groups=["Wall"]]
+[node name="Static_Chunk_8_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1717591358 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_13" unique_id=881453709]
+[node name="Chunk_8_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_13" unique_id=1096178239]
 shape = SubResource("ConcavePolygonShape3D_34enf")
 
-[node name="Static_Chunk_9_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1641773557 groups=["Wall"]]
+[node name="Static_Chunk_9_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=973218087 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_13" unique_id=2092512218]
+[node name="Chunk_9_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_13" unique_id=1123201350]
 shape = SubResource("ConcavePolygonShape3D_h5j1y")
 
-[node name="Static_Chunk_10_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1015877110 groups=["Wall"]]
+[node name="Static_Chunk_10_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=710621167 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_13" unique_id=1557968415]
+[node name="Chunk_10_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_13" unique_id=1066401142]
 shape = SubResource("ConcavePolygonShape3D_n4joo")
 
-[node name="Static_Chunk_11_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=751424625 groups=["Wall"]]
+[node name="Static_Chunk_11_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1419392506 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_13" unique_id=1768972684]
+[node name="Chunk_11_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_13" unique_id=1123474368]
 shape = SubResource("ConcavePolygonShape3D_fc77v")
 
-[node name="Static_Chunk_12_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1549628704 groups=["Wall"]]
+[node name="Static_Chunk_12_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=732797136 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_13" unique_id=431536920]
+[node name="Chunk_12_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_13" unique_id=646330714]
 shape = SubResource("ConcavePolygonShape3D_ql3qp")
 
-[node name="Static_Chunk_13_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=275382714 groups=["Wall"]]
+[node name="Static_Chunk_13_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=373616339 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_13" unique_id=661324950]
+[node name="Chunk_13_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_13" unique_id=601419831]
 shape = SubResource("ConcavePolygonShape3D_53hcj")
 
-[node name="Static_Chunk_14_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=874450092 groups=["Wall"]]
+[node name="Static_Chunk_14_13" type="StaticBody3D" parent="Terrain_Collisions" unique_id=887927390 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -120)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_13" unique_id=263860235]
+[node name="Chunk_14_13_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_13" unique_id=448957087]
 shape = SubResource("ConcavePolygonShape3D_77i85")
 
-[node name="Static_Chunk_0_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1937039498 groups=["Wall"]]
+[node name="Static_Chunk_0_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1990638092 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -140, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_0_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_14" unique_id=492901999]
+[node name="Chunk_0_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_0_14" unique_id=2003053074]
 shape = SubResource("ConcavePolygonShape3D_22qpe")
 
-[node name="Static_Chunk_1_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1833947948 groups=["Wall"]]
+[node name="Static_Chunk_1_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=350485975 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_1_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_14" unique_id=903615007]
+[node name="Chunk_1_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_1_14" unique_id=1098284863]
 shape = SubResource("ConcavePolygonShape3D_666h5")
 
-[node name="Static_Chunk_2_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1453360022 groups=["Wall"]]
+[node name="Static_Chunk_2_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=779176992 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_2_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_14" unique_id=636230759]
+[node name="Chunk_2_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_2_14" unique_id=1033270435]
 shape = SubResource("ConcavePolygonShape3D_c2knu")
 
-[node name="Static_Chunk_3_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=794936601 groups=["Wall"]]
+[node name="Static_Chunk_3_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1906810435 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_3_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_14" unique_id=1133767866]
+[node name="Chunk_3_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_3_14" unique_id=1677083073]
 shape = SubResource("ConcavePolygonShape3D_eusgh")
 
-[node name="Static_Chunk_4_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=704509935 groups=["Wall"]]
+[node name="Static_Chunk_4_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=201722553 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_4_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_14" unique_id=170941129]
+[node name="Chunk_4_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_4_14" unique_id=1849471157]
 shape = SubResource("ConcavePolygonShape3D_o4834")
 
-[node name="Static_Chunk_5_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=892188238 groups=["Wall"]]
+[node name="Static_Chunk_5_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=71684419 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_5_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_14" unique_id=461472761]
+[node name="Chunk_5_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_5_14" unique_id=1336087435]
 shape = SubResource("ConcavePolygonShape3D_847j1")
 
-[node name="Static_Chunk_6_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1505374114 groups=["Wall"]]
+[node name="Static_Chunk_6_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1487788858 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_6_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_14" unique_id=644608048]
+[node name="Chunk_6_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_6_14" unique_id=1981625637]
 shape = SubResource("ConcavePolygonShape3D_o7ray")
 
-[node name="Static_Chunk_7_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1385831294 groups=["Wall"]]
+[node name="Static_Chunk_7_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1362960775 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_7_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_14" unique_id=1716386205]
+[node name="Chunk_7_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_7_14" unique_id=1794844344]
 shape = SubResource("ConcavePolygonShape3D_18k7g")
 
-[node name="Static_Chunk_8_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=872621804 groups=["Wall"]]
+[node name="Static_Chunk_8_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1135266756 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_8_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_14" unique_id=1098196230]
+[node name="Chunk_8_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_8_14" unique_id=468178894]
 shape = SubResource("ConcavePolygonShape3D_m7vf7")
 
-[node name="Static_Chunk_9_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1748511042 groups=["Wall"]]
+[node name="Static_Chunk_9_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=246541403 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_9_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_14" unique_id=914511470]
+[node name="Chunk_9_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_9_14" unique_id=746942616]
 shape = SubResource("ConcavePolygonShape3D_v5guj")
 
-[node name="Static_Chunk_10_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1808544783 groups=["Wall"]]
+[node name="Static_Chunk_10_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=393440808 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_10_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_14" unique_id=353047904]
+[node name="Chunk_10_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_10_14" unique_id=1757269217]
 shape = SubResource("ConcavePolygonShape3D_3126y")
 
-[node name="Static_Chunk_11_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=798105537 groups=["Wall"]]
+[node name="Static_Chunk_11_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1718306826 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 80, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_11_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_14" unique_id=1450786658]
+[node name="Chunk_11_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_11_14" unique_id=552354697]
 shape = SubResource("ConcavePolygonShape3D_l52hh")
 
-[node name="Static_Chunk_12_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1006166167 groups=["Wall"]]
+[node name="Static_Chunk_12_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=2034416087 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_12_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_14" unique_id=764279190]
+[node name="Chunk_12_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_12_14" unique_id=358526743]
 shape = SubResource("ConcavePolygonShape3D_p1550")
 
-[node name="Static_Chunk_13_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=375530629 groups=["Wall"]]
+[node name="Static_Chunk_13_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=1919177779 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_13_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_14" unique_id=301740881]
+[node name="Chunk_13_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_13_14" unique_id=880814626]
 shape = SubResource("ConcavePolygonShape3D_fd27c")
 
-[node name="Static_Chunk_14_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=595029684 groups=["Wall"]]
+[node name="Static_Chunk_14_14" type="StaticBody3D" parent="Terrain_Collisions" unique_id=800880542 groups=["Wall"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 140, 0, -140)
 collision_layer = 2
 collision_mask = 0
 
-[node name="Chunk_14_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_14" unique_id=552819573]
+[node name="Chunk_14_14_Col" type="CollisionShape3D" parent="Terrain_Collisions/Static_Chunk_14_14" unique_id=164812666]
 shape = SubResource("ConcavePolygonShape3D_u07lg")

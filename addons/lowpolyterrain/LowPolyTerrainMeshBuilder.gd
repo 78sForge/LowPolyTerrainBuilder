@@ -299,9 +299,17 @@ static func build_face_soup(mesh: ArrayMesh) -> PackedVector3Array:
 
 	var arrays: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 
-	# An unindexed surface already is a triangle soup.
+	# An unindexed surface already IS a triangle soup, and it reports ARRAY_INDEX as null
+	# rather than as an empty array. The null has to be caught before the typed assignment, not
+	# after it: assigning it raises a runtime error that aborts this function and returns an
+	# empty soup, which is what left the brush with no geometry to hit over deactivated chunks.
+	# Their preview quad is built without an index buffer.
+	var raw_indices: Variant = arrays[Mesh.ARRAY_INDEX]
+	if raw_indices == null:
+		return verts
+
+	var indices: PackedInt32Array = raw_indices
 	if indices.is_empty():
 		return verts
 

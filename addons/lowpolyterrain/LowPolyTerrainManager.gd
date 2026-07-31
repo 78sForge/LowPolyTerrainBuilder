@@ -355,7 +355,7 @@ var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 enum RuntimeCollision {
 	LAZY = 0,     ## A collider is created the first time a target comes near the chunk.
 	PREBUILT = 1, ## Every active chunk has a collider from the start; the radius only
-	              ## switches them on and off (default).
+				  ## switches them on and off (default).
 	NONE = 2,     ## No runtime collision at all.
 }
 
@@ -1983,8 +1983,12 @@ func _seed_culling_state_from_current_colliders() -> void:
 ## True when the chunk currently has collision the culling would have to switch off.
 func _chunk_collision_is_enabled(coord: Vector2i) -> bool:
 	if terrain_backend == TerrainBackend.SERVERS:
-		# Under LAZY nothing exists yet, so there is nothing to switch off either.
-		return _server_backend != null and _server_backend.has_body(coord)
+		# has_active_body(), not has_body(): a parked collider still exists but takes part in
+		# no collision test, so counting it as enabled would let the culling believe a chunk
+		# was already switched on and skip actually enabling it. The MESH_NODES branch below
+		# has always asked the same question - whether the collider is ON, not whether it is
+		# there - and the two must not diverge. Under LAZY nothing exists yet either way.
+		return _server_backend != null and _server_backend.has_active_body(coord)
 
 	var shape: CollisionShape3D = _find_baked_collision_shape(coord)
 	return shape != null and not shape.disabled

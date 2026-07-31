@@ -963,6 +963,49 @@ func test_collision_policy_all_builds_every_chunk() -> void:
 	assert_eq(_count_bodies(), 4, "ALL must give every active chunk a collider.")
 
 
+## Switching a policy has to act in BOTH directions.
+##
+## Regression: set_collision_policy() only handled the way INTO NONE. Colliders are otherwise
+## created solely while a chunk is being redrawn, so switching back left the terrain with no
+## collision at all - silently, until something happened to regenerate a mesh. The whole suite
+## passed while this was broken, because every test set its policy before enabling the backend.
+func test_switching_back_to_prebuilt_rebuilds_released_colliders() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
+	_use_servers()
+	assert_eq(_count_bodies(), 4, "Precondition: PREBUILT starts with every chunk collidable.")
+
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.NONE
+	assert_eq(_count_built(), 0, "Precondition: NONE releases every collider.")
+
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
+	assert_eq(_count_bodies(), 4,
+		"Returning to PREBUILT must rebuild a collider for every active chunk.")
+
+
+## The same switch coming from LAZY, where the colliders still exist but are parked.
+##
+## Regression: parked chunks stayed switched off after the change, so a terrain could look
+## fully collidable by body count while the player fell straight through the parked parts.
+func test_switching_from_lazy_to_prebuilt_unparks_every_collider() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	_use_servers()
+
+	# Reach chunk (0,0), then move far away so it parks rather than staying active.
+	manager.update_collision_culling(Vector3.ZERO, 3.0)
+	assert_eq(_count_bodies(), 1, "Precondition: LAZY built the chunk inside the radius.")
+
+	manager.update_collision_culling(Vector3(1000.0, 0.0, 1000.0), 3.0)
+	assert_eq(_count_bodies(), 0, "Precondition: leaving the radius parks the collider.")
+	assert_eq(manager._server_backend.get_debug_parked_count(), 1,
+		"Precondition: the collider is parked, not released.")
+
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
+	assert_eq(_count_bodies(), 4,
+		"PREBUILT must leave every active chunk collidable, parked ones included.")
+	assert_eq(manager._server_backend.get_debug_parked_count(), 0,
+		"Nothing may stay on the parked list once PREBUILT is active.")
+
+
 func test_collision_policy_none_builds_nothing() -> void:
 	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.NONE
 	_use_servers()
@@ -1102,6 +1145,8 @@ func test_switching_policy_to_none_releases_existing_colliders() -> void:
 
 	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.NONE
 	assert_eq(_count_bodies(), 0, "Switching to NONE must release every collider.")
+
+
 
 
 # --- COLLISION DEBUG OVERLAY ---

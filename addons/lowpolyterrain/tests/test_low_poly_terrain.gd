@@ -688,6 +688,35 @@ func test_face_soup_handles_degenerate_input() -> void:
 		"A surfaceless mesh must yield an empty soup.")
 
 
+## An UNINDEXED surface already is a triangle soup and must come back unchanged.
+##
+## Regression: Godot reports ARRAY_INDEX as null for such a surface, not as an empty array.
+## Assigning that to a typed PackedInt32Array raises a runtime error which aborts the function
+## and returns an EMPTY soup. The editor brush then had no geometry to raycast against over
+## deactivated chunks - their preview quad is built without an index buffer - so the ring
+## silently stopped appearing while the console filled with type errors.
+func test_face_soup_accepts_an_unindexed_surface() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.add_vertex(Vector3(0.0, 0.0, 0.0))
+	st.add_vertex(Vector3(1.0, 0.0, 0.0))
+	st.add_vertex(Vector3(0.0, 0.0, 1.0))
+	var unindexed: ArrayMesh = st.commit()
+
+	assert_null(unindexed.surface_get_arrays(0)[Mesh.ARRAY_INDEX],
+		"Precondition: this surface really carries no index buffer.")
+
+	var soup: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(unindexed)
+	assert_eq(soup.size(), 3, "An unindexed triangle must survive as three vertices.")
+
+
+## The concrete mesh that triggered it in the editor, so the guard cannot drift from the case.
+func test_face_soup_accepts_the_deactivated_preview_quad() -> void:
+	var quad: ArrayMesh = LowPolyTerrainMeshBuilder.build_deactivated_preview_mesh(10, 1.0)
+	assert_eq(LowPolyTerrainMeshBuilder.build_face_soup(quad).size(), 6,
+		"The preview quad must yield two pickable triangles, or the brush cannot see it.")
+
+
 func test_baked_collider_uses_the_uncached_soup() -> void:
 	# Guards the actual call site: if baking went back to get_faces(), the shape would carry
 	# the compressed values instead and this comparison would drift apart.
@@ -766,3 +795,49 @@ func test_chunk_grid_material_reads_through_terrain() -> void:
 		"An overlay must not be lit.")
 	assert_true(mat.no_depth_test,
 		"The grid must read through hills instead of vanishing inside them.")
+
+
+## The deactivated-chunk marker has to face the camera it is looked at from, which is above.
+##
+## Regression: the quad was wound the other way round and carried no normals at all, so with a
+## lit material it was visible only from underneath. Nothing caught it, because every existing
+## check looked at vertex positions - which were correct the whole time.
+func test_deactivated_preview_quad_faces_upwards() -> void:
+	var mesh: ArrayMesh = LowPolyTerrainMeshBuilder.build_deactivated_preview_mesh(10, 1.0)
+	assert_not_null(mesh, "The preview quad must exist.")
+
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+
+	var normals = arrays[Mesh.ARRAY_NORMAL]
+	assert_not_null(normals,
+		"Without normals a lit material has nothing to shade against.")
+	for n: Vector3 in normals:
+		assert_almost_eq(n.y, 1.0, 0.001, "Every normal must point straight up.")
+
+	# Flattened to a plain triangle list first: the quad is unindexed today, so ARRAY_INDEX is
+	# null rather than an empty array, but an indexed surface must pass the same check.
+	var tris := PackedVector3Array()
+	var raw_indices = arrays[Mesh.ARRAY_INDEX]
+	if raw_indices == null:
+		tris = verts
+	else:
+		for index: int in (raw_indices as PackedInt32Array):
+			tris.append(verts[index])
+
+	assert_true(tris.size() >= 6, "A quad needs at least two triangles.")
+
+	# Godot treats CLOCKWISE triangles as front-facing, which makes the right-hand-rule cross
+	# product of an upward-facing triangle point DOWN. A positive y here is the actual bug.
+	for i in range(0, tris.size(), 3):
+		assert_lt((tris[i + 1] - tris[i]).cross(tris[i + 2] - tris[i]).y, 0.0,
+			"Triangle %d is wound face-down; it would only be visible from below." % (i / 3))
+
+
+## The marker must read the same no matter where the scene's sun happens to be.
+func test_deactivated_preview_material_is_unlit() -> void:
+	var mat: StandardMaterial3D = LowPolyTerrainMeshBuilder.build_deactivated_preview_material()
+	assert_eq(mat.shading_mode, StandardMaterial3D.SHADING_MODE_UNSHADED,
+		"A lit marker changes colour with the scene lighting.")
+	assert_eq(mat.cull_mode, BaseMaterial3D.CULL_DISABLED,
+		"Looking at a deactivated chunk from below must still show it.")

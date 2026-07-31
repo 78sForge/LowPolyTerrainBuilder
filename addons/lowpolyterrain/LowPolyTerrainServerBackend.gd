@@ -354,11 +354,11 @@ func refresh_materials() -> void:
 # Bodies exist at runtime only. Editor-side baking is deliberately absent, because rebuilding a
 # ConcavePolygonShape3D on every _update_single_chunk() would fire once per brush stroke frame.
 #
-# Memory matters a great deal here. Measured on a 10x10 grid of size-16 chunks, the render
-# meshes cost ~6 MB while their concave colliders cost a further ~10 MB: only 1.76 MB of that
-# is raw face data, the rest is the physics server's own indexed mesh and BVH, roughly 84 KB
-# per chunk. Keeping a collider alive for a chunk nobody can reach is therefore the single
-# most expensive thing this backend can do, which is what the LAZY policy exists to avoid.
+# Collision dominates this backend's memory profile: a chunk's concave collider costs
+# considerably more than the mesh it was built from, because the physics server keeps its own
+# indexed mesh and BVH alongside the raw face data. Keeping colliders alive for chunks nobody
+# can reach is therefore the most expensive thing this backend can do, which is what the LAZY
+# policy exists to avoid.
 
 
 ## Policy values mirroring LowPolyTerrainManager.RuntimeCollision.
@@ -367,13 +367,33 @@ const COLLISION_PREBUILT: int = 1
 const COLLISION_NONE: int = 2
 
 
+## Applies a new collision policy to the colliders that already exist.
+##
+## Both directions have to act. Colliders are otherwise only ever created while a chunk is
+## being redrawn, so a switch back to PREBUILT used to do nothing at all: coming from NONE the
+## terrain stayed uncollidable, and coming from LAZY every previously parked chunk stayed
+## switched off - in both cases silently, until something happened to regenerate a mesh.
 func set_collision_policy(policy: int) -> void:
+	var previous: int = _collision_policy
 	_collision_policy = policy
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() or policy == previous:
 		return
+
 	if policy == COLLISION_NONE:
 		for coord: Vector2i in _records:
 			release_chunk_collision(coord)
+		return
+
+	if policy == COLLISION_PREBUILT:
+		_parked.clear()
+		for coord: Vector2i in _records:
+			var rec: ChunkRecord = _records[coord]
+			if rec.mesh == null:
+				continue
+			# Cleared before building, because _build_chunk_collision() restores exactly this
+			# flag onto the rebuilt shape.
+			rec.shape_parked = false
+			_build_chunk_collision(rec)
 
 
 ## Records that the manager is actively culling. Purely informational under the current policy
@@ -384,12 +404,13 @@ func notify_culling_active() -> void:
 
 ## True when a chunk may own a collider without anyone explicitly asking for it.
 ##
-## LAZY answers false unconditionally, and that is the entire point. Measurements show that
-## releasing a collider does NOT return the physics server's share of its memory: building all
-## 100 colliders of a 10x10 world and then releasing 88 of them leaves 15.7 MB resident, while
-## never building more than those 12 leaves 8.0 MB. Only the colliders that were never created
-## are actually free, so a chunk outside the radius must never get one in the first place.
-func _collision_allowed_by_default(coord: Vector2i) -> bool:
+## LAZY answers false unconditionally: a chunk gets its collider from ensure_chunk_collision()
+## when it first comes within reach, so memory tracks the region actually visited rather than
+## the whole world. Releasing one genuinely hands the memory back - that only became true once
+## the shapes stopped going through ArrayMesh.get_faces(), which cached its triangle soup
+## inside the mesh permanently and left a released collider holding almost all of its cost.
+## See LowPolyTerrainMeshBuilder.build_face_soup().
+func _collision_allowed_by_default() -> bool:
 	if _collision_policy == COLLISION_NONE or _collision_policy == COLLISION_LAZY:
 		return false
 	return true
@@ -426,7 +447,7 @@ func _update_chunk_collision(rec: ChunkRecord) -> void:
 		_free_body(rec)
 		return
 
-	if not _collision_allowed_by_default(rec.coord):
+	if not _collision_allowed_by_default():
 		# Under LAZY the collider is created by ensure_chunk_collision() instead. An existing
 		# one is still refreshed, so a chunk inside the radius follows the sculpted geometry.
 		if not rec.body_rid.is_valid():
@@ -713,10 +734,15 @@ func prune_out_of_bounds(world_chunks: Vector2i) -> void:
 		if coord.x < 0 or coord.x >= world_chunks.x or coord.y < 0 or coord.y >= world_chunks.y:
 			stale.append(coord)
 	for coord: Vector2i in stale:
-		var rec: ChunkRecord = _records[coord]
-		_record_list.erase(rec)
-		_destroy_record(rec)
+		_destroy_record(_records[coord])
 		_records.erase(coord)
+
+	# Rebuilt in one pass rather than erased per entry. Array.erase() is a linear scan, so
+	# removing m of n records one at a time costs O(n*m) where rebuilding costs O(n).
+	if not stale.is_empty():
+		_record_list.clear()
+		for coord: Vector2i in _records:
+			_record_list.append(_records[coord])
 
 	var stale_previews: Array[Vector2i] = []
 	for coord: Vector2i in _preview_instances:
