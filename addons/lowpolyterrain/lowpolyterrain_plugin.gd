@@ -55,6 +55,9 @@ func _enter_tree() -> void:
 		preload("res://addons/lowpolyterrain/icon.svg")
 	)
 	
+	# Enabled only while a terrain manager is selected; see _process().
+	set_process(false)
+
 	_initialize_editor_shortcuts()
 	_create_brush_ui_panel()
 	
@@ -156,6 +159,9 @@ func _edit(object: Object) -> void:
 		_create_3d_brush_gizmo()
 		_show_brush_ui_panel(true)
 		_sync_ui_buttons_with_manager()
+
+		# The pointer-left-the-viewport poll only has to run while a terrain is being edited.
+		set_process(true)
 		
 		# [FIX] Force-update the 3D ring mesh and 2D text label to instantly match the newly selected manager
 		_update_gizmo_scale()
@@ -264,6 +270,51 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 # New 2D label reference inside the plugin script
 var mouse_label: Label = null
 
+## Control hosting the 3D viewport. Cached because it is looked up once per frame while a
+## terrain manager is selected.
+var _viewport_container: Control = null
+
+
+## Resolves the Control the 3D viewport is drawn into, so the plugin can tell whether the
+## mouse is still over it.
+func _get_viewport_container() -> Control:
+	if is_instance_valid(_viewport_container):
+		return _viewport_container
+	var sub_viewport: SubViewport = EditorInterface.get_editor_viewport_3d(0)
+	if sub_viewport == null:
+		return null
+	_viewport_container = sub_viewport.get_parent() as Control
+	return _viewport_container
+
+
+## Hides the brush ring and its label the moment the pointer leaves the 3D viewport.
+##
+## Both are only ever refreshed from _forward_3d_gui_input(), which stops receiving events
+## as soon as the mouse moves into the Inspector or any other dock. Without this poll the ring
+## simply freezes in place and the label keeps floating over unrelated editor UI, offset from
+## the cursor. Polling rather than the Control's mouse_exited signal, because that also fires
+## when moving onto a child control such as the viewport toolbar, which would make the brush
+## flicker.
+func _process(_delta: float) -> void:
+	if active_manager == null:
+		return
+
+	var container: Control = _get_viewport_container()
+	if container == null:
+		return
+
+	if not container.get_global_rect().has_point(container.get_global_mouse_position()):
+		_hide_brush_visuals()
+
+
+## Hides both brush overlays. Never used to show them: the ring's visibility depends on whether
+## the picking ray actually hit terrain, which only _update_gizmo_position() can decide.
+func _hide_brush_visuals() -> void:
+	if mouse_label and mouse_label.visible:
+		mouse_label.visible = false
+	if brush_gizmo and brush_gizmo.visible:
+		brush_gizmo.visible = false
+
 func _create_3d_brush_gizmo() -> void:
 	if not active_manager or brush_gizmo: 
 		return
@@ -354,6 +405,9 @@ func _update_gizmo_scale() -> void:
 
 
 func _destroy_3d_brush_gizmo() -> void:
+	# Nothing left to watch over once the overlays are gone.
+	set_process(false)
+
 	if brush_gizmo:
 		if brush_gizmo.get_parent():
 			brush_gizmo.get_parent().remove_child(brush_gizmo)

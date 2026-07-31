@@ -128,8 +128,10 @@ saving comes from.
   invisible to the editor's click-selection.
 * **Bake Live Collisions** is hidden, since `PhysicsServer3D` already provides the physics and
   a baked container would duplicate it. Calling it from code is refused with a message.
-* Switching to `SERVERS` removes an existing `<Manager>_Collisions` container. The removal is
-  registered in the editor history, so a single `Ctrl+Z` brings it back.
+* Switching to `SERVERS` removes an existing `<Manager>_Collisions` container, since keeping it
+  would duplicate the physics. **`Ctrl+Z` does not bring it back** — switch back to
+  `MESH_NODES` and press **Bake Live Collisions** to regenerate it. Nothing is lost: the
+  container is derived from the terrain data, not authored content.
 * The manager's child count drops to one (`Terrain_Assets`). This is expected, not a defect.
 * Game code that checks `collider is StaticBody3D` stops matching, because hits resolve to the
   manager. Check the collision group instead (see below).
@@ -287,10 +289,14 @@ Every editing operation registers in the editor history and reverses with `Ctrl+
 | Activate / Deactivate Chunk brush | `Terrain Chunk Activation` | Sparse delta, only the chunks that flipped |
 | Generate Noise Terrain | `Generate Noise Terrain` | Full height matrix snapshot |
 | Smooth Entire Terrain | `Smooth Entire Terrain` | Full height matrix snapshot |
-| Switching to `SERVERS` | `Switch Terrain Backend (Remove Baked Collisions)` | The removed collider container |
 
 One brush stroke is one history entry, no matter how many paint events it consists of, and the
 delta always holds the state from *before* the stroke began.
+
+**Not covered:** switching the terrain backend. That happens inside a property setter, where
+the inspector already has its own history action open, and a nested action does not work there.
+Removing the baked collider container therefore cannot be undone — press **Bake Live
+Collisions** to regenerate it instead.
 
 ---
 

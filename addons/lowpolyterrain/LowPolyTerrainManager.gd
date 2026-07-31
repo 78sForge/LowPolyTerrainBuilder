@@ -1840,22 +1840,21 @@ func _has_chunk(coord: Vector2i) -> bool:
 
 ##@@
 
-## Safely resolves the editor's history manager without leaking an Editor* static type into
-## a script that also runs inside exported release builds.
-func _fetch_undo_redo() -> Object:
-	if not Engine.is_editor_hint():
-		return null
-	if _active_undo_redo_manager != null:
-		return _active_undo_redo_manager
-	var ei: Object = Engine.get_singleton("EditorInterface")
-	if ei and ei.has_method("get_undo_redo"):
-		_active_undo_redo_manager = ei.call("get_undo_redo")
-	return _active_undo_redo_manager
-
-
 ## Removes the baked collider container, because the server bodies replace it entirely and
-## keeping both alive would produce duplicated physics geometry. Registered as an undoable
-## action so an accidental backend switch can be reverted with a single Ctrl+Z.
+## keeping both alive would produce duplicated physics geometry.
+##
+## Deliberately NOT registered as an undoable action. This runs from the terrain_backend
+## setter, and the inspector already has its own UndoRedo action open at that point to record
+## the property change; a nested action does not work there. Even if it did, undoing it alone
+## would restore the container while the backend stayed on SERVERS - which is exactly the
+## duplicated physics this removal exists to prevent.
+##
+## Disabling the shapes instead of removing them is not an option either: measured on 100
+## chunks, `disabled = true` gives back 0.01 MB of the 12.26 MB the colliders occupy, and the
+## nodes stay in the scene and therefore in every build.
+##
+## None of this loses work. The container is derived data, rebuilt identically from
+## global_height_data by the "Bake Live Collisions" button.
 func _delete_baked_collision_container() -> void:
 	var parent: Node = get_parent()
 	if parent == null:
@@ -1865,23 +1864,12 @@ func _delete_baked_collision_container() -> void:
 	if container == null:
 		return
 
-	var undo_redo: Object = _fetch_undo_redo()
-	if undo_redo == null:
-		parent.remove_child(container)
-		container.queue_free()
-		return
+	parent.remove_child(container)
+	container.queue_free()
 
-	# Captured before removal, because get_index() is meaningless once detached.
-	var restore_index: int = container.get_index()
-
-	undo_redo.create_action("Switch Terrain Backend (Remove Baked Collisions)", 0, self)
-	undo_redo.add_do_method(parent, &"remove_child", container)
-	undo_redo.add_undo_method(parent, &"add_child", container)
-	undo_redo.add_undo_method(parent, &"move_child", container, restore_index)
-	undo_redo.add_undo_method(self, &"_restore_scene_owner_recursive", container)
-	# The history owns the detached subtree while the action is undone.
-	undo_redo.add_undo_reference(container)
-	undo_redo.commit_action()
+	print("Removed the baked collision container '%s_Collisions'. " % name
+		+ "Ctrl+Z does not bring it back: switch back to MESH_NODES and press "
+		+ "'Bake Live Collisions' to regenerate it from the terrain data.")
 
 
 ##@@
@@ -2280,19 +2268,3 @@ func _find_baked_collision_shape(coord: Vector2i) -> CollisionShape3D:
 				break
 	_culling_shape_cache[coord] = shape
 	return shape
-
-
-##@@
-
-## Re-assigns scene ownership across a restored subtree so it saves back into the .tscn.
-func _restore_scene_owner_recursive(node: Node) -> void:
-	if not Engine.is_editor_hint() or node == null:
-		return
-	if not is_inside_tree() or get_tree() == null:
-		return
-	var scene_root: Node = get_tree().edited_scene_root
-	if scene_root == null:
-		return
-	node.set_owner(scene_root)
-	for child in node.get_children():
-		_restore_scene_owner_recursive(child)
