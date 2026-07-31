@@ -166,19 +166,35 @@ const MESH_NODES_ONLY_PROPERTIES: PackedStringArray = [
 	"bake_collisions_button",
 ]
 
+## Settings that additionally require RuntimeCollision.LAZY, because they govern colliders
+## being built and released - which is the only mode where that happens at all.
+const LAZY_ONLY_PROPERTIES: PackedStringArray = [
+	"collision_retain_limit",
+]
+
 
 ## Hides the settings belonging to the other backend. They stay stored, they just stop
 ## advertising themselves in a mode where they genuinely cannot do anything - which is
 ## otherwise easy to misread as the setting being broken.
 func _validate_property(property: Dictionary) -> void:
+	var name: String = property["name"]
 	var hidden: bool = false
+
 	if terrain_backend == TerrainBackend.SERVERS:
-		hidden = MESH_NODES_ONLY_PROPERTIES.has(property["name"])
+		hidden = MESH_NODES_ONLY_PROPERTIES.has(name)
+		# A second axis: some settings only mean anything while colliders are actually being
+		# built and released, which is what LAZY does and the other policies do not.
+		if not hidden and runtime_collision != RuntimeCollision.LAZY:
+			hidden = LAZY_ONLY_PROPERTIES.has(name)
 	else:
-		hidden = SERVER_ONLY_PROPERTIES.has(property["name"])
+		hidden = SERVER_ONLY_PROPERTIES.has(name) or LAZY_ONLY_PROPERTIES.has(name)
 
 	if hidden:
-		property["usage"] = PROPERTY_USAGE_NO_EDITOR
+		# Clear ONLY the editor bit. Assigning PROPERTY_USAGE_NO_EDITOR outright would replace
+		# the whole mask and drop PROPERTY_USAGE_SCRIPT_VARIABLE with it, at which point the
+		# .tscn loader discards the stored value and the property silently falls back to its
+		# default on every scene load.
+		property["usage"] = int(property["usage"]) & ~PROPERTY_USAGE_EDITOR
 
 
 ## Triggers an instant inspector refresh to update calculated read-only size metrics
@@ -339,31 +355,55 @@ var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 
 ## Controls how much collision the SERVERS backend keeps resident at runtime.
 enum RuntimeCollision {
-	CULLED = 0, ## Colliders are built only for chunks update_collision_culling() reports.
-	ALL = 1,    ## Every active chunk keeps a collider for the entire session (default).
-	NONE = 2,   ## No runtime collision at all.
+	LAZY = 0,     ## A collider is created the first time a target comes near the chunk.
+	PREBUILT = 1, ## Every active chunk has a collider from the start; the radius only
+	              ## switches them on and off (default).
+	NONE = 2,     ## No runtime collision at all.
 }
 
 ## SERVERS backend only; the MESH_NODES backend is unaffected and still uses the bake button.
 ##
-## Concave colliders dominate the memory profile. Measured on a 10x10 grid of size-16 chunks:
+## Decides WHEN a chunk's collider is created, which is a trade of frame time against memory.
 ##
-##   MESH_NODES, never baked              6.1 MB
-##   MESH_NODES, baked                   18.3 MB
-##   SERVERS, RuntimeCollision.ALL       17.5 MB
-##   SERVERS, CULLED with a 20 m radius   8.0 MB
+## PREBUILT creates all of them up front. Memory scales with the total chunk count and the
+## per-frame cost is nil, since the culling radius then only switches colliders on and off.
+## This mirrors what a baked MESH_NODES terrain does, minus the nodes.
 ##
-## ALL is the default because it is the safe choice: it matches a baked MESH_NODES terrain
-## while costing slightly less. CULLED only ever builds a collider for a chunk that
-## update_collision_culling() has reported as reachable, which is where the large saving comes
-## from - a collider that is released does NOT hand its physics-server memory back, so the
-## only cheap collider is one that was never created. A game using CULLED therefore MUST call
-## update_collision_culling() or it will have no terrain collision at all.
-@export var runtime_collision: RuntimeCollision = RuntimeCollision.ALL:
+## LAZY creates a collider the first time a target comes near the chunk. Memory scales with
+## the region actually reached rather than the whole world, which is what makes very large
+## terrains feasible. The price is that a first visit has to construct a concave shape and its
+## acceleration structure, and that happens inside the physics step - so a target crossing
+## many new chunks per second produces noticeable spikes. Revisits are cheap, because a chunk
+## leaving the radius is parked rather than destroyed; see collision_retain_limit.
+##
+## PREBUILT is the default: it is the predictable choice, and LAZY only pays off once the
+## terrain is large enough that holding every collider becomes the actual constraint.
+##
+## A game using LAZY MUST drive the culling, either through collision_cull_targets or by
+## calling update_collision_culling() itself, or the terrain will have no collision at all.
+@export var runtime_collision: RuntimeCollision = RuntimeCollision.PREBUILT:
 	set(v):
 		runtime_collision = v
 		if _server_backend != null:
 			_server_backend.set_collision_policy(int(v))
+		# collision_retain_limit only applies to LAZY, so the inspector has to re-check.
+		notify_property_list_changed()
+
+## How many colliders outside the culling radius stay built but switched off.
+##
+## `LAZY` only pays for a chunk the first time it is reached. Afterwards a chunk leaving the
+## radius is parked rather than destroyed, so returning to it costs a fraction of a microsecond
+## instead of a full rebuild - which matters because a target moving through the world crosses
+## the same chunks again and again.
+##
+## Parked colliders take part in no collision test, they only hold their memory. This value
+## caps how many may do so; beyond it the least recently parked one is genuinely released.
+## Raise it for a target that roams a small area, lower it when memory is the tighter
+## constraint. Zero restores the old behaviour of releasing immediately.
+##
+## Only relevant for `SERVERS` with `RuntimeCollision.LAZY`.
+@export_range(0, 512, 1) var collision_retain_limit: int = 64
+
 
 ## Controls the translucent overlay that visualises the SERVERS backend's live colliders.
 enum CollisionDebugDraw {
@@ -376,7 +416,7 @@ enum CollisionDebugDraw {
 ## because that feature lives inside CollisionShape3D and this backend has no such node.
 ## This draws the very same geometry instead, taken straight from Shape3D.get_debug_mesh().
 ##
-## Useful mainly for watching RuntimeCollision.CULLED work: only the chunks that currently own
+## Useful mainly for watching RuntimeCollision.LAZY work: only the chunks that currently own
 ## a collider light up, so the culling radius becomes directly visible.
 ##
 ## The overlay costs extra line geometry per visible chunk, so leave it off when profiling.
@@ -388,7 +428,7 @@ enum CollisionDebugDraw {
 ## Nodes the collision culling should follow, typically the player's CharacterBody3D.
 ##
 ## While at least one valid target is assigned the manager drives update_collision_culling()
-## itself once per physics frame, so RuntimeCollision.CULLED needs no glue code at all. The
+## itself once per physics frame, so RuntimeCollision.LAZY needs no glue code at all. The
 ## enabled set is the union of every target's radius. Leave empty to drive culling manually.
 ##
 ## An inspector reference can only point inside the same scene. For a player spawned at
@@ -1616,8 +1656,8 @@ func _activate_server_backend(remove_baked_collisions: bool) -> void:
 	_sync_collision_debug_draw()
 	if _culling_handover_done:
 		_server_backend.notify_culling_active()
-	elif not Engine.is_editor_hint() and runtime_collision == RuntimeCollision.CULLED:
-		# CULLED builds nothing on its own, so a game that forgets to drive the radius would
+	elif not Engine.is_editor_hint() and runtime_collision == RuntimeCollision.LAZY:
+		# LAZY builds nothing on its own, so a game that forgets to drive the radius would
 		# silently end up with terrain you fall straight through. Check back once and say so.
 		_warn_if_culling_never_started.call_deferred()
 
@@ -1969,7 +2009,7 @@ func _seed_culling_state_from_current_colliders() -> void:
 ## True when the chunk currently has collision the culling would have to switch off.
 func _chunk_collision_is_enabled(coord: Vector2i) -> bool:
 	if terrain_backend == TerrainBackend.SERVERS:
-		# Under CULLED nothing exists yet, so there is nothing to switch off either.
+		# Under LAZY nothing exists yet, so there is nothing to switch off either.
 		return _server_backend != null and _server_backend.has_body(coord)
 
 	var shape: CollisionShape3D = _find_baked_collision_shape(coord)
@@ -2035,7 +2075,7 @@ func _commit_culling_set() -> void:
 	_culling_scratch.clear()
 
 
-## One-shot diagnostic for the CULLED policy, which produces no collision until the game
+## One-shot diagnostic for the LAZY policy, which produces no collision until the game
 ## starts reporting a radius. Waits a moment so a caller wiring this up in _ready() or in the
 ## first _physics_process() is not falsely accused.
 func _warn_if_culling_never_started() -> void:
@@ -2047,13 +2087,13 @@ func _warn_if_culling_never_started() -> void:
 		return
 	if terrain_backend != TerrainBackend.SERVERS:
 		return
-	if runtime_collision != RuntimeCollision.CULLED:
+	if runtime_collision != RuntimeCollision.LAZY:
 		return
 	# Targets drive the culling automatically, so their presence is not a misconfiguration.
 	if not collision_cull_targets.is_empty():
 		return
 
-	push_warning("LowPolyTerrain '%s': runtime_collision is CULLED but " % name
+	push_warning("LowPolyTerrain '%s': runtime_collision is LAZY but " % name
 		+ "update_collision_culling() has never been called, so this terrain currently has no "
 		+ "collision at all. Call it once per physics frame with the player position, or "
 		+ "switch runtime_collision to ALL.")
@@ -2191,10 +2231,10 @@ func _warn_on_culling_policy_mismatch() -> void:
 	if terrain_backend != TerrainBackend.SERVERS:
 		return
 
-	if runtime_collision == RuntimeCollision.ALL:
+	if runtime_collision == RuntimeCollision.PREBUILT:
 		push_warning("LowPolyTerrain '%s': culling targets are assigned, but " % name
 			+ "runtime_collision is ALL, so every chunk keeps its collider and the culling "
-			+ "only toggles them. Switch to CULLED to actually reclaim the memory.")
+			+ "only toggles them. Switch to LAZY to actually reclaim the memory.")
 	elif runtime_collision == RuntimeCollision.NONE:
 		push_warning("LowPolyTerrain '%s': culling targets are assigned, but " % name
 			+ "runtime_collision is NONE, so there is no collision to cull at all.")

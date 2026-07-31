@@ -12,8 +12,8 @@ class_name LowPolyTerrainPicking
 ## or collision shape to the engine.
 
 
-## Upper bound on how many chunks keep a cached triangle soup. ArrayMesh.get_faces() allocates
-## a full de-indexed copy of the geometry, so the picking loop must not call it per frame.
+## Upper bound on how many chunks keep a cached triangle soup. De-indexing a chunk allocates
+## a full copy of its geometry, so the picking loop must not redo it every frame.
 const FACES_CACHE_LIMIT: int = 64
 
 
@@ -101,7 +101,9 @@ static func cached_faces(
 	if entry.has("rid") and entry["rid"] == mesh_rid:
 		return entry["faces"]
 
-	var faces: PackedVector3Array = chunk_mesh.get_faces()
+	# Not get_faces(): that caches inside the mesh for good, so simply moving the mouse
+	# across the terrain would permanently accumulate memory per chunk crossed.
+	var faces: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(chunk_mesh)
 	if cache.size() >= FACES_CACHE_LIMIT:
 		cache.clear()
 	cache[coord] = { "rid": mesh_rid, "faces": faces }

@@ -268,7 +268,10 @@ func bake_collision(scene_root: Node) -> void:
 	var half_bounds: float = (float(chunk_size) * cell_size) / 2.0
 	var center_offset := Vector3(half_bounds, 0.0, -half_bounds)
 	
-	var faces_raw: PackedVector3Array = mesh.get_faces()
+	# See LowPolyTerrainMeshBuilder.build_face_soup(): get_faces() would cache the soup in
+	# the mesh permanently, which baking has no reason to pay for.
+	var faces_raw: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(
+		mesh as ArrayMesh)
 	for i in range(faces_raw.size()):
 		faces_raw[i] -= center_offset
 		

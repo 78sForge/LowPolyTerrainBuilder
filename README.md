@@ -81,46 +81,35 @@ counts and it is what makes cheap streaming possible.
 
 ### Frame time
 
-Draw calls, primitives and GPU time are identical by construction. Measured with rendering on a
-10×10 grid of size-16 chunks, median `TIME_PROCESS` was 23.9 ms for unbaked `MESH_NODES` against
-21.6 ms for `SERVERS`, and physics time dropped from 0.38 ms to 0.08 ms. Node count fell from 106
-to 6.
+Draw calls, primitives and GPU time are identical by construction, and in a stationary scene
+the two backends perform the same. `SERVERS` tends to come out slightly ahead, simply because
+there are no chunk nodes for the engine to carry.
 
 There is one case where `SERVERS` is genuinely slower. If the manager, or any ancestor, changes
 its transform, every chunk instance has to be re-pushed, and that loop runs in GDScript rather
-than in Godot's C++ scene-graph propagation:
+than in Godot's C++ scene-graph propagation. The gap grows with the chunk count and is
+substantial.
 
-| Chunks | `MESH_NODES` | `SERVERS` |
-| ---: | ---: | ---: |
-| 100 | 0.6 µs | 14.5 µs |
-| 400 | 1.8 µs | 54.3 µs |
-| 900 | 4.1 µs | 124.4 µs |
-
-This cost applies **once per frame** (Godot coalesces transform notifications) and **only while
+The cost applies **once per frame** (Godot coalesces transform notifications) and **only while
 the manager is actually moving**. A stationary terrain pays nothing. If you animate a terrain of
 several thousand chunks, prefer `MESH_NODES`.
 
 ### Memory
 
-Collision, not rendering, dominates the memory profile. Measured on a 10×10 grid of size-16
-chunks (51 200 triangles), each configuration in its own process:
+Collision, not rendering, dominates the memory profile: a concave collider costs considerably
+more than the chunk mesh it was built from, and the totals are driven almost entirely by how
+many colliders exist.
 
-| Configuration | RAM | Colliders |
-| :--- | ---: | ---: |
-| `MESH_NODES`, never baked | 6.1 MB | 0 |
-| `MESH_NODES`, baked | 18.3 MB | 100 |
-| `SERVERS`, `RuntimeCollision.NONE` | 6.4 MB | 0 |
-| `SERVERS`, `RuntimeCollision.ALL` | 17.5 MB | 100 |
-| `SERVERS`, `CULLED`, 40 m radius | 10.1 MB | 32 |
-| `SERVERS`, `CULLED`, 20 m radius | 8.0 MB | 12 |
+Compare like with like: `SERVERS` + `PREBUILT` against **baked** `MESH_NODES`, where it comes
+out a little cheaper because the collider nodes are gone. An unbaked `MESH_NODES` terrain has
+no collision at all, so it is not a fair baseline.
 
-Compare like with like: `SERVERS` + `ALL` against **baked** `MESH_NODES`, where it is slightly
-cheaper. An unbaked `MESH_NODES` terrain has no collision at all, so it is not a fair baseline.
-
-A concave collider costs roughly 110 KB per chunk, most of it inside the physics server rather
-than in the face data itself. Releasing one does **not** give that memory back, so `CULLED`
-never builds a collider for a chunk outside the radius in the first place. That is where the
-saving comes from.
+Colliders are built from the mesh without going through `ArrayMesh.get_faces()`, which caches
+its triangle soup inside the mesh permanently. That detail matters more than it sounds: with
+the cache in play a released collider gave back almost nothing, so memory under `LAZY` crept
+up towards the `PREBUILT` figure as a target explored the world. Built the other way, `LAZY`
+stays flat no matter how much of the terrain has been visited, and releasing genuinely
+returns the memory.
 
 ### SERVERS mode limitations
 
@@ -176,11 +165,56 @@ What the call does depends on **Runtime Collision**:
 
 | `runtime_collision` | Behaviour of `update_collision_culling()` |
 | :--- | :--- |
-| `ALL` (default) | Colliders exist everywhere; the radius only enables/disables them. Cheapest to toggle, highest memory. |
-| `CULLED` | Colliders are **built** on entering the radius and **released** on leaving. Lowest memory. |
+| `PREBUILT` (default) | Colliders exist everywhere; the radius only enables/disables them. Cheapest to toggle, highest memory. |
+| `LAZY` | A collider is **built** the first time a target comes near. Leaving parks it rather than destroying it, so returning is cheap. Lowest memory. |
 | `NONE` | No effect; there is no runtime collision. |
 
-> With `CULLED` something **must** drive the culling - either a target or your own call -
+### Choosing between PREBUILT and LAZY
+
+The two differ in *when* a collider is created, and that is a direct trade of frame time
+against memory.
+
+`PREBUILT` builds every collider once and never touches them again. Memory is then
+proportional to the **total** number of chunks, and the per-frame cost is nil - the culling
+radius only flips colliders on and off, which is close to free.
+
+`LAZY` builds a collider the first time a target comes near the chunk. Memory is then
+proportional to the region actually reached rather than to the whole world, which is what
+makes very large terrains feasible at all. The price is paid on **first** contact: a concave
+shape and its acceleration structure have to be constructed, and that happens inside the
+physics step.
+
+Leaving the radius only **parks** a collider - it keeps its shape but takes part in no
+collision test - so returning to a chunk costs a flag flip instead of a rebuild. That matters
+because a target moving through the world keeps crossing chunks it has already visited.
+**Collision Retain Limit** caps how many parked colliders stay resident; beyond it the least
+recently parked one is genuinely released. Set it to zero to release immediately instead.
+
+Two rules follow from that:
+
+```
+memory        ∝  colliders resident      (all chunks, or the reached region plus parked ones)
+frame cost    ∝  chunks reached for the FIRST time per second × cost of building one collider
+```
+
+The second one scales with the radius **perimeter** times the target's speed. Enlarging
+`collision_cull_radius` therefore makes `LAZY` *more* expensive, not cheaper - it buys
+earlier collider availability, not less work. Denser chunks (a larger `chunk_size`) raise the
+cost of each individual build, since the shape has more triangles.
+
+| Situation | Recommendation | Reasoning |
+| :--- | :--- | :--- |
+| The whole terrain's colliders fit in memory | **`PREBUILT`** | Nothing is ever rebuilt, so physics time matches the node backend while the nodes themselves are gone. |
+| The terrain is too large for that | **`LAZY`** | Keeping only the reachable region resident is the only way to fit, and is what the policy exists for. |
+| Targets move slowly relative to the chunk size | **`LAZY`** | Few chunks enter per second, so the build cost stays negligible. |
+| Targets move fast - vehicles, aircraft, teleports | **`PREBUILT`** | A fast mover reaches many new chunks per second, and each first contact pays a full build. |
+| Consistent frame times matter more than memory | **`PREBUILT`** | `LAZY` concentrates its work: most frames build nothing, then one frame builds several colliders at once. |
+| No gameplay collision needed at all | **`NONE`** | Rendering only, with no physics memory whatsoever. |
+
+If you are unsure, start with `PREBUILT` and only move to `LAZY` once memory actually becomes the
+constraint. `PREBUILT` is the default for that reason.
+
+> With `LAZY` something **must** drive the culling - either a target or your own call -
 > otherwise the terrain has no collision whatsoever. With neither in place the manager pushes a
 > warning two seconds in.
 
@@ -210,7 +244,7 @@ taken straight from `Shape3D.get_debug_mesh()`, as a translucent cyan wireframe:
 | `NEVER` | Never drawn. |
 
 Because only chunks that actually own a collider light up, this is the direct way to watch
-`CULLED` at work: the lit region *is* the culling radius. Turn it off for profiling, since the
+`LAZY` at work: the lit region *is* the culling radius. Turn it off for profiling, since the
 wireframe adds line geometry per visible chunk.
 
 ---
@@ -238,10 +272,10 @@ difference. Expect roughly
 error  ≈  jitter_strength × (height change between neighbouring vertices)
 ```
 
-Measured on a 3×3 chunk terrain with `cell_size 1.0` and `jitter_strength 0.5`: a gentle
-0.26 m per cell relief drifts 6 mm on average and 4.5 cm at worst, a steep 0.77 m per cell
-relief drifts 10 cm on average and 53 cm at worst. A larger `cell_size` reduces it. On steep
-jittered terrain use a raycast instead.
+So the query is exact on unjittered terrain and stays well within a rounding error on gentle
+jittered terrain, while a steep jittered slope can drift far enough to matter. A larger
+`cell_size` reduces it, since the slope per metre drops. Where that precision is not enough,
+use a raycast instead.
 
 > Height at an XZ position stops being well defined if the manager is rotated around X or Z,
 > because a vertical ray can then cross the surface more than once.
@@ -271,9 +305,10 @@ jittered terrain use a raycast instead.
 | **Custom Material** | Terrain Properties | `Resource` | Slot for custom 3D shader or standard materials. |
 | **Export Target Path** | Data Export | `String` | Target path where the exported `.gltf` file will be saved. |
 | **Choose Path & Export Terrain** | Data Export | `Button` | Opens a file dialog to name and save the model asset. |
-| **Runtime Collision** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. `ALL` gives every active chunk a collider. `CULLED` builds colliders only inside the culling radius. `NONE` disables runtime collision. |
+| **Runtime Collision** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Decides *when* a collider is created: `PREBUILT` up front, `LAZY` on first approach, `NONE` never. |
 | **Collision Cull Targets** | Collision Generation | `Array[Node3D]` | Nodes the culling follows, typically the player. The manager then drives culling itself once per physics frame. Empty means you drive it manually. |
 | **Collision Cull Radius** | Collision Generation | `float` | Metres of collision kept around each target. Pre-filled with `chunk_size * cell_size * 2` and re-derived on dimension changes unless you overrode it. |
+| **Collision Retain Limit** | Collision Generation | `int` | `LAZY` only, hidden otherwise. How many colliders outside the radius stay built but parked, so returning to them is cheap. Zero releases immediately. |
 | **Collision Debug Draw** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Draws live colliders as a translucent wireframe, since Godot's own Visible Collision Shapes cannot see server bodies. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 

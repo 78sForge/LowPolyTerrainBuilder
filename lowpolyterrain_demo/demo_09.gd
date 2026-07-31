@@ -6,7 +6,10 @@ extends Node3D
 var count := 0
 var zoomOut := true
 func _process(delta: float) -> void:
+	
 	pivot.rotate_y(delta * 0.3)
+	#pivot.rotate_x(delta * 0.3)
+	
 	
 	return
 	

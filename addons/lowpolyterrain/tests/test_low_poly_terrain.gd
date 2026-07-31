@@ -662,6 +662,53 @@ func test_culling_resolves_shapes_by_type_not_by_name() -> void:
 
 
 ##@@
+# --- TRIANGLE SOUP WITHOUT THE MESH CACHE ---
+# ArrayMesh.get_faces() stores its result inside the mesh permanently, measured at roughly
+# 88 KB per chunk and never released. That is what made a released collider appear to keep
+# most of its memory, and what made the editor brush accumulate memory per chunk hovered.
+
+
+func test_face_soup_matches_get_faces() -> void:
+	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0, 0)]
+	var mesh: ArrayMesh = chunk.mesh as ArrayMesh
+	var soup: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(mesh)
+	var reference: PackedVector3Array = mesh.get_faces()
+
+	assert_eq(soup.size(), reference.size(),
+		"The soup must contain exactly as many vertices as get_faces() returns.")
+	assert_eq(soup.size() % 3, 0, "A triangle soup must be a multiple of three.")
+
+	# They agree geometrically; only the last decimals differ, because get_faces() reads back
+	# the mesh's compressed vertex storage while the surface arrays are uncompressed.
+	var worst: float = 0.0
+	for i in range(soup.size()):
+		worst = maxf(worst, (soup[i] - reference[i]).length())
+	assert_lt(worst, 0.001,
+		"Largest deviation from get_faces() was %.6f, which is more than rounding." % worst)
+
+
+func test_face_soup_handles_degenerate_input() -> void:
+	assert_eq(LowPolyTerrainMeshBuilder.build_face_soup(null).size(), 0,
+		"A null mesh must yield an empty soup rather than an error.")
+	assert_eq(LowPolyTerrainMeshBuilder.build_face_soup(ArrayMesh.new()).size(), 0,
+		"A surfaceless mesh must yield an empty soup.")
+
+
+func test_baked_collider_uses_the_uncached_soup() -> void:
+	# Guards the actual call site: if baking went back to get_faces(), the shape would carry
+	# the compressed values instead and this comparison would drift apart.
+	manager._bake_live_collisions_as_child()
+	var shape: CollisionShape3D = manager._find_baked_collision_shape(Vector2i(0, 0))
+	assert_not_null(shape, "Precondition: the chunk was baked.")
+
+	var chunk: LowPolyTerrainChunk = manager.chunks_dict[Vector2i(0, 0)]
+	var expected: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(
+		chunk.mesh as ArrayMesh)
+	assert_eq((shape.shape as ConcavePolygonShape3D).get_faces().size(), expected.size(),
+		"The baked shape must be built from the uncached soup.")
+
+
+##@@
 # --- CHUNK BOUNDARY GRID OVERLAY ---
 # Replaced the former per-chunk Label3D overlay. The builder is pure and runtime-safe, so the
 # geometry can be asserted here even though the overlay node itself is editor-only.

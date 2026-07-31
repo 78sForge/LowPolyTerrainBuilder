@@ -38,6 +38,10 @@ class ChunkRecord extends RefCounted:
 	## the geometry of an earlier frame.
 	var collision_dirty: bool = true
 
+	## True while the collider is built but parked: it exists and keeps its shape, but takes
+	## part in no collision test. Re-entering the radius only has to clear this flag.
+	var shape_parked: bool = false
+
 	# Translucent overlay showing this chunk's actual collider. Strong ref for the same
 	# lifetime reason as `mesh`.
 	var debug_mesh: ArrayMesh = null
@@ -85,6 +89,12 @@ var _collision_policy: int = 0
 
 ## Flips to true the first time update_collision_culling() runs.
 var _culling_driving_collision: bool = false
+
+## Coords whose collider is built but parked, least recently parked first. Under LAZY a
+## chunk leaving the radius is switched off rather than destroyed, so returning to it costs a
+## fraction of a microsecond instead of a full rebuild. The list is bounded by the manager's
+## collision_retain_limit; the oldest entry is genuinely freed once that is exceeded.
+var _parked: Array[Vector2i] = []
 
 ## Draws every live collider as a translucent overlay. Godot's own "Visible Collision Shapes"
 ## cannot show these bodies, because that feature is implemented inside CollisionShape3D and
@@ -190,7 +200,7 @@ func on_transform_changed(global_xform: Transform3D) -> void:
 ## actually changed. Rebaking is deferred because dragging the scale gizmo emits a transform
 ## notification every single frame, and N concave rebakes per frame would stall the editor.
 func _sync_body_transforms() -> void:
-	# Under CULLED only a handful of chunks own a body, so skipping the sweep entirely when
+	# Under LAZY only a handful of chunks own a body, so skipping the sweep entirely when
 	# there is none avoids walking thousands of records for nothing.
 	if Engine.is_editor_hint() or _body_count == 0:
 		return
@@ -352,12 +362,12 @@ func refresh_materials() -> void:
 # meshes cost ~6 MB while their concave colliders cost a further ~10 MB: only 1.76 MB of that
 # is raw face data, the rest is the physics server's own indexed mesh and BVH, roughly 84 KB
 # per chunk. Keeping a collider alive for a chunk nobody can reach is therefore the single
-# most expensive thing this backend can do, which is what the CULLED policy exists to avoid.
+# most expensive thing this backend can do, which is what the LAZY policy exists to avoid.
 
 
 ## Policy values mirroring LowPolyTerrainManager.RuntimeCollision.
-const COLLISION_CULLED: int = 0
-const COLLISION_ALL: int = 1
+const COLLISION_LAZY: int = 0
+const COLLISION_PREBUILT: int = 1
 const COLLISION_NONE: int = 2
 
 
@@ -371,20 +381,20 @@ func set_collision_policy(policy: int) -> void:
 
 
 ## Records that the manager is actively culling. Purely informational under the current policy
-## set, since CULLED never builds colliders on its own anyway.
+## set, since LAZY never builds colliders on its own anyway.
 func notify_culling_active() -> void:
 	_culling_driving_collision = true
 
 
 ## True when a chunk may own a collider without anyone explicitly asking for it.
 ##
-## CULLED answers false unconditionally, and that is the entire point. Measurements show that
+## LAZY answers false unconditionally, and that is the entire point. Measurements show that
 ## releasing a collider does NOT return the physics server's share of its memory: building all
 ## 100 colliders of a 10x10 world and then releasing 88 of them leaves 15.7 MB resident, while
 ## never building more than those 12 leaves 8.0 MB. Only the colliders that were never created
 ## are actually free, so a chunk outside the radius must never get one in the first place.
 func _collision_allowed_by_default(coord: Vector2i) -> bool:
-	if _collision_policy == COLLISION_NONE or _collision_policy == COLLISION_CULLED:
+	if _collision_policy == COLLISION_NONE or _collision_policy == COLLISION_LAZY:
 		return false
 	return true
 
@@ -404,8 +414,9 @@ func ensure_chunk_collision(coord: Vector2i) -> void:
 
 
 ## Releases a chunk's collider entirely, including its shape and the physics server's BVH.
-## This is what makes the CULLED policy actually reclaim memory rather than merely park it.
+## This is what makes the LAZY policy actually reclaim memory rather than merely park it.
 func release_chunk_collision(coord: Vector2i) -> void:
+	_parked.erase(coord)
 	if not _records.has(coord):
 		return
 	_free_body(_records[coord])
@@ -420,7 +431,7 @@ func _update_chunk_collision(rec: ChunkRecord) -> void:
 		return
 
 	if not _collision_allowed_by_default(rec.coord):
-		# Under CULLED the collider is created by ensure_chunk_collision() instead. An existing
+		# Under LAZY the collider is created by ensure_chunk_collision() instead. An existing
 		# one is still refreshed, so a chunk inside the radius follows the sculpted geometry.
 		if not rec.body_rid.is_valid():
 			return
@@ -445,6 +456,10 @@ func _build_chunk_collision(rec: ChunkRecord) -> void:
 
 	PhysicsServer3D.body_set_collision_layer(rec.body_rid, _manager.collision_layer)
 	PhysicsServer3D.body_set_collision_mask(rec.body_rid, 0)
+	# body_add_shape() always attaches an ENABLED shape, so a rebuild would silently wake a
+	# parked collider back up without this.
+	if PhysicsServer3D.body_get_shape_count(rec.body_rid) > 0:
+		PhysicsServer3D.body_set_shape_disabled(rec.body_rid, 0, rec.shape_parked)
 	_push_body_transform(rec)
 	_update_collision_debug(rec)
 
@@ -458,7 +473,9 @@ func _bake_collision_shape(rec: ChunkRecord, scale: Vector3) -> void:
 	if rec.shape != null and not rec.collision_dirty and rec.baked_scale.is_equal_approx(scale):
 		return
 
-	var faces: PackedVector3Array = rec.mesh.get_faces()
+	# build_face_soup() rather than get_faces(): the latter caches the soup inside the mesh
+	# permanently, so a released collider would keep most of its memory anyway.
+	var faces: PackedVector3Array = LowPolyTerrainMeshBuilder.build_face_soup(rec.mesh)
 	if not scale.is_equal_approx(Vector3.ONE):
 		for i in range(faces.size()):
 			faces[i] = faces[i] * scale
@@ -503,23 +520,38 @@ func _free_body(rec: ChunkRecord) -> void:
 	rec.shape = null
 	rec.baked_scale = Vector3.ONE
 	rec.collision_dirty = true
+	rec.shape_parked = false
 	_free_collision_debug(rec)
 
 
 ## Switches a chunk's collision on or off according to the active policy.
-## CULLED builds and releases the shape outright, so memory tracks the radius.
-## ALL keeps the shape resident and only parks the body, which makes toggling nearly free.
+##
+## Under LAZY a chunk is BUILT the first time it is needed and afterwards only parked when it
+## leaves the radius, rather than destroyed. Parking costs a fraction of a microsecond where a
+## rebuild costs tens to hundreds, which matters because a target moving through the world
+## keeps re-entering chunks it has already visited. Genuine release only happens once the
+## parked list outgrows the manager's collision_retain_limit.
 func set_chunk_collision_enabled(coord: Vector2i, enabled: bool) -> void:
 	if Engine.is_editor_hint() or _collision_policy == COLLISION_NONE:
 		return
 
-	if _collision_policy == COLLISION_CULLED:
+	if _collision_policy == COLLISION_LAZY:
 		if enabled:
+			_parked.erase(coord)
 			ensure_chunk_collision(coord)
+			_set_shape_parked(coord, false)
 		else:
-			release_chunk_collision(coord)
+			if not has_body(coord):
+				return
+			_set_shape_parked(coord, true)
+			_park(coord)
 		return
 
+	_set_shape_parked(coord, not enabled)
+
+
+## Parks or unparks a built collider: the body and its shape stay allocated either way.
+func _set_shape_parked(coord: Vector2i, parked: bool) -> void:
 	if not _records.has(coord):
 		return
 	var rec: ChunkRecord = _records[coord]
@@ -527,14 +559,44 @@ func set_chunk_collision_enabled(coord: Vector2i, enabled: bool) -> void:
 		return
 	if PhysicsServer3D.body_get_shape_count(rec.body_rid) == 0:
 		return
-	PhysicsServer3D.body_set_shape_disabled(rec.body_rid, 0, not enabled)
+	rec.shape_parked = parked
+	PhysicsServer3D.body_set_shape_disabled(rec.body_rid, 0, parked)
+	_update_collision_debug(rec)
 
 
-## True when the chunk currently owns a physics body at all.
+## Records a chunk as parked and enforces the retention limit, freeing the oldest entries.
+func _park(coord: Vector2i) -> void:
+	_parked.erase(coord)
+	_parked.append(coord)
+
+	var limit: int = 0
+	if _manager != null:
+		limit = maxi(_manager.collision_retain_limit, 0)
+
+	while _parked.size() > limit:
+		var oldest: Vector2i = _parked[0]
+		_parked.remove_at(0)
+		release_chunk_collision(oldest)
+
+
+## True when the chunk currently owns a physics body at all, parked or not.
 func has_body(coord: Vector2i) -> bool:
 	if not _records.has(coord):
 		return false
 	return (_records[coord] as ChunkRecord).body_rid.is_valid()
+
+
+## True when the chunk's collider exists AND actually takes part in collision.
+func has_active_body(coord: Vector2i) -> bool:
+	if not _records.has(coord):
+		return false
+	var rec: ChunkRecord = _records[coord]
+	return rec.body_rid.is_valid() and not rec.shape_parked
+
+
+## Test-only accessor: how many built colliders are currently parked.
+func get_debug_parked_count() -> int:
+	return _parked.size()
 
 
 ##@@
@@ -565,7 +627,10 @@ func is_collision_debug_enabled() -> bool:
 
 ## Creates, refreshes or removes a chunk's overlay so it always matches the live collider.
 func _update_collision_debug(rec: ChunkRecord) -> void:
-	if not _collision_debug or rec.shape == null or not rec.body_rid.is_valid():
+	# A parked collider takes part in no collision test, so drawing it would misrepresent what
+	# is actually active - which is the one thing this overlay exists to show.
+	if not _collision_debug or rec.shape == null or not rec.body_rid.is_valid() \
+	or rec.shape_parked:
 		_free_collision_debug(rec)
 		return
 
@@ -674,6 +739,7 @@ func destroy_all() -> void:
 		_destroy_record(_records[coord])
 	_records.clear()
 	_record_list.clear()
+	_parked.clear()
 
 	for coord: Vector2i in _preview_instances.keys():
 		_free_preview_instance(coord)

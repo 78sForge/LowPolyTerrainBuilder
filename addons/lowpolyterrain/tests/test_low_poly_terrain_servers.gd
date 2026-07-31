@@ -129,6 +129,94 @@ func test_server_only_settings_are_hidden_in_mesh_nodes() -> void:
 				"'%s' must still be saved even while hidden." % entry["name"])
 
 
+## Saves to a real .tscn on disk and loads it back, for every backend/policy combination.
+##
+## The in-memory PackedScene check below is not enough on its own: the regression this guards
+## against - hiding a property in a way that also strips its storage flag - showed up in the
+## TEXT scene path, where the loader silently dropped the value and the setting reverted to
+## its default without any error.
+func test_every_setting_survives_a_real_tscn_round_trip() -> void:
+	var path := "user://lowpolyterrain_roundtrip_test.tscn"
+	var backends: Array = [
+		LowPolyTerrainManager.TerrainBackend.MESH_NODES,
+		LowPolyTerrainManager.TerrainBackend.SERVERS,
+	]
+	var policies: Array = [
+		LowPolyTerrainManager.RuntimeCollision.LAZY,
+		LowPolyTerrainManager.RuntimeCollision.PREBUILT,
+		LowPolyTerrainManager.RuntimeCollision.NONE,
+	]
+
+	for backend in backends:
+		for policy in policies:
+			var source := LowPolyTerrainManager.new()
+			source.name = "RoundTrip"
+			source.terrain_backend = backend
+			source.runtime_collision = policy
+			source.collision_debug_draw = LowPolyTerrainManager.CollisionDebugDraw.ALWAYS
+			source.collision_retain_limit = 137
+			source.collision_layer = 8
+
+			var packed := PackedScene.new()
+			packed.pack(source)
+			assert_eq(ResourceSaver.save(packed, path), OK,
+				"Saving must succeed for backend %s / policy %s." % [backend, policy])
+
+			var restored: LowPolyTerrainManager = load(path).instantiate()
+			var label := "backend %s / policy %s" % [backend, policy]
+			assert_eq(restored.terrain_backend, backend, "terrain_backend lost for %s." % label)
+			assert_eq(restored.runtime_collision, policy,
+				"runtime_collision lost for %s." % label)
+			assert_eq(restored.collision_debug_draw,
+				LowPolyTerrainManager.CollisionDebugDraw.ALWAYS,
+				"collision_debug_draw lost for %s." % label)
+			assert_eq(restored.collision_retain_limit, 137,
+				"collision_retain_limit lost for %s." % label)
+			assert_eq(restored.collision_layer, 8, "collision_layer lost for %s." % label)
+
+			restored.free()
+			source.free()
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_hidden_settings_survive_a_scene_round_trip() -> void:
+	# The regression this guards: hiding a property by ASSIGNING PROPERTY_USAGE_NO_EDITOR
+	# replaces the whole usage mask and drops PROPERTY_USAGE_SCRIPT_VARIABLE, after which the
+	# scene loader silently discards the stored value and the setting reverts to its default.
+	var source := LowPolyTerrainManager.new()
+	source.name = "RoundTrip"
+	source.terrain_backend = LowPolyTerrainManager.TerrainBackend.MESH_NODES
+	source.runtime_collision = LowPolyTerrainManager.RuntimeCollision.NONE
+	source.collision_debug_draw = LowPolyTerrainManager.CollisionDebugDraw.ALWAYS
+	add_child(source)
+
+	var packed := PackedScene.new()
+	assert_eq(packed.pack(source), OK, "Packing the manager must succeed.")
+
+	var restored: LowPolyTerrainManager = packed.instantiate()
+	assert_eq(restored.runtime_collision, LowPolyTerrainManager.RuntimeCollision.NONE,
+		"A hidden runtime_collision must survive being saved and loaded.")
+	assert_eq(restored.collision_debug_draw, LowPolyTerrainManager.CollisionDebugDraw.ALWAYS,
+		"A hidden collision_debug_draw must survive being saved and loaded.")
+
+	restored.free()
+	source.free()
+
+
+func test_hiding_keeps_every_usage_flag_except_editor() -> void:
+	var reference: int = 0
+	for entry: Dictionary in manager.get_property_list():
+		if entry["name"] == "terrain_backend":
+			reference = int(entry["usage"])
+
+	for entry: Dictionary in manager.get_property_list():
+		if LowPolyTerrainManager.SERVER_ONLY_PROPERTIES.has(entry["name"]):
+			var usage: int = int(entry["usage"])
+			assert_eq(usage, reference & ~PROPERTY_USAGE_EDITOR,
+				"'%s' must differ from a visible property only by the editor bit." % entry["name"])
+
+
 func test_server_only_settings_appear_again_under_servers() -> void:
 	_use_servers()
 	var seen: int = 0
@@ -139,6 +227,67 @@ func test_server_only_settings_appear_again_under_servers() -> void:
 				"'%s' must be visible while SERVERS is active." % entry["name"])
 	assert_eq(seen, LowPolyTerrainManager.SERVER_ONLY_PROPERTIES.size(),
 		"Every server-only setting must be present in the property list.")
+
+
+func _usage_of(prop: String) -> int:
+	for entry: Dictionary in manager.get_property_list():
+		if entry["name"] == prop:
+			return int(entry["usage"])
+	return -1
+
+
+func test_retain_limit_is_visible_only_under_lazy() -> void:
+	# It governs colliders being built and released, which only LAZY ever does. Offering it
+	# elsewhere would advertise a setting that cannot take effect.
+	for prop: String in LowPolyTerrainManager.LAZY_ONLY_PROPERTIES:
+		assert_eq(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must be hidden while MESH_NODES is active." % prop)
+
+	_use_servers()
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
+	for prop: String in LowPolyTerrainManager.LAZY_ONLY_PROPERTIES:
+		assert_eq(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must be hidden under PREBUILT." % prop)
+
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.NONE
+	for prop: String in LowPolyTerrainManager.LAZY_ONLY_PROPERTIES:
+		assert_eq(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must be hidden under NONE." % prop)
+
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	for prop: String in LowPolyTerrainManager.LAZY_ONLY_PROPERTIES:
+		assert_gt(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must appear under LAZY." % prop)
+
+
+func test_hidden_retain_limit_is_still_stored() -> void:
+	# Same trap as before: hiding must clear the editor bit only, never the storage flag.
+	_use_servers()
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
+	manager.collision_retain_limit = 123
+
+	var packed := PackedScene.new()
+	assert_eq(packed.pack(manager), OK, "Packing must succeed.")
+	var restored: LowPolyTerrainManager = packed.instantiate()
+	assert_eq(restored.collision_retain_limit, 123,
+		"A hidden collision_retain_limit must still survive save and load.")
+	restored.free()
+
+
+func test_retain_limit_sits_directly_below_runtime_collision() -> void:
+	# Inspector order follows declaration order, and a setting that qualifies another one is
+	# useless three rows away from it.
+	var props: Array = manager.get_property_list()
+	var policy_index: int = -1
+	var limit_index: int = -1
+	for i in range(props.size()):
+		match props[i]["name"]:
+			"runtime_collision": policy_index = i
+			"collision_retain_limit": limit_index = i
+
+	assert_gt(policy_index, -1, "runtime_collision must be present.")
+	assert_eq(limit_index, policy_index + 1,
+		"collision_retain_limit must follow runtime_collision immediately.")
 
 
 func test_bake_button_is_hidden_under_servers() -> void:
@@ -674,9 +823,9 @@ func test_dimension_change_keeps_a_manual_radius() -> void:
 
 
 func test_assigned_target_drives_culling_without_any_glue_code() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
-	assert_eq(_count_bodies(), 0, "Precondition: CULLED builds nothing on its own.")
+	assert_eq(_count_bodies(), 0, "Precondition: LAZY builds nothing on its own.")
 
 	var target: Node3D = _make_target(Vector3(2.0, 0.0, -2.0))
 	manager.collision_cull_radius = 3.0
@@ -692,7 +841,7 @@ func test_assigned_target_drives_culling_without_any_glue_code() -> void:
 
 
 func test_target_movement_updates_the_enabled_set() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 
 	var target: Node3D = _make_target(Vector3(2.0, 0.0, -2.0))
@@ -713,7 +862,7 @@ func test_target_movement_updates_the_enabled_set() -> void:
 
 
 func test_culling_pass_is_skipped_while_inside_the_same_chunk() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 
 	var target: Node3D = _make_target(Vector3(2.0, 0.0, -2.0))
@@ -736,7 +885,7 @@ func test_culling_pass_is_skipped_while_inside_the_same_chunk() -> void:
 
 
 func test_multiple_targets_union_their_radii() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 	manager.collision_cull_radius = 3.0
 
@@ -753,7 +902,7 @@ func test_multiple_targets_union_their_radii() -> void:
 
 
 func test_removing_a_target_releases_its_chunks() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 	manager.collision_cull_radius = 3.0
 
@@ -766,13 +915,13 @@ func test_removing_a_target_releases_its_chunks() -> void:
 	assert_eq(manager._culling_enabled.size(), 0,
 		"Removing the last target must release every chunk it held.")
 	assert_eq(_count_bodies(), 0,
-		"The released chunks must give their colliders back, not just be marked disabled.")
+		"No chunk may keep colliding once the last target is gone.")
 
 	target.free()
 
 
 func test_freed_targets_do_not_break_the_pass() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 	manager.collision_cull_radius = 3.0
 
@@ -799,7 +948,18 @@ func test_collision_culling_skips_deactivated_chunks() -> void:
 # GUT runs with Engine.is_editor_hint() == false, so these exercise the real runtime path.
 
 
+## Colliders that actually take part in collision. A parked one exists but collides with
+## nothing, so it must not be counted here.
 func _count_bodies() -> int:
+	var total: int = 0
+	for coord in manager.get_chunk_coords():
+		if manager._server_backend.has_active_body(coord):
+			total += 1
+	return total
+
+
+## Colliders that exist at all, parked or not.
+func _count_built() -> int:
 	var total: int = 0
 	for coord in manager.get_chunk_coords():
 		if manager._server_backend.has_body(coord):
@@ -808,7 +968,7 @@ func _count_bodies() -> int:
 
 
 func test_collision_policy_all_builds_every_chunk() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	_use_servers()
 	assert_eq(_count_bodies(), 4, "ALL must give every active chunk a collider.")
 
@@ -820,34 +980,134 @@ func test_collision_policy_none_builds_nothing() -> void:
 
 
 func test_collision_policy_culled_builds_nothing_until_culling_runs() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 
-	# This is the whole point of CULLED: releasing a collider does not return its
+	# This is the whole point of LAZY: releasing a collider does not return its
 	# physics-server memory, so a collider outside the radius must never be built at all.
 	assert_eq(_count_bodies(), 0,
-		"CULLED must not build colliders before a radius has been reported.")
+		"LAZY must not build colliders before a radius has been reported.")
 
 	# A 3 metre radius at the origin reaches only chunk (0,0) of this 10 metre grid.
 	manager.update_collision_culling(Vector3.ZERO, 3.0)
-	assert_eq(_count_bodies(), 1, "CULLED must build exactly the chunk inside the radius.")
+	assert_eq(_count_bodies(), 1, "LAZY must build exactly the chunk inside the radius.")
 	assert_true(manager._server_backend.has_body(Vector2i(0, 0)),
 		"The built collider must be the chunk under the query point.")
 
 
+##@@
+# --- PARKING AND THE RETENTION LIMIT ---
+
+
+func test_leaving_the_radius_parks_instead_of_freeing() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	manager.collision_retain_limit = 64
+	_use_servers()
+
+	manager.update_collision_culling(Vector3.ZERO, 3.0)
+	var record = manager._server_backend.get_debug_record(Vector2i(0, 0))
+	var shape_before: ConcavePolygonShape3D = record.shape
+	assert_not_null(shape_before, "Precondition: the chunk was built.")
+
+	manager.update_collision_culling(Vector3(900.0, 0.0, -900.0), 3.0)
+	assert_false(manager._server_backend.has_active_body(Vector2i(0, 0)),
+		"A chunk outside the radius must stop colliding.")
+	assert_true(manager._server_backend.has_body(Vector2i(0, 0)),
+		"...but its collider must still exist, parked rather than destroyed.")
+	assert_eq(record.shape, shape_before,
+		"Parking must keep the very same shape object, not rebuild anything.")
+
+
+func test_returning_to_a_parked_chunk_reuses_its_shape() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	manager.collision_retain_limit = 64
+	_use_servers()
+
+	manager.update_collision_culling(Vector3.ZERO, 3.0)
+	var record = manager._server_backend.get_debug_record(Vector2i(0, 0))
+	var shape_before: ConcavePolygonShape3D = record.shape
+
+	manager.update_collision_culling(Vector3(900.0, 0.0, -900.0), 3.0)
+	manager.update_collision_culling(Vector3.ZERO, 3.0)
+
+	assert_true(manager._server_backend.has_active_body(Vector2i(0, 0)),
+		"Coming back must switch the collider on again.")
+	assert_eq(record.shape, shape_before,
+		"Returning must reuse the parked shape rather than build a new one.")
+
+
+func test_retention_limit_frees_the_least_recently_parked() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	manager.collision_retain_limit = 2
+	_use_servers()
+	var backend = manager._server_backend
+
+	# Park three chunks in a known order by visiting each and then leaving.
+	for coord: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)]:
+		backend.set_chunk_collision_enabled(coord, true)
+		backend.set_chunk_collision_enabled(coord, false)
+
+	assert_eq(backend.get_debug_parked_count(), 2,
+		"The parked list must never exceed the retention limit.")
+	assert_false(backend.has_body(Vector2i(0, 0)),
+		"The chunk parked FIRST is the one actually released when the limit is exceeded.")
+	assert_true(backend.has_body(Vector2i(1, 0)), "The newer entries survive.")
+	assert_true(backend.has_body(Vector2i(0, 1)), "The newest entry survives.")
+
+
+func test_retention_limit_zero_frees_immediately() -> void:
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	manager.collision_retain_limit = 0
+	_use_servers()
+	var backend = manager._server_backend
+
+	backend.set_chunk_collision_enabled(Vector2i(0, 0), true)
+	assert_true(backend.has_body(Vector2i(0, 0)), "Precondition: built.")
+
+	backend.set_chunk_collision_enabled(Vector2i(0, 0), false)
+	assert_false(backend.has_body(Vector2i(0, 0)),
+		"A limit of zero must destroy the collider straight away.")
+	assert_eq(backend.get_debug_parked_count(), 0, "Nothing may be retained.")
+
+
+func test_rebuilding_terrain_does_not_wake_a_parked_collider() -> void:
+	# body_add_shape() always attaches an ENABLED shape, so a terrain change under a parked
+	# collider could silently switch it back on.
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
+	manager.collision_retain_limit = 64
+	_use_servers()
+	var backend = manager._server_backend
+	var coord := Vector2i(0, 0)
+
+	backend.set_chunk_collision_enabled(coord, true)
+	backend.set_chunk_collision_enabled(coord, false)
+	assert_false(backend.has_active_body(coord), "Precondition: parked.")
+
+	manager.set_height_at(3, 3, 9.0)
+	manager._update_single_chunk(coord)
+
+	assert_false(backend.has_active_body(coord),
+		"A parked collider must stay parked across a terrain rebuild.")
+	assert_true(backend.has_body(coord), "...while still existing.")
+
+
 func test_collision_policy_culled_releases_chunks_that_leave_the_radius() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	_use_servers()
 
 	manager.update_collision_culling(Vector3(10.0, 0.0, -10.0), 40.0)
 	assert_eq(_count_bodies(), 4, "A wide radius must build every chunk.")
 
 	manager.update_collision_culling(Vector3(900.0, 0.0, -900.0), 5.0)
-	assert_eq(_count_bodies(), 0, "Leaving the area must release every collider.")
+	assert_eq(_count_bodies(), 0, "Leaving the area must stop every collider from colliding.")
+	# Parked rather than destroyed, so coming back costs a flag flip instead of a rebuild.
+	assert_eq(_count_built(), 4, "Within the retain limit the colliders stay built.")
+	assert_eq(manager._server_backend.get_debug_parked_count(), 4,
+		"All four must be recorded as parked.")
 
 
 func test_switching_policy_to_none_releases_existing_colliders() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	_use_servers()
 	assert_eq(_count_bodies(), 4, "Precondition: ALL built the colliders.")
 
@@ -860,7 +1120,7 @@ func test_switching_policy_to_none_releases_existing_colliders() -> void:
 
 
 func test_collision_overlay_draws_one_instance_per_live_collider() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	manager.collision_debug_draw = LowPolyTerrainManager.CollisionDebugDraw.ALWAYS
 	_use_servers()
 
@@ -869,7 +1129,7 @@ func test_collision_overlay_draws_one_instance_per_live_collider() -> void:
 
 
 func test_collision_overlay_tracks_the_culling_radius() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.CULLED
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.LAZY
 	manager.collision_debug_draw = LowPolyTerrainManager.CollisionDebugDraw.ALWAYS
 	_use_servers()
 
@@ -883,11 +1143,11 @@ func test_collision_overlay_tracks_the_culling_radius() -> void:
 
 	manager.update_collision_culling(Vector3(900.0, 0.0, -900.0), 5.0)
 	assert_eq(manager._server_backend.get_debug_collision_overlay_count(), 0,
-		"The overlay must disappear together with the collider.")
+		"A parked collider must vanish from the overlay: it collides with nothing.")
 
 
 func test_collision_overlay_can_be_toggled_off_again() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	manager.collision_debug_draw = LowPolyTerrainManager.CollisionDebugDraw.ALWAYS
 	_use_servers()
 	assert_eq(manager._server_backend.get_debug_collision_overlay_count(), 4,
@@ -899,7 +1159,7 @@ func test_collision_overlay_can_be_toggled_off_again() -> void:
 
 
 func test_collision_overlay_is_off_by_default_in_tests() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	_use_servers()
 
 	# FOLLOW_DEBUG_MENU resolves to SceneTree.debug_collisions_hint, which is false unless the
@@ -915,7 +1175,7 @@ func test_collision_overlay_is_off_by_default_in_tests() -> void:
 
 
 func test_deactivating_a_chunk_releases_its_collider() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	_use_servers()
 	assert_true(manager._server_backend.has_body(Vector2i(0, 0)),
 		"Precondition: the chunk starts with a collider.")
@@ -931,7 +1191,7 @@ func test_deactivating_a_chunk_releases_its_collider() -> void:
 
 
 func test_collider_follows_a_regenerated_mesh() -> void:
-	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.ALL
+	manager.runtime_collision = LowPolyTerrainManager.RuntimeCollision.PREBUILT
 	_use_servers()
 
 	var coord := Vector2i(0, 0)
@@ -949,6 +1209,9 @@ func test_collider_follows_a_regenerated_mesh() -> void:
 	assert_ne(faces_after, faces_before,
 		"The collider must be rebuilt when the render mesh changes, not frozen on frame one.")
 
-	# And it must agree with what is actually being drawn.
-	assert_eq(faces_after, (manager.get_chunk_mesh(coord) as ArrayMesh).get_faces(),
+	# And it must agree with what is actually being drawn. Compared through build_face_soup(),
+	# the same route the collider is built from; ArrayMesh.get_faces() reads back the mesh's
+	# compressed vertex storage and would differ in the last few decimals.
+	assert_eq(faces_after,
+		LowPolyTerrainMeshBuilder.build_face_soup(manager.get_chunk_mesh(coord)),
 		"Collider geometry must match the rendered mesh exactly.")

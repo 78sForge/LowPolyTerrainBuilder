@@ -269,6 +269,36 @@ static func build_deactivated_preview_mesh(chunk_size: int, cell_size: float) ->
 	return st_box.commit()
 
 
+## Returns a mesh as a flat triangle soup, three vertices per face.
+##
+## Deliberately NOT ArrayMesh.get_faces(). That call caches its result inside the mesh
+## permanently - measured at about 88 KB per chunk, never released - which is what made
+## released colliders appear to hold on to most of their memory, and what made the editor
+## brush accumulate memory for every chunk the mouse ever crossed.
+##
+## De-indexing the surface arrays by hand produces the same soup with no permanent cost, and
+## measured roughly three times faster. The values differ from get_faces() by around 5e-5,
+## because get_faces() reads back the mesh's compressed vertex storage while the surface
+## arrays are uncompressed. That is far below anything physically meaningful here.
+static func build_face_soup(mesh: ArrayMesh) -> PackedVector3Array:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return PackedVector3Array()
+
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+
+	# An unindexed surface already is a triangle soup.
+	if indices.is_empty():
+		return verts
+
+	var soup := PackedVector3Array()
+	soup.resize(indices.size())
+	for i in range(indices.size()):
+		soup[i] = verts[indices[i]]
+	return soup
+
+
 ## Vertical offset of the chunk boundary grid overlay.
 const GRID_PLANE_Y: float = 0.05
 
