@@ -337,6 +337,25 @@ Collisions** to regenerate it instead.
 
 ## ⌨️ Viewport Hotkeys
 
-* **Tool Swapping:** `Q` (Raise), `W` (Lower), `E` (Flatten), `R` (Smooth), `A` (Activate), `S` (Deactivate).
 * **Brush Size:** Hold `,` (Comma) to shrink or `.` (Period) to expand the selection circle seamlessly.
 * **Polarity Inversion:** Hold `Shift` during sculpt passes to instantly flip `Raise` into `Lower`.
+* **Tool Swapping:** No key assigned out of the box. Pick your own under
+  `Editor Settings > Plugins > Low Poly Terrain Builder > Shortcuts`, then click the toolbar
+  buttons or use your key.
+
+### Why the tools ship without a shortcut
+
+While a terrain node is selected the plugin sees viewport keys first and consumes the ones it
+recognises, so any default would take that key away from Godot for the whole editing session.
+The 3D viewport has none to spare: letters drive the tool modes, freelook and the
+Blender-style instant transforms, both number rows switch the view, and every modifier fails
+somewhere - `Alt` is special-character and dead-key input on macOS and the menu mnemonic on
+Windows, `Ctrl` and `Cmd` are reserved, and `Shift` is the freelook speed modifier. Rather than
+pick a conflict on your behalf, the plugin leaves the choice to you.
+
+Before assigning a key, check it against Godot's own bindings in
+`Editor Settings > Shortcuts`, filtered by `spatial_editor`. That list is authoritative for
+your Godot version, where any list reproduced here would not be.
+
+Existing installs keep whatever they already have: a default is only written when the setting
+does not exist yet.

@@ -17,13 +17,25 @@ const BRUSH_COLORS: Dictionary = {
 const FallBackColor := Color(1.0, 1.0, 1.0, 0.9) # Default fallback color
 # Centralized definition array driven directly by the manager's master enum
 # Formatting: [Enum/Index, Identifier String, Display Name, Icon Path, Default Key String]
+#
+# The brush tools deliberately ship WITHOUT a default key. _forward_3d_gui_input() consumes
+# whatever it matches, so any default would take that key away from Godot for as long as a
+# terrain node is selected - and the 3D viewport has no key left to spare: letters are taken by
+# the tool modes, freelook and the Blender-style instant transforms, both number rows switch
+# the view, and every modifier fails on at least one platform (Alt is dead-key and special
+# character input on macOS and the menu mnemonic on Windows, Ctrl and Cmd are reserved, Shift
+# is the freelook speed modifier). Users assign these themselves under
+# Editor Settings > Plugins > Low Poly Terrain Builder > Shortcuts.
+#
+# Comma and Period are the exception: Godot leaves them alone in the 3D viewport, and they sit
+# in the same place on QWERTY and QWERTZ alike.
 const BRUSH_TOOL_DEFINITIONS: Array = [
-	[LowPolyTerrainManager.BrushMode.RAISE, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", "Q"],
-	[LowPolyTerrainManager.BrushMode.LOWER, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", "W"],
-	[LowPolyTerrainManager.BrushMode.FLATTEN, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", "E"],
-	[LowPolyTerrainManager.BrushMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", "R"],
-	[LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", "A"],
-	[LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", "S"],
+	[LowPolyTerrainManager.BrushMode.RAISE, "raise_terrain", "Raise", "res://addons/lowpolyterrain/icons/raise.svg", ""],
+	[LowPolyTerrainManager.BrushMode.LOWER, "lower_terrain", "Lower", "res://addons/lowpolyterrain/icons/lower.svg", ""],
+	[LowPolyTerrainManager.BrushMode.FLATTEN, "flatten_terrain", "Flatten", "res://addons/lowpolyterrain/icons/flatten.svg", ""],
+	[LowPolyTerrainManager.BrushMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", ""],
+	[LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", ""],
+	[LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", ""],
 	[LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"], # Plugin specific helper index
 	[LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]   # Plugin specific helper index
 ]
@@ -212,22 +224,9 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 		
 	# Process brush size and tool switching shortcuts inside the 3D viewport
 	if event is InputEventKey and event.pressed:
-		for mode in brush_shortcuts.keys():
-			var sc: Shortcut = brush_shortcuts[mode]
-			if sc.matches_event(event):
-				if mode == LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS:
-					active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
-					active_manager.notify_property_list_changed.call_deferred()
-					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
-				elif mode == LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS:
-					active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
-					active_manager.notify_property_list_changed.call_deferred()
-					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
-				else:
-					if not event.echo:
-						_select_brush_mode(mode)
-						return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
-		
+		if _try_handle_brush_shortcut(event as InputEventKey):
+			return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
+
 	# Track and update the 2D label and 3D gizmo position on mouse motion
 	if event is InputEventMouseMotion:
 		_update_gizmo_position(viewport_camera, event.position)
@@ -275,6 +274,69 @@ var mouse_label: Label = null
 var _viewport_container: Control = null
 
 
+## Applies whichever brush shortcut matches the event. Returns true when one did.
+##
+## Shared by the two delivery paths below rather than living in either, because they differ
+## only in how the event reaches the plugin, not in what it should do.
+func _try_handle_brush_shortcut(event: InputEventKey) -> bool:
+	if active_manager == null:
+		return false
+
+	for mode: int in brush_shortcuts.keys():
+		var sc: Shortcut = brush_shortcuts[mode]
+		if not sc.matches_event(event):
+			continue
+
+		if mode == LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS:
+			active_manager.brush_radius = clampi(active_manager.brush_radius - 1, 1, 50)
+			active_manager.notify_property_list_changed.call_deferred()
+			return true
+		elif mode == LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS:
+			active_manager.brush_radius = clampi(active_manager.brush_radius + 1, 1, 50)
+			active_manager.notify_property_list_changed.call_deferred()
+			return true
+		elif not event.echo:
+			# Auto-repeat must not re-trigger a tool switch, but it is welcome on the radius
+			# keys above, where holding the key is the intended way to resize the brush.
+			_select_brush_mode(mode)
+			return true
+
+	return false
+
+
+## Second delivery path for the brush shortcuts, used when the 3D viewport does not hold
+## keyboard focus.
+##
+## _forward_3d_gui_input() is driven by the viewport's gui_input, and a Control only receives
+## key events while it is focused. Mouse events need no focus, so right after the editor starts
+## the brush ring already tracks the cursor while every shortcut stays dead until the user
+## clicks into the viewport once - which is exactly what made the radius keys look broken.
+##
+## Gated on the pointer being over a VISIBLE 3D viewport: the container keeps its rect while
+## the Script editor is open, so without the visibility check typing a comma into a script
+## would resize the brush.
+func _shortcut_input(event: InputEvent) -> void:
+	if active_manager == null:
+		return
+
+	var key_event: InputEventKey = event as InputEventKey
+	if key_event == null or not key_event.pressed:
+		return
+	if not _pointer_is_over_viewport():
+		return
+
+	if _try_handle_brush_shortcut(key_event):
+		get_viewport().set_input_as_handled()
+
+
+## True while the pointer sits over a 3D viewport that is actually on screen.
+func _pointer_is_over_viewport() -> bool:
+	var container: Control = _get_viewport_container()
+	if container == null or not container.is_visible_in_tree():
+		return false
+	return container.get_global_rect().has_point(container.get_global_mouse_position())
+
+
 ## Resolves the Control the 3D viewport is drawn into, so the plugin can tell whether the
 ## mouse is still over it.
 func _get_viewport_container() -> Control:
@@ -299,11 +361,7 @@ func _process(_delta: float) -> void:
 	if active_manager == null:
 		return
 
-	var container: Control = _get_viewport_container()
-	if container == null:
-		return
-
-	if not container.get_global_rect().has_point(container.get_global_mouse_position()):
+	if not _pointer_is_over_viewport():
 		_hide_brush_visuals()
 
 
@@ -543,6 +601,47 @@ func _initialize_editor_shortcuts() -> void:
 		brush_shortcuts[mode_idx] = shortcut
 
 
+## Where a user assigns the brush shortcuts, shown on every button that has none.
+const SHORTCUT_SETTINGS_HINT: String = \
+	"No shortcut assigned.\nEditor Settings > Plugins > Low Poly Terrain Builder > Shortcuts"
+
+
+## Returns a shortcut's display text, or an empty string when it is unassigned.
+##
+## An unassigned shortcut is NOT an empty one: _initialize_editor_shortcuts() always appends an
+## InputEventKey, it just carries keycode 0. So events.is_empty() reports false and
+## get_as_text() returns the literal "(unset)", which would otherwise reach the button as
+## "Raise ((unset))". Such a shortcut matches no event at all, so it is only a display concern.
+static func _shortcut_display_text(shortcut: Shortcut) -> String:
+	if shortcut == null or shortcut.events.is_empty():
+		return ""
+
+	var first: InputEventKey = shortcut.events[0] as InputEventKey
+	if first == null or first.keycode == KEY_NONE:
+		return ""
+
+	# get_as_text() spells these out, while the settings field and the viewport both show the
+	# actual character.
+	var text: String = shortcut.get_as_text()
+	if text == "Comma":
+		return ","
+	if text == "Period":
+		return "."
+	return text
+
+
+## Applies a button's caption and tooltip for the shortcut it currently carries, if any.
+func _apply_shortcut_labels(btn: Button, label_text: String, mode_idx: int) -> void:
+	var shortcut_text: String = _shortcut_display_text(brush_shortcuts.get(mode_idx) as Shortcut)
+	if shortcut_text.is_empty():
+		btn.text = label_text
+		btn.tooltip_text = "%s\n%s" % [label_text, SHORTCUT_SETTINGS_HINT]
+		return
+
+	btn.text = "%s (%s)" % [label_text, shortcut_text]
+	btn.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
+
+
 ## Generates the modern horizontal Radio-Button toolbar interface driven by the central constant.
 func _create_brush_ui_panel() -> void:
 	if brush_panel_container: 
@@ -584,19 +683,7 @@ func _create_brush_ui_panel() -> void:
 				btn.add_theme_color_override("icon_hover_color", hover_color)
 				btn.add_theme_color_override("icon_focus_color", hover_color)
 				
-		var shortcut_node = brush_shortcuts.get(mode_idx)
-		if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
-			var shortcut_text: String = shortcut_node.get_as_text()
-			
-			if shortcut_text == "Comma": 
-				shortcut_text = ","
-			if shortcut_text == "Period": 
-				shortcut_text = "."
-			
-			btn.text = "%s (%s)" % [label_text, shortcut_text]
-			btn.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
-		else:
-			btn.text = label_text
+		_apply_shortcut_labels(btn, label_text, mode_idx)
 
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
@@ -673,11 +760,9 @@ func _on_editor_settings_changed() -> void:
 					label_text = def[2]
 					break
 					
-			var shortcut_node = brush_shortcuts.get(mode_idx)
-			if shortcut_node and shortcut_node is Shortcut and not shortcut_node.events.is_empty():
-				var shortcut_text: String = shortcut_node.get_as_text()
-				child.text = "%s (%s)" % [label_text, shortcut_text]
-				child.tooltip_text = "%s (%s)" % [label_text, shortcut_text]
+			# Unconditional, unlike before: clearing a shortcut in the Editor Settings has to
+			# drop the key from the caption too, not leave the previous one showing.
+			_apply_shortcut_labels(child as Button, label_text, mode_idx)
 
 ## Triggered dynamically whenever any property (like brush_strength) is modified inside the inspector.
 func _on_manager_property_changed() -> void:
