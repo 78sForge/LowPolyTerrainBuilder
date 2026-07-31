@@ -1051,6 +1051,29 @@ func _smooth_entire_terrain() -> void:
 
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
+## The brush mode that actually runs for the given modifier state.
+##
+## Public because the editor plugin needs the very same answer to colour the brush ring and
+## caption it. Keeping the mapping here rather than duplicating it there is what stops the
+## overlay from advertising one tool while the stroke performs another.
+func resolve_brush_mode(is_alternative: bool) -> BrushMode:
+	if not is_alternative:
+		return tool_mode
+
+	match tool_mode:
+		BrushMode.RAISE:
+			return BrushMode.LOWER
+		BrushMode.LOWER:
+			return BrushMode.RAISE
+		BrushMode.ACTIVATE_CHUNK:
+			return BrushMode.DEACTIVATE_CHUNK
+		BrushMode.DEACTIVATE_CHUNK:
+			return BrushMode.ACTIVATE_CHUNK
+
+	# FLATTEN and SMOOTH have no natural opposite, so the modifier reaches for SMOOTH.
+	return BrushMode.SMOOTH
+
+
 func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
 	
 	# [TEST-SAFE COOLDOWN] Bypass throttling if we are running automated history checks
@@ -1064,19 +1087,8 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 	var local_pos: Vector3 = to_local(world_pos)
 	
 	# Determine operation mode based on current selection and modifier keys
-	var mode: BrushMode = tool_mode
-	if is_alternative:
-		if tool_mode == BrushMode.RAISE:
-			mode = BrushMode.LOWER
-		elif tool_mode == BrushMode.LOWER:
-			mode = BrushMode.RAISE
-		elif tool_mode == BrushMode.ACTIVATE_CHUNK:
-			mode = BrushMode.DEACTIVATE_CHUNK
-		elif tool_mode == BrushMode.DEACTIVATE_CHUNK:
-			mode = BrushMode.ACTIVATE_CHUNK
-		else:
-			mode = BrushMode.SMOOTH
-		
+	var mode: BrushMode = resolve_brush_mode(is_alternative)
+
 	# --- RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
 	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
 		if not show_deactivated_chunks:

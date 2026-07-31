@@ -45,6 +45,10 @@ const BRUSH_TOOL_DEFINITIONS: Array = [
 var active_manager: LowPolyTerrainManager = null
 var is_drawing: bool = false
 
+## True while Shift is held, which temporarily inverts the active tool. Tracked so the ring
+## colour and the caption can follow the stroke instead of describing the toolbar selection.
+var _shift_held: bool = false
+
 # Transient 3D mesh instance used as a visual preview tool inside the editor viewport
 var brush_gizmo: MeshInstance3D = null
 
@@ -233,6 +237,11 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if not active_manager:
 		return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
 		
+	# Events that carry the modifier update it immediately; _process() polls it as well, so a
+	# bare Shift press is picked up even when no event follows.
+	if event is InputEventWithModifiers:
+		_set_shift_held((event as InputEventWithModifiers).shift_pressed)
+
 	# Process brush size and tool switching shortcuts inside the 3D viewport
 	if event is InputEventKey and event.pressed:
 		if _try_handle_brush_shortcut(event as InputEventKey):
@@ -285,6 +294,17 @@ var mouse_label: Label = null
 var _viewport_container: Control = null
 
 
+## Records the Shift modifier and refreshes the brush overlays when it actually changed.
+##
+## Single entry point on purpose: the poll in _process() and any event that carries the
+## modifier both land here, so the ring colour and the caption cannot disagree about it.
+func _set_shift_held(held: bool) -> void:
+	if held == _shift_held:
+		return
+	_shift_held = held
+	_update_gizmo_scale()
+
+
 ## Applies whichever brush shortcut matches the event. Returns true when one did.
 ##
 ## Shared by the two delivery paths below rather than living in either, because they differ
@@ -329,11 +349,16 @@ func _try_handle_brush_shortcut(event: InputEventKey) -> bool:
 func _shortcut_input(event: InputEvent) -> void:
 	if active_manager == null:
 		return
+	if not _pointer_is_over_viewport():
+		return
+
+	# Also here, not only in _forward_3d_gui_input(): key events reach the viewport only while
+	# it holds keyboard focus, and this path does not depend on that.
+	if event is InputEventWithModifiers:
+		_set_shift_held((event as InputEventWithModifiers).shift_pressed)
 
 	var key_event: InputEventKey = event as InputEventKey
 	if key_event == null or not key_event.pressed:
-		return
-	if not _pointer_is_over_viewport():
 		return
 
 	if _try_handle_brush_shortcut(key_event):
@@ -374,6 +399,13 @@ func _process(_delta: float) -> void:
 
 	if not _pointer_is_over_viewport():
 		_hide_brush_visuals()
+		return
+
+	# Polled rather than read off an event. A bare modifier press does not reliably arrive as
+	# a key event in the viewport, so the event-driven version only noticed Shift once the
+	# mouse moved and something carried shift_pressed along. Gated on the pointer being over
+	# the viewport, so holding Shift while typing elsewhere leaves the brush alone.
+	_set_shift_held(Input.is_key_pressed(KEY_SHIFT))
 
 
 ## Hides both brush overlays. Never used to show them: the ring's visibility depends on whether
@@ -422,35 +454,69 @@ func _create_3d_brush_gizmo() -> void:
 	_update_gizmo_scale()
 
 
+## Builds the brush caption, listing only the settings that actually reach the given mode.
+##
+## Deliberately not the same set for every tool. brush_strength never reaches FLATTEN, which
+## interpolates towards a fixed target height, and brush_falloff_strength never reaches SMOOTH,
+## which always applies the full smoothstep curve. Printing them anyway would invite tuning a
+## value that does nothing.
+## Static and manager-parameterised so it can be unit tested; GUT cannot instantiate an
+## EditorPlugin, which is how the old caption kept its wrong tool name unnoticed.
+static func _build_brush_label(
+	manager: LowPolyTerrainManager,
+	mode_idx: int,
+	shift_held: bool
+) -> String:
+	if manager == null:
+		return ""
+
+	var mode_name: String = ""
+	for def in BRUSH_TOOL_DEFINITIONS:
+		# Check the specific Enum value from the first array slot (index 0)
+		if def[0] == mode_idx:
+			mode_name = def[2] as String
+			break
+
+	if shift_held:
+		# Named so the caption cannot be mistaken for the toolbar selection having changed.
+		mode_name += " (Shift)"
+
+	var parts := PackedStringArray()
+	parts.append("R: %d" % manager.brush_radius)
+
+	if mode_idx == LowPolyTerrainManager.BrushMode.RAISE \
+	or mode_idx == LowPolyTerrainManager.BrushMode.LOWER \
+	or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH:
+		parts.append("S: %.2f" % manager.brush_strength)
+
+	if mode_idx == LowPolyTerrainManager.BrushMode.RAISE \
+	or mode_idx == LowPolyTerrainManager.BrushMode.LOWER \
+	or mode_idx == LowPolyTerrainManager.BrushMode.FLATTEN:
+		parts.append("F: %.2f" % manager.brush_falloff_strength)
+
+	return "%s\n%s" % [mode_name, " | ".join(parts)]
+
+
 func _update_gizmo_scale() -> void:
 	if not brush_gizmo or not active_manager: 
 		return
 	
 	var ring_mesh: MeshInstance3D = brush_gizmo
-	var mode_idx: int = active_manager.tool_mode
+	# The mode the stroke would actually perform right now, Shift included. Using tool_mode
+	# here left the ring green and captioned "Activate Chunk" while Shift was deactivating.
+	var mode_idx: int = active_manager.resolve_brush_mode(_shift_held)
 	var current_radius: float = float(active_manager.brush_radius) * active_manager.cell_size
-	
+
 	var mat: StandardMaterial3D = ring_mesh.material_override
 	if mat:
 		if BRUSH_COLORS.has(mode_idx):
 			mat.albedo_color = BRUSH_COLORS[mode_idx]
 		else:
 			mat.albedo_color = FallBackColor
-			
-	# Safely extract text fields using absolute indexing to make MouseLabel visible
+
 	if mouse_label:
-		var mode_name: String = ""
-		for def in BRUSH_TOOL_DEFINITIONS:
-			# Check the specific Enum value from the first array slot (index 0)
-			if def[0] == mode_idx:
-				mode_name = def[2] as String
-				break
-				
-		if mode_idx == LowPolyTerrainManager.BrushMode.RAISE or mode_idx == LowPolyTerrainManager.BrushMode.LOWER or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH: 
-			mouse_label.text = "%s\nR: %d | S: %.2f" % [mode_name, active_manager.brush_radius, active_manager.brush_strength]
-		else: 
-			mouse_label.text = "%s\nR: %d" % [mode_name, active_manager.brush_radius]
-			
+		mouse_label.text = _build_brush_label(active_manager, mode_idx, _shift_held)
+
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var segments: int = 36

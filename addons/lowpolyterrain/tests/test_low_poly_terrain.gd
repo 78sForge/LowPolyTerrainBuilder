@@ -841,3 +841,86 @@ func test_deactivated_preview_material_is_unlit() -> void:
 		"A lit marker changes colour with the scene lighting.")
 	assert_eq(mat.cull_mode, BaseMaterial3D.CULL_DISABLED,
 		"Looking at a deactivated chunk from below must still show it.")
+
+
+# --- BRUSH OVERLAY ---
+# The ring colour and the caption must describe the stroke that would actually happen, which
+# is not the toolbar selection whenever Shift is held.
+
+
+## Shift inverts the tool. The plugin reads this same function for the ring and the caption,
+## so it is the single place where overlay and stroke can agree or drift apart.
+func test_shift_resolves_to_the_inverted_brush_mode() -> void:
+	var expected: Dictionary = {
+		LowPolyTerrainManager.BrushMode.RAISE: LowPolyTerrainManager.BrushMode.LOWER,
+		LowPolyTerrainManager.BrushMode.LOWER: LowPolyTerrainManager.BrushMode.RAISE,
+		LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK:
+			LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK,
+		LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK:
+			LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK,
+		# Neither has a natural opposite, so the modifier reaches for SMOOTH.
+		LowPolyTerrainManager.BrushMode.FLATTEN: LowPolyTerrainManager.BrushMode.SMOOTH,
+		LowPolyTerrainManager.BrushMode.SMOOTH: LowPolyTerrainManager.BrushMode.SMOOTH,
+	}
+
+	for mode: int in expected:
+		manager.tool_mode = mode
+		assert_eq(manager.resolve_brush_mode(false), mode,
+			"Without Shift the selected tool must be used unchanged.")
+		assert_eq(manager.resolve_brush_mode(true), expected[mode],
+			"Shift on mode %d must resolve to %d." % [mode, expected[mode]])
+
+
+## The caption lists only what reaches the active tool.
+##
+## Regression: the falloff value was never shown at all, and strength was printed for tools
+## that ignore it. Tuning a slider that does nothing is worse than not seeing it.
+func test_brush_label_lists_only_the_settings_that_apply() -> void:
+	var plugin: GDScript = load("res://addons/lowpolyterrain/lowpolyterrain_plugin.gd")
+	manager.brush_radius = 7
+	manager.brush_strength = 2.5
+	manager.brush_falloff_strength = 0.35
+
+	var raise: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.RAISE, false)
+	assert_string_contains(raise, "R: 7", "Radius applies to every tool.")
+	assert_string_contains(raise, "S: 2.50", "Strength drives how far RAISE moves a vertex.")
+	assert_string_contains(raise, "F: 0.35", "Falloff shapes the RAISE brush edge.")
+
+	# FLATTEN interpolates towards a fixed target height and never reads brush_strength.
+	var flatten: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.FLATTEN, false)
+	assert_string_contains(flatten, "F: 0.35", "Falloff shapes the FLATTEN brush edge.")
+	assert_false(flatten.contains("S: "), "FLATTEN ignores brush_strength.")
+
+	# SMOOTH always applies the full smoothstep curve and never reads brush_falloff_strength.
+	var smooth: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.SMOOTH, false)
+	assert_string_contains(smooth, "S: 2.50", "SMOOTH scales its blend by brush_strength.")
+	assert_false(smooth.contains("F: "), "SMOOTH ignores brush_falloff_strength.")
+
+	# The chunk brushes work per chunk, so neither value reaches them.
+	var activate: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, false)
+	assert_string_contains(activate, "R: 7", "Radius still selects which chunks are hit.")
+	assert_false(activate.contains("S: "), "Chunk activation ignores brush_strength.")
+	assert_false(activate.contains("F: "), "Chunk activation ignores brush_falloff_strength.")
+
+
+## While Shift is held the caption must name the inverted tool, and say why.
+func test_brush_label_names_the_inverted_tool_while_shift_is_held() -> void:
+	var plugin: GDScript = load("res://addons/lowpolyterrain/lowpolyterrain_plugin.gd")
+
+	var plain: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.RAISE, false)
+	assert_string_contains(plain, "Raise", "Without Shift the selected tool is named.")
+	assert_false(plain.contains("Shift"), "No modifier hint without the modifier.")
+
+	# What the plugin passes in: resolve_brush_mode() first, then the caption.
+	manager.tool_mode = LowPolyTerrainManager.BrushMode.RAISE
+	var inverted: String = plugin._build_brush_label(
+		manager, manager.resolve_brush_mode(true), true)
+	assert_string_contains(inverted, "Lower",
+		"Shift lowers, so the caption must stop claiming Raise.")
+	assert_string_contains(inverted, "Shift",
+		"The hint separates a temporary inversion from a changed toolbar selection.")
