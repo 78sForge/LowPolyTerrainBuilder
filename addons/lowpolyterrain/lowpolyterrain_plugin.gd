@@ -61,12 +61,20 @@ const FULL_STRENGTH_DISTANCE_CELLS: float = 0.25
 ## Brush position of the previous sculpting frame, for the movement measure above.
 var _last_paint_position: Vector3 = Vector3.ZERO
 
-## Opacity of the brush disc. Kept low deliberately: the ring marks where the brush sits, and
-## the terrain being sculpted has to stay readable underneath it.
+## Default opacity of the brush disc. Kept low deliberately: the ring marks where the brush
+## sits, and the terrain being sculpted has to stay readable underneath it. Bright terrain can
+## swallow it entirely, which is why the value is a setting rather than a constant.
 const BRUSH_FILL_ALPHA: float = 0.15
 
-## Opacity of the brush outline, which is what actually carries the tool colour.
+## Default opacity of the brush outline, which is what actually carries the tool colour.
 const BRUSH_OUTLINE_ALPHA: float = 0.95
+
+## Where the two live in the Editor Settings. Deliberately not inspector properties on the
+## manager: how visible the brush needs to be depends on the terrain's brightness and on the
+## person looking at it, not on the terrain itself - and a per-manager value would have to be
+## set again for every terrain in the project, then saved into scenes that do not own it.
+const SETTING_FILL_ALPHA: String = "plugins/low_poly_terrain_builder/brush/fill_opacity"
+const SETTING_OUTLINE_ALPHA: String = "plugins/low_poly_terrain_builder/brush/outline_opacity"
 
 ## Segment count of the brush circle. Higher than the disc alone needed, because the outline
 ## now defines the silhouette and a coarse one reads as a polygon rather than a circle.
@@ -102,6 +110,7 @@ func _enter_tree() -> void:
 	set_process(false)
 
 	_initialize_editor_shortcuts()
+	_initialize_brush_appearance_settings()
 	_create_brush_ui_panel()
 	
 	# Listen for global editor setting updates
@@ -601,11 +610,13 @@ func _update_gizmo_scale() -> void:
 	# way is what makes the terrain under the brush readable while sculpting it.
 	if _brush_outline_material:
 		_brush_outline_material.albedo_color = Color(
-			tool_color.r, tool_color.g, tool_color.b, BRUSH_OUTLINE_ALPHA
+			tool_color.r, tool_color.g, tool_color.b,
+			_brush_opacity(SETTING_OUTLINE_ALPHA, BRUSH_OUTLINE_ALPHA)
 		)
 	if _brush_fill_material:
 		_brush_fill_material.albedo_color = Color(
-			tool_color.r, tool_color.g, tool_color.b, BRUSH_FILL_ALPHA
+			tool_color.r, tool_color.g, tool_color.b,
+			_brush_opacity(SETTING_FILL_ALPHA, BRUSH_FILL_ALPHA)
 		)
 
 	if mouse_label:
@@ -740,6 +751,38 @@ func _on_signal_brush_settings_changed() -> void:
 		_update_gizmo_scale()
 
 
+## Publishes the two brush opacity sliders in the Editor Settings.
+func _initialize_brush_appearance_settings() -> void:
+	var settings := EditorInterface.get_editor_settings()
+	if settings == null:
+		return
+	_register_opacity_setting(settings, SETTING_FILL_ALPHA, BRUSH_FILL_ALPHA)
+	_register_opacity_setting(settings, SETTING_OUTLINE_ALPHA, BRUSH_OUTLINE_ALPHA)
+
+
+## Declares one 0..1 slider, leaving a value the user already chose untouched.
+func _register_opacity_setting(settings: EditorSettings, path: String, fallback: float) -> void:
+	if not settings.has_setting(path):
+		settings.set_setting(path, fallback)
+
+	# Makes the revert arrow return to the shipped value rather than to zero.
+	settings.set_initial_value(path, fallback, false)
+	settings.add_property_info({
+		"name": path,
+		"type": TYPE_FLOAT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "0.0,1.0,0.01",
+	})
+
+
+## Reads one of the opacity settings, falling back to the shipped default.
+func _brush_opacity(path: String, fallback: float) -> float:
+	var settings := EditorInterface.get_editor_settings()
+	if settings == null or not settings.has_setting(path):
+		return fallback
+	return clampf(float(settings.get_setting(path)), 0.0, 1.0)
+
+
 ## Registers shortcuts cleanly inside the Editor Settings using the central constants template.
 func _initialize_editor_shortcuts() -> void:
 	var settings := EditorInterface.get_editor_settings()
@@ -766,16 +809,17 @@ func _initialize_editor_shortcuts() -> void:
 		# Enforce the default fallback state value explicitly as a clear string type
 		settings.set_initial_value(settings_path, default_key_str, false)
 		
-		# Explicitly register property info metadata to tell the editor UI this is a string
-		var property_info := {
+		# Explicitly register property info metadata to tell the editor UI this is a string.
+		# add_property_info(), not the 3.x-era add_custom_property_info(): that name no longer
+		# exists in Godot 4.7, so the has_method() guard here silently skipped the call and the
+		# shortcut settings were published without any type information at all.
+		settings.add_property_info({
 			"name": settings_path,
 			"type": TYPE_STRING,
 			"hint": PROPERTY_HINT_NONE,
 			"hint_string": ""
-		}
-		if settings.has_method("add_custom_property_info"):
-			settings.call("add_custom_property_info", property_info)
-			
+		})
+
 		var shortcut := Shortcut.new()
 		var key_event := InputEventKey.new()
 		
@@ -938,8 +982,13 @@ func _sync_ui_buttons_with_manager() -> void:
 
 ## Automatically fired when the user modifies any configuration inside the Editor Settings.
 func _on_editor_settings_changed() -> void:
+	# Applied before the early return below, so dragging an opacity slider is visible at once
+	# rather than only after the next brush event.
+	if brush_gizmo and active_manager:
+		_update_gizmo_scale()
+
 	if not brush_panel_container: return
-	
+
 	# Force clean refresh of internal shortcuts cache
 	_initialize_editor_shortcuts()
 	

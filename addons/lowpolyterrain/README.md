@@ -27,6 +27,7 @@ Key additions:
 * Resting Strokes: A stroke held on one spot applies at reduced strength instead of full force.
 * Brush Silhouette: A coloured outline over a barely tinted disc keeps the terrain readable.
 * Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
+* Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -380,6 +381,11 @@ Collisions** to regenerate it instead.
 * **Tool Swapping:** No key assigned out of the box. Pick your own under
   `Editor Settings > Plugins > Low Poly Terrain Builder > Shortcuts`, then click the toolbar
   buttons or use your key.
+* **Brush Visibility:** The ring is drawn as a coloured outline over a faint disc, so the terrain
+  underneath stays readable while you sculpt it. Bright terrain can swallow the default, so both
+  opacities are adjustable under
+  `Editor Settings > Plugins > Low Poly Terrain Builder > Brush`. They apply to every terrain,
+  and nothing about them is stored in your scenes.
 
 ### Why the tools ship without a shortcut
 
