@@ -141,14 +141,15 @@ func test_chunk_mesh_generation_creates_valid_triangles_and_correct_winding() ->
 	var chunk_local_heights_cliff := PackedFloat32Array()
 	chunk_local_heights_cliff.resize(vert_stride * vert_stride)
 	chunk_local_heights_cliff.fill(0.0)
-	chunk_local_heights_cliff[5 + 5 * vert_stride] = 50.0 
-	chunk.height_data = chunk_local_heights_cliff
-	
-	var current_h: float = chunk.height_data[5 + 5 * vert_stride]
-	var h_r: float = chunk.height_data[clampi(5 + 1, 0, chunk.chunk_size) + 5 * vert_stride]
-	var h_l: float = chunk.height_data[clampi(5 - 1, 0, chunk.chunk_size) + 5 * vert_stride]
-	var h_d: float = chunk.height_data[5 + clampi(5 + 1, 0, chunk.chunk_size) * vert_stride]
-	var h_u: float = chunk.height_data[5 + clampi(5 - 1, 0, chunk.chunk_size) * vert_stride]
+	chunk_local_heights_cliff[5 + 5 * vert_stride] = 50.0
+
+	# Read from the local window rather than from the chunk: the height data is deliberately
+	# not retained on the node, since it is dead weight once the mesh has been built.
+	var current_h: float = chunk_local_heights_cliff[5 + 5 * vert_stride]
+	var h_r: float = chunk_local_heights_cliff[clampi(5 + 1, 0, chunk.chunk_size) + 5 * vert_stride]
+	var h_l: float = chunk_local_heights_cliff[clampi(5 - 1, 0, chunk.chunk_size) + 5 * vert_stride]
+	var h_d: float = chunk_local_heights_cliff[5 + clampi(5 + 1, 0, chunk.chunk_size) * vert_stride]
+	var h_u: float = chunk_local_heights_cliff[5 + clampi(5 - 1, 0, chunk.chunk_size) * vert_stride]
 	
 	var diff_x: float = maxf(absf(current_h - h_r), absf(current_h - h_l))
 	var diff_z: float = maxf(absf(current_h - h_d), absf(current_h - h_u))

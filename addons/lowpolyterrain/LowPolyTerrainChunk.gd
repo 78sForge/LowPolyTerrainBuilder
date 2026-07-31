@@ -12,8 +12,10 @@ class_name LowPolyTerrainChunk
 var jitter_strength: float = 0.0
 var jitter_slope_threshold: float = 0.5
 
-# --- PERFORMANCE CRITICAL: Dense packed float storage array instead of a dynamic list ---
-var height_data: PackedFloat32Array = PackedFloat32Array()
+# NOTE: The height window is NOT stored on the chunk. It is only needed while the mesh is
+# being built, and keeping a copy per chunk duplicated the manager's entire height matrix
+# (measured at 111% of it, since neighbouring chunks each store the shared border row).
+# It is therefore passed straight through to the builder instead.
 var custom_material: Material = null
 
 
@@ -32,7 +34,6 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 	chunk_size = c_size
 	cell_size = cell_s
 	step_height = step_h
-	height_data = manager_data
 	jitter_strength = m_jitter
 	jitter_slope_threshold = m_threshold
 	custom_material = m_material
@@ -48,32 +49,37 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 
 	var vert_count: int = chunk_size + 1
 	var required_size: int = vert_count * vert_count
-	
-	if height_data.size() != required_size:
-		height_data.resize(required_size)
-		height_data.fill(0.0)
-	
+
+	# Self-healing against a mismatched window; the local copy is discarded again once the
+	# mesh has been generated.
+	var heights: PackedFloat32Array = manager_data
+	if heights.size() != required_size:
+		heights.resize(required_size)
+		heights.fill(0.0)
+
 	position = Vector3(
 		float(coord.x * chunk_size) * cell_size,
 		0.0,
 		float(-coord.y * chunk_size) * cell_size
 	)
-	generate_mesh()
+	generate_mesh(heights)
 
 
 ##@@
 
 ## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
-func generate_mesh() -> void:
-	if height_data.is_empty() or not visible:
+## The height window is a parameter rather than a field: it is dead weight once the mesh
+## exists, and storing it per chunk duplicated the manager's whole height matrix.
+func generate_mesh(heights: PackedFloat32Array) -> void:
+	if heights.is_empty() or not visible:
 		mesh = null
 		return
-	
+
 	# Delegates to the shared stateless builder so that the MeshInstance3D backend and the
 	# RenderingServer backend always emit bit-identical geometry from identical inputs.
 	mesh = LowPolyTerrainMeshBuilder.build_chunk_mesh(
-		chunk_coord, chunk_size, cell_size, height_data,
+		chunk_coord, chunk_size, cell_size, heights,
 		jitter_strength, jitter_slope_threshold
 	)
 	
@@ -87,8 +93,8 @@ func generate_mesh() -> void:
 ## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via fixed grid indexing.
 ## Currently not used !!!
-func generate_mesh_non_delaunay() -> void:
-	if height_data.is_empty() or not visible:
+func generate_mesh_non_delaunay(heights: PackedFloat32Array) -> void:
+	if heights.is_empty() or not visible:
 		mesh = null
 		return
 	var vert_count: int = chunk_size + 1
@@ -106,15 +112,15 @@ func generate_mesh_non_delaunay() -> void:
 			var is_edge: bool = (x == 0 or x == chunk_size or z == 0 or z == chunk_size)
 			var is_corner: bool = ((x == 0 or x == chunk_size) and (z == 0 or z == chunk_size))
 			
-			var current_h: float = height_data[x + z * vert_count]
+			var current_h: float = heights[x + z * vert_count]
 			
 			# Cross-examination check for completely flat interior spaces
 			var is_flat_center: bool = false
 			if not is_edge:
-				var h_r: float = height_data[(x+1) + z * vert_count]
-				var h_l: float = height_data[(x-1) + z * vert_count]
-				var h_d: float = height_data[x + (z+1) * vert_count]
-				var h_u: float = height_data[x + (z-1) * vert_count]
+				var h_r: float = heights[(x+1) + z * vert_count]
+				var h_l: float = heights[(x-1) + z * vert_count]
+				var h_d: float = heights[x + (z+1) * vert_count]
+				var h_u: float = heights[x + (z-1) * vert_count]
 				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and \
 				is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
 					is_flat_center = true
@@ -123,13 +129,13 @@ func generate_mesh_non_delaunay() -> void:
 			var is_flat_edge_point: bool = false
 			if is_edge and not is_corner:
 				if z == 0 or z == chunk_size:
-					var h_left: float = height_data[(x-1) + z * vert_count]
-					var h_right: float = height_data[(x+1) + z * vert_count]
+					var h_left: float = heights[(x-1) + z * vert_count]
+					var h_right: float = heights[(x+1) + z * vert_count]
 					if is_equal_approx(current_h, h_left) and is_equal_approx(current_h, h_right):
 						is_flat_edge_point = true
 				elif x == 0 or x == chunk_size:
-					var h_up: float = height_data[x + (z-1) * vert_count]
-					var h_down: float = height_data[x + (z+1) * vert_count]
+					var h_up: float = heights[x + (z-1) * vert_count]
+					var h_down: float = heights[x + (z+1) * vert_count]
 					if is_equal_approx(current_h, h_up) and is_equal_approx(current_h, h_down):
 						is_flat_edge_point = true
 			
@@ -152,10 +158,10 @@ func generate_mesh_non_delaunay() -> void:
 			# --- ADVANCED SLOPE & EDGE AWARE JITTER DAMPENING ---
 			var jitter := Vector3.ZERO
 			if not is_edge and jitter_strength > 0.0:
-				var h_r: float = height_data[clampi(x + 1, 0, chunk_size) + z * vert_count]
-				var h_l: float = height_data[clampi(x - 1, 0, chunk_size) + z * vert_count]
-				var h_d: float = height_data[x + clampi(z + 1, 0, chunk_size) * vert_count]
-				var h_u: float = height_data[x + clampi(z - 1, 0, chunk_size) * vert_count]
+				var h_r: float = heights[clampi(x + 1, 0, chunk_size) + z * vert_count]
+				var h_l: float = heights[clampi(x - 1, 0, chunk_size) + z * vert_count]
+				var h_d: float = heights[x + clampi(z + 1, 0, chunk_size) * vert_count]
+				var h_u: float = heights[x + clampi(z - 1, 0, chunk_size) * vert_count]
 				
 				var diff_x: float = maxf(absf(current_h - h_r), absf(current_h - h_l))
 				var diff_z: float = maxf(absf(current_h - h_d), absf(current_h - h_u))
