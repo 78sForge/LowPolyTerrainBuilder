@@ -394,4 +394,9 @@ static func build_deactivated_preview_material() -> StandardMaterial3D:
 	# A marker, not a surface. Lit, its colour would depend on where the scene's sun happens to
 	# be, so a chunk could read as deactivated in one scene and barely register in another.
 	red_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Same reasoning as the chunk grid: a marker that another terrain can hide is no marker.
+	# With several managers in one scene the markers of the lower one disappeared entirely
+	# behind the geometry of the upper one. The cost is that the quad also draws in front of
+	# terrain standing between it and the camera, which is the price of being unmissable.
+	red_mat.no_depth_test = true
 	return red_mat

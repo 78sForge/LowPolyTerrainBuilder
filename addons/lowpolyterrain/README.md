@@ -26,6 +26,7 @@ Key additions:
 * Frame-Paced Strokes: The brush applies once per frame instead of once per motion event.
 * Resting Strokes: A stroke held on one spot applies at reduced strength instead of full force.
 * Brush Silhouette: A coloured outline over a barely tinted disc keeps the terrain readable.
+* Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.

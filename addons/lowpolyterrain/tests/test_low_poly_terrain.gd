@@ -841,6 +841,10 @@ func test_deactivated_preview_material_is_unlit() -> void:
 		"A lit marker changes colour with the scene lighting.")
 	assert_eq(mat.cull_mode, BaseMaterial3D.CULL_DISABLED,
 		"Looking at a deactivated chunk from below must still show it.")
+	# With several terrains in one scene the markers of the lower manager vanished behind the
+	# geometry of the upper one. Same requirement the chunk grid already carries.
+	assert_true(mat.no_depth_test,
+		"A marker another terrain can hide is no marker.")
 
 
 # --- BRUSH OVERLAY ---
