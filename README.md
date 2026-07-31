@@ -3,6 +3,37 @@
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic
 low-poly landscapes inside the Godot 4 editor.
 
+## ✅ **Update information for v1.1.0 (The Server Backend Update):**
+Version 1.1.0 adds a second, node-free rendering and physics pipeline alongside the classic one,
+together with runtime collision control and a world-space height query.
+Key additions:
+* Backend Selector: A new 'terrain_backend' option at the top of the inspector picks the pipeline.
+* Node-Free Pipeline: SERVERS registers chunks straight with RenderingServer and PhysicsServer3D.
+* Lossless Switching: Both backends read the same data, so switching back and forth alters nothing.
+* Full Node Parity: Transform, scale, visibility and world membership are mirrored explicitly.
+* Group Compatibility: Raycasts still answer 'collider.is_in_group("Wall")' without any glue code.
+* Collision Policy: 'runtime_collision' offers PREBUILT (default), LAZY and NONE.
+* Retained Colliders: LAZY parks chunks leaving the radius, bounded by 'collision_retain_limit'.
+* Culling Targets: Assign nodes to 'collision_cull_targets' and the manager drives the culling.
+* Collider Overlay: 'collision_debug_draw' shows live colliders that Godot itself cannot display.
+* Runtime Height Query: 'get_height_at_world_coords(x, z)' resolves in O(1) with no physics query.
+* Chunk Grid Overlay: 'show_chunk_grid' replaces the per-chunk labels and stays legible at any zoom.
+* Chunk Activation Undo: Activate Chunk and Deactivate Chunk strokes are now undoable.
+* Brush Handling: The ring hides outside the viewport, and its reach is no longer capped.
+* Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
+* Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
+* Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
+* Leaner Chunks: Height windows and preview resources are no longer duplicated per chunk.
+* Layer Picker Fix: 'collision_layer' now uses the 3D physics layers instead of the 2D ones.
+* Setting Persistence: Inspector-hidden backend settings survive saving and reloading a scene.
+* Child Node Safety: Nodes parented to the manager are no longer destroyed on scene start.
+* Water Shader: Correct Compatibility-renderer depth and periodic noise without low-speed jitter.
+* Cleanup: Removed the unused non-Delaunay mesh generator and the per-chunk 3D labels.
+
+When switching an existing terrain to SERVERS: the baked '<Manager>_Collisions' container is
+removed and the bake button is hidden, because bodies are created at runtime instead. Raycast
+hits then resolve to the manager rather than to a StaticBody3D.
+
 ## ✅ **Update information for v1.0.13 (The Noise Layer & Compatibility Update):**
 Version 1.0.13 introduces procedural noise detailing and critical fixes for the OpenGL backend.
 Key additions:

@@ -28,8 +28,14 @@
 * **Static Typing:** Always use explicit static typing for variables, arguments, and function 
   return types (e.g., `var chunk_size: int = 16`, `func get_height() -> float`).
 * **Strict Modern API Execution:** Never use obsolete Godot 3.x or early 4.0 constructs.
-	* Use modern signal connection: `signal.connect(callable)` — NEVER use `connect("signal", 
-	  target)`.
+	* Use the Signal object for the WHOLE family, never the string-based Object methods: 
+	  `sig.connect(callable)`, `sig.disconnect(callable)`, `sig.is_connected(callable)`, 
+	  `sig.emit(args)`. NEVER `connect("sig", c)`, `disconnect("sig", c)`, 
+	  `is_connected("sig", c)` or `emit_signal("sig", args)`. The string form still works in 
+	  Godot 4 and is therefore easy to leave in place, but it is unchecked: a typo in the 
+	  signal name only surfaces at runtime, where the Signal form fails at parse time. Mixing 
+	  both within one file is the usual way this creeps back in — when touching any such call, 
+	  convert the others in that file too.
 	* Use modern string formatting: `"Value: %s" % var` or `str(var)` — NEVER use old string 
 	  utility methods.
 	* Use Lambda Callables for runtime migrations where appropriate, leveraging Godot 4.7+ 
