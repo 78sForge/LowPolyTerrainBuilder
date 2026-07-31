@@ -611,6 +611,24 @@ func test_culling_follows_a_moving_centre_across_baked_chunks() -> void:
 
 
 ##@@
+# --- INSPECTOR HINTS ---
+
+
+func test_collision_layer_uses_the_3d_physics_hint() -> void:
+	# The colliders are StaticBody3D / PhysicsServer3D, so the inspector has to read its layer
+	# names from the 3D section of Project Settings. A 2D hint labels the same checkboxes with
+	# the wrong names, which silently misleads anyone who named their layers.
+	for entry: Dictionary in manager.get_property_list():
+		if entry["name"] == "collision_layer":
+			assert_eq(int(entry["hint"]), PROPERTY_HINT_LAYERS_3D_PHYSICS,
+				"collision_layer must use the 3D physics layer hint, not the 2D one.")
+			assert_eq(int(entry["type"]), TYPE_INT,
+				"The value stays a plain int, so the hint change needs no migration.")
+			return
+	assert_true(false, "collision_layer must be present in the property list.")
+
+
+##@@
 # --- BAKED COLLIDER NAMING ---
 
 

@@ -413,7 +413,7 @@ enum CollisionDebugDraw {
 @export_storage var _derived_cull_radius: float = 0.0
 
 ## The physics layer bitmask assigned to the generated static colliders. Default is Layer 2.
-@export_flags_2d_physics var collision_layer: int = 2:
+@export_flags_3d_physics var collision_layer: int = 2:
 	set(v):
 		collision_layer = v
 		# Baked collider nodes read this value at bake time, so only the live server bodies
