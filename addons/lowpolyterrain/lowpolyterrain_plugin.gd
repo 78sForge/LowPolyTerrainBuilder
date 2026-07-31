@@ -49,6 +49,18 @@ var is_drawing: bool = false
 ## colour and the caption can follow the stroke instead of describing the toolbar selection.
 var _shift_held: bool = false
 
+## How much of the brush a stroke keeps while it rests on one spot. A held button applies once
+## per frame, so at full strength standing still digs as fast as a sweep across the terrain.
+const HELD_STILL_STRENGTH: float = 0.5
+
+## Distance, in cells, that returns a stroke to full strength. Kept small on purpose: only a
+## stroke that genuinely rests is meant to be softened, and any real drag clears this within a
+## single frame. Ramped rather than switched, so a slow drag cannot flicker between the two.
+const FULL_STRENGTH_DISTANCE_CELLS: float = 0.25
+
+## Brush position of the previous sculpting frame, for the movement measure above.
+var _last_paint_position: Vector3 = Vector3.ZERO
+
 # Transient 3D mesh instance used as a visual preview tool inside the editor viewport
 var brush_gizmo: MeshInstance3D = null
 
@@ -259,7 +271,12 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 			mouse_label.visible = false
 			
 		if is_drawing:
-			_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
+			# The stroke itself is applied once per frame from _process(), NOT here. Applying
+			# it per motion event meant a high polling rate mouse sculpted many times per
+			# frame - every one of them at the same spot, because _update_gizmo_position() is
+			# frame guarded. That was redundant work, and it tied the sculpting speed to the
+			# mouse hardware instead of to the brush settings.
+			# The event is still consumed, or dragging would orbit the editor camera.
 			return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 			
 	# Process active mouse click strokes for sculpting operations
@@ -272,16 +289,19 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 				var manager_undo_redo: EditorUndoRedoManager = get_undo_redo()
 				if active_manager.has_method("stroke_started"):
 					active_manager.stroke_started(manager_undo_redo)
+
+				# Seeded here, or the first held frame would measure its travel against
+				# wherever the PREVIOUS stroke ended and start at full strength by accident.
+				if brush_gizmo:
+					_last_paint_position = brush_gizmo.global_position
 			
 			# When the user releases the left mouse button, reset the session cache in the manager
 			# needed for FLATTEN mode where is_paint_stroke_active is set to true
-			if not is_drawing and active_manager:
-				active_manager.is_paint_stroke_active = false
-				if active_manager.has_method("stroke_finished"):
-					active_manager.stroke_finished()
-				
+			if not is_drawing:
+				_end_paint_stroke()
+
 			if is_drawing:
-				_process_paint_stroke(viewport_camera, event.position, event.shift_pressed)
+				_process_paint_stroke()
 				return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
 
 	return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
@@ -406,6 +426,49 @@ func _process(_delta: float) -> void:
 	# mouse moved and something carried shift_pressed along. Gated on the pointer being over
 	# the viewport, so holding Shift while typing elsewhere leaves the brush alone.
 	_set_shift_held(Input.is_key_pressed(KEY_SHIFT))
+
+	_drive_held_paint_stroke()
+
+
+## Keeps a held mouse button sculpting even while the cursor stays perfectly still.
+##
+## The stroke used to be driven purely by InputEventMouseMotion, so pressing the button applied
+## the brush exactly once and then waited for the mouse to move. Holding still - the natural way
+## to raise a single hill - did nothing at all.
+##
+## Rate is one application per frame, which is at or below what dragging already produced,
+## since the motion path applies the brush per motion event rather than per frame.
+func _drive_held_paint_stroke() -> void:
+	if not is_drawing:
+		return
+
+	# Also the safety net for a release this plugin never saw, for instance when the button
+	# came up outside the viewport: without it the stroke would silently resume on re-entry.
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_end_paint_stroke()
+		return
+
+	if brush_gizmo == null or not brush_gizmo.visible:
+		return
+
+	# Full strength as soon as the brush genuinely travels, softened while it rests.
+	var moved: float = brush_gizmo.global_position.distance_to(_last_paint_position)
+	var full_at: float = maxf(active_manager.cell_size * FULL_STRENGTH_DISTANCE_CELLS, 0.0001)
+	var travelled: float = clampf(moved / full_at, 0.0, 1.0)
+	_last_paint_position = brush_gizmo.global_position
+
+	_process_paint_stroke(lerpf(HELD_STILL_STRENGTH, 1.0, travelled))
+
+
+## Closes a sculpting stroke: drops the FLATTEN height lock and commits the undo action.
+func _end_paint_stroke() -> void:
+	is_drawing = false
+	if active_manager == null:
+		return
+
+	active_manager.is_paint_stroke_active = false
+	if active_manager.has_method("stroke_finished"):
+		active_manager.stroke_finished()
 
 
 ## Hides both brush overlays. Never used to show them: the ring's visibility depends on whether
@@ -609,10 +672,17 @@ func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
 		brush_gizmo.visible = false
 
 
-func _process_paint_stroke(camera: Camera3D, mouse_pos: Vector2, is_shift: bool) -> void:
-	if not active_manager: return
+## Applies the brush exactly once, at wherever the ring currently sits.
+##
+## Takes no camera or mouse position: the ring is placed by _update_gizmo_position() and its
+## world position IS the brush position. The two arguments this used to carry were never read.
+func _process_paint_stroke(strength_scale: float = 1.0) -> void:
+	if active_manager == null:
+		return
 	if brush_gizmo and brush_gizmo.visible:
-		active_manager.interact_at_world_position(brush_gizmo.global_position, is_shift)
+		active_manager.interact_at_world_position(
+			brush_gizmo.global_position, _shift_held, strength_scale
+		)
 
 
 ## Target handler fired when custom hotkeys or script calls update the brush properties.

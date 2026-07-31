@@ -1074,7 +1074,18 @@ func resolve_brush_mode(is_alternative: bool) -> BrushMode:
 	return BrushMode.SMOOTH
 
 
-func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> void:
+## Applies the brush once at a world position.
+##
+## `strength_scale` attenuates this single pass without touching brush_strength, so the caller
+## can soften a stroke without writing to a property the inspector is showing. The editor uses
+## it to weaken a stroke held still on one spot, which would otherwise dig at the full rate of
+## a moving one every single frame. It multiplies the falloff, which is the one term every
+## sculpting mode already scales by, so all of them attenuate consistently.
+func interact_at_world_position(
+	world_pos: Vector3,
+	is_alternative: bool,
+	strength_scale: float = 1.0
+) -> void:
 	
 	# [TEST-SAFE COOLDOWN] Bypass throttling if we are running automated history checks
 	if _active_undo_redo_manager == null:
@@ -1174,7 +1185,11 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 				else:
 					# RAISE, LOWER, and FLATTEN blend linearly between hard (1.0) and soft (smooth_curve)
 					final_falloff = lerpf(1.0, smooth_curve, brush_falloff_strength)
-				
+
+				# Every mode below multiplies by final_falloff, so attenuating it here is what
+				# makes strength_scale act uniformly instead of per-mode.
+				final_falloff *= strength_scale
+
 				match mode:
 					BrushMode.RAISE:
 						new_h += current_increment * final_falloff

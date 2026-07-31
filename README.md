@@ -22,6 +22,9 @@ Key additions:
 * Brush Handling: The ring hides outside the viewport, and its reach is no longer capped.
 * Brush Readout: The caption lists the falloff value, and only the settings the active tool reads.
 * Modifier Preview: Holding Shift recolours and recaptions the brush to the tool it will perform.
+* Held-Button Sculpting: Holding the mouse button keeps sculpting without moving the cursor.
+* Frame-Paced Strokes: The brush applies once per frame instead of once per motion event.
+* Resting Strokes: A stroke held on one spot applies at reduced strength instead of full force.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
