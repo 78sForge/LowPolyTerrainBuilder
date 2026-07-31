@@ -56,6 +56,7 @@ on my mobile device, achieving up to 1000 FPS within the editor.
 * **Multi-Backend Stability:** Fully optimized for Forward+, Mobile, and Compatibility renderers.
 * **Selectable Submission Backend:** Render chunks as nodes or register them with the servers.
 * **Radius-Based Collision Culling:** Enables physics near a target without per-collider scans.
+* **Full Editor Undo:** Sculpting, noise, smoothing and chunk activation all reverse with Ctrl+Z.
 
 ---
 
@@ -273,6 +274,23 @@ jittered terrain use a raycast instead.
 | **Collision Cull Radius** | Collision Generation | `float` | Metres of collision kept around each target. Pre-filled with `chunk_size * cell_size * 2` and re-derived on dimension changes unless you overrode it. |
 | **Collision Debug Draw** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Draws live colliders as a translucent wireframe, since Godot's own Visible Collision Shapes cannot see server bodies. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
+
+---
+
+## ↩️ Undo / Redo
+
+Every editing operation registers in the editor history and reverses with `Ctrl+Z`:
+
+| Operation | History entry | Stored |
+| :--- | :--- | :--- |
+| Raise / Lower / Flatten / Smooth brush | `Terrain Sculpt Step` | Sparse delta, only the vertices touched |
+| Activate / Deactivate Chunk brush | `Terrain Chunk Activation` | Sparse delta, only the chunks that flipped |
+| Generate Noise Terrain | `Generate Noise Terrain` | Full height matrix snapshot |
+| Smooth Entire Terrain | `Smooth Entire Terrain` | Full height matrix snapshot |
+| Switching to `SERVERS` | `Switch Terrain Backend (Remove Baked Collisions)` | The removed collider container |
+
+One brush stroke is one history entry, no matter how many paint events it consists of, and the
+delta always holds the state from *before* the stroke began.
 
 ---
 

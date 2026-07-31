@@ -331,6 +331,116 @@ func test_material_assignment_stability() -> void:
 
 
 ##@@
+# --- CHUNK ACTIVATION UNDO / REDO ---
+
+
+## Stand-in for EditorUndoRedoManager, which GUT cannot obtain outside the editor. Records the
+## do/undo payloads so the test can replay them exactly as the editor history would.
+class UndoRedoSpy extends RefCounted:
+	var action_name: String = ""
+	var commits: int = 0
+	var do_args: Array = []
+	var undo_args: Array = []
+
+	func create_action(name: String, _merge_mode: int = 0, _context: Object = null) -> void:
+		action_name = name
+
+	func add_do_method(_object: Object, _method: StringName, a: Variant, b: Variant) -> void:
+		do_args = [a, b]
+
+	func add_undo_method(_object: Object, _method: StringName, a: Variant, b: Variant) -> void:
+		undo_args = [a, b]
+
+	func commit_action(_execute: bool = true) -> void:
+		commits += 1
+
+
+func _arm_undo_spy() -> UndoRedoSpy:
+	var spy := UndoRedoSpy.new()
+	# stroke_started() is editor-gated, so the reference is injected the same way it would be.
+	manager._active_undo_redo_manager = spy
+	manager._undo_activity_delta.clear()
+	return spy
+
+
+func test_chunk_activation_registers_an_undoable_action() -> void:
+	var spy: UndoRedoSpy = _arm_undo_spy()
+
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager._commit_activity_stroke()
+
+	assert_eq(spy.commits, 1, "Toggling chunks must commit exactly one history action.")
+	assert_eq(spy.action_name, "Terrain Chunk Activation",
+		"The action needs a name of its own, distinct from a sculpt step.")
+	assert_gt((spy.do_args[0] as PackedInt32Array).size(), 0,
+		"At least one chunk must be recorded.")
+
+
+func test_chunk_activation_undo_restores_the_previous_state() -> void:
+	var spy: UndoRedoSpy = _arm_undo_spy()
+	var before: PackedByteArray = manager.chunk_activity_data.duplicate()
+
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager._commit_activity_stroke()
+	var after: PackedByteArray = manager.chunk_activity_data.duplicate()
+	assert_ne(after, before, "Precondition: the stroke actually changed something.")
+
+	manager._apply_activity_delta(spy.undo_args[0], spy.undo_args[1])
+	assert_eq(manager.chunk_activity_data, before, "Undo must restore the exact prior state.")
+
+	manager._apply_activity_delta(spy.do_args[0], spy.do_args[1])
+	assert_eq(manager.chunk_activity_data, after, "Redo must reapply the stroke exactly.")
+
+
+func test_chunk_activation_records_only_the_chunks_that_flipped() -> void:
+	# Deactivate once, then run the very same stroke again: the second pass changes nothing,
+	# so it must not enter the history at all.
+	var spy: UndoRedoSpy = _arm_undo_spy()
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	var recorded: int = manager._undo_activity_delta.size()
+	manager._commit_activity_stroke()
+
+	var second: UndoRedoSpy = _arm_undo_spy()
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager._commit_activity_stroke()
+
+	assert_gt(recorded, 0, "The first stroke must record the chunks it flipped.")
+	assert_eq(second.commits, 0,
+		"A stroke that changes nothing must not push an empty action onto the history.")
+
+
+func test_chunk_activation_delta_keeps_the_pre_stroke_value() -> void:
+	# A stroke is several paint events. Only the first change per chunk may be recorded,
+	# otherwise undo would restore an intermediate state instead of the original one.
+	var spy: UndoRedoSpy = _arm_undo_spy()
+	var before: PackedByteArray = manager.chunk_activity_data.duplicate()
+
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), true)
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	manager._commit_activity_stroke()
+
+	manager._apply_activity_delta(spy.undo_args[0], spy.undo_args[1])
+	assert_eq(manager.chunk_activity_data, before,
+		"Undo must jump back to the state before the whole stroke, not to a step within it.")
+
+
+func test_committing_consumes_the_activity_delta() -> void:
+	# The delta has to be drained on commit, otherwise the next stroke would push the same
+	# chunks into the history a second time and undo would walk back too far.
+	var spy: UndoRedoSpy = _arm_undo_spy()
+	manager.set_chunk_status_in_radius(Vector3(5.0, 0.0, -5.0), false)
+	assert_gt(manager._undo_activity_delta.size(), 0, "Precondition: something was recorded.")
+
+	manager._commit_activity_stroke()
+	assert_eq(manager._undo_activity_delta.size(), 0,
+		"Committing must consume the delta it just registered.")
+
+	manager._commit_activity_stroke()
+	assert_eq(spy.commits, 1, "A second commit without new changes must not add an action.")
+
+
+##@@
 # --- WORLD SPACE HEIGHT QUERY ---
 
 

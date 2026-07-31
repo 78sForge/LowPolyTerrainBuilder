@@ -487,8 +487,15 @@ func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 			if dist_sq <= radius_squared:
 				var index := cz * world_chunks.x + cx
 				if index < chunk_activity_data.size() and chunk_activity_data[index] != target_value:
+					# [SPARSE UNDO] Capture the previous state before overwriting it, exactly
+					# like the sculpting brushes do. Only the first change per chunk and stroke
+					# is recorded, so the entry always holds the pre-stroke value.
+					if (Engine.is_editor_hint() or _active_undo_redo_manager != null) \
+					and not _undo_activity_delta.has(index):
+						_undo_activity_delta[index] = chunk_activity_data[index]
+
 					chunk_activity_data[index] = target_value
-					
+
 					# Direct update of the changed without global rebuild
 					var coord := Vector2i(cx, cz)
 					if _has_chunk(coord):
@@ -531,6 +538,11 @@ var locked_flatten_height: float = 0.0
 
 # --- HIGH-PERFORMANCE SPARSE DELTA STORAGE FOR SCULPTING UNDO/REDO ---
 var _undo_sparse_delta: Dictionary = {} # Format: { global_index (int): old_height (float) }
+
+## Same idea for the Activate/Deactivate Chunk brushes.
+## Format: { chunk_index (int): old_activity (int) }
+var _undo_activity_delta: Dictionary = {}
+
 var _active_undo_redo_manager: Object = null
 
 
@@ -1328,8 +1340,9 @@ func stroke_started(editor_ur: Object) -> void:
 	# Securely cache the central engine manager reference
 	_active_undo_redo_manager = editor_ur
 	
-	# Reset the sparse delta matrix to ensure a clean state for the upcoming stroke
+	# Reset the sparse delta matrices to ensure a clean state for the upcoming stroke
 	_undo_sparse_delta.clear()
+	_undo_activity_delta.clear()
 
 
 
@@ -1339,9 +1352,15 @@ func stroke_finished() -> void:
 	if Engine.is_editor_hint():
 		notify_property_list_changed()
 
-	if not Engine.is_editor_hint() or _active_undo_redo_manager == null or _undo_sparse_delta.is_empty():
+	if not Engine.is_editor_hint() or _active_undo_redo_manager == null:
 		return
-		
+
+	# A stroke uses exactly one brush mode, so at most one of these ever has anything to say.
+	_commit_activity_stroke()
+
+	if _undo_sparse_delta.is_empty():
+		return
+
 	# Build precise, compressed primitive arrays for the native Undo pipeline
 	var affected_indices := PackedInt32Array()
 	var old_heights := PackedFloat32Array()
@@ -1379,6 +1398,69 @@ func stroke_finished() -> void:
 
 
 	_undo_sparse_delta.clear()
+
+
+## Registers the Activate/Deactivate Chunk stroke in the editor history, using the same thin
+## delta approach as sculpting: only the chunks that actually flipped are stored.
+func _commit_activity_stroke() -> void:
+	if _undo_activity_delta.is_empty():
+		return
+
+	var affected_indices := PackedInt32Array()
+	var old_states := PackedByteArray()
+	var new_states := PackedByteArray()
+
+	var total_elements: int = _undo_activity_delta.size()
+	affected_indices.resize(total_elements)
+	old_states.resize(total_elements)
+	new_states.resize(total_elements)
+
+	var cursor: int = 0
+	for idx in _undo_activity_delta.keys():
+		affected_indices[cursor] = idx
+		old_states[cursor] = int(_undo_activity_delta[idx])
+		new_states[cursor] = chunk_activity_data[idx]
+		cursor += 1
+
+	# Pass 'self' as the custom context so the action binds to the active scene tab.
+	_active_undo_redo_manager.create_action("Terrain Chunk Activation", 0, self)
+	_active_undo_redo_manager.add_do_method(
+		self,
+		_apply_activity_delta.get_method(),
+		affected_indices,
+		new_states
+	)
+	_active_undo_redo_manager.add_undo_method(
+		self,
+		_apply_activity_delta.get_method(),
+		affected_indices,
+		old_states
+	)
+	_active_undo_redo_manager.commit_action()
+
+	_undo_activity_delta.clear()
+
+
+## Targeted mutation callback for chunk activation, invoked by the engine's undo/redo pipeline.
+func _apply_activity_delta(indices: PackedInt32Array, states: PackedByteArray) -> void:
+	if indices.is_empty() or indices.size() != states.size():
+		return
+	if world_chunks.x <= 0:
+		return
+
+	for i in range(indices.size()):
+		var chunk_index: int = indices[i]
+		if chunk_index < 0 or chunk_index >= chunk_activity_data.size():
+			continue
+		chunk_activity_data[chunk_index] = states[i]
+
+		# Only the chunks that actually changed are refreshed, never the whole world.
+		_update_single_chunk(Vector2i(
+			chunk_index % world_chunks.x,
+			chunk_index / world_chunks.x
+		))
+
+	notify_property_list_changed()
 
 
 ## High-speed targeted mutation callback invoked by the engine's central undo/redo pipeline.
