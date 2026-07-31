@@ -331,7 +331,6 @@ func test_material_assignment_stability() -> void:
 	assert_eq(chunk.material_override, test_mat, "Custom material mapping failed on incremental single-chunk update.")
 
 
-##@@
 # --- CHUNK ACTIVATION UNDO / REDO ---
 
 
@@ -441,7 +440,6 @@ func test_committing_consumes_the_activity_delta() -> void:
 	assert_eq(spy.commits, 1, "A second commit without new changes must not add an action.")
 
 
-##@@
 # --- WORLD SPACE HEIGHT QUERY ---
 
 
@@ -561,7 +559,6 @@ func test_world_height_drift_stays_within_the_documented_bound() -> void:
 		% [measured["worst"], bound, measured["max_step"]])
 
 
-##@@
 # --- BAKED COLLIDER CULLING ---
 # These assert the ACTUAL disabled flags rather than the culling bookkeeping. Checking only
 # the bookkeeping is what let the first pass silently leave every collider switched on.
@@ -611,7 +608,6 @@ func test_culling_follows_a_moving_centre_across_baked_chunks() -> void:
 	assert_false(far.disabled, "The newly reached chunk must be switched on.")
 
 
-##@@
 # --- INSPECTOR HINTS ---
 
 
@@ -629,7 +625,6 @@ func test_collision_layer_uses_the_3d_physics_hint() -> void:
 	assert_true(false, "collision_layer must be present in the property list.")
 
 
-##@@
 # --- BAKED COLLIDER NAMING ---
 
 
@@ -661,7 +656,6 @@ func test_culling_resolves_shapes_by_type_not_by_name() -> void:
 	assert_not_null(legacy, "A pre-rename shape must keep working with the culling lookup.")
 
 
-##@@
 # --- TRIANGLE SOUP WITHOUT THE MESH CACHE ---
 # ArrayMesh.get_faces() stores its result inside the mesh permanently, measured at roughly
 # 88 KB per chunk and never released. That is what made a released collider appear to keep
@@ -708,7 +702,6 @@ func test_baked_collider_uses_the_uncached_soup() -> void:
 		"The baked shape must be built from the uncached soup.")
 
 
-##@@
 # --- CHUNK BOUNDARY GRID OVERLAY ---
 # Replaced the former per-chunk Label3D overlay. The builder is pure and runtime-safe, so the
 # geometry can be asserted here even though the overlay node itself is editor-only.

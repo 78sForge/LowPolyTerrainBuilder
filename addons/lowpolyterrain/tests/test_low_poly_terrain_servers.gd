@@ -58,7 +58,6 @@ func _sculpt_some_terrain() -> void:
 	manager.is_paint_stroke_active = false
 
 
-##@@
 # --- PILLAR 1: GRID ALLOCATION VALIDATION ---
 
 
@@ -341,7 +340,6 @@ func test_migration_preserves_heights_under_servers() -> void:
 		"Grid migration under SERVERS must carry existing heights across intact.")
 
 
-##@@
 # --- PILLAR 2: CARDINAL SEAM VERIFICATION ---
 
 
@@ -409,7 +407,6 @@ func _quantize(v: Vector3) -> String:
 	return "%.4f|%.4f|%.4f" % [v.x, v.y, v.z]
 
 
-##@@
 # --- PILLAR 3: WINDING ORDER INTEGRITY ---
 
 
@@ -477,7 +474,6 @@ func test_mesh_builder_matches_the_chunk_node_pipeline() -> void:
 		"The shared builder must reproduce the chunk node geometry exactly.")
 
 
-##@@
 # --- SERVER SPECIFIC BEHAVIOUR ---
 
 
@@ -544,7 +540,6 @@ func test_deactivated_previews_share_one_mesh_and_material() -> void:
 		% int(stats["instances"]))
 
 
-##@@
 # --- ANALYTIC PICKING ---
 
 
@@ -601,7 +596,6 @@ func test_analytic_pick_is_silent_when_previews_are_hidden() -> void:
 		"Hidden deactivated previews must not be pickable.")
 
 
-##@@
 # --- TERRAIN RAYCAST ---
 # These guard the brush picking path, which was untestable while it lived inside the
 # EditorPlugin. That is precisely how a hardcoded 5000-unit reach survived in it unnoticed.
@@ -716,7 +710,6 @@ func test_faces_cache_reuses_entries_until_the_mesh_changes() -> void:
 	assert_ne(third, first, "A rebuilt mesh must not serve stale cached geometry.")
 
 
-##@@
 # --- TRANSFORM SYNCHRONIZATION ---
 
 
@@ -754,7 +747,6 @@ func test_chunk_transforms_follow_the_manager() -> void:
 		"Server chunks must follow the manager transform, since no node does it for them.")
 
 
-##@@
 # --- DISTANCE BASED COLLISION CULLING ---
 
 
@@ -777,7 +769,6 @@ func test_collision_culling_selects_only_chunks_inside_the_radius() -> void:
 		"Moving far away must release every chunk again.")
 
 
-##@@
 # --- AUTOMATIC CULLING TARGETS ---
 
 
@@ -943,7 +934,6 @@ func test_collision_culling_skips_deactivated_chunks() -> void:
 		"A deactivated chunk must never be selected for collision.")
 
 
-##@@
 # --- RUNTIME COLLISION POLICY ---
 # GUT runs with Engine.is_editor_hint() == false, so these exercise the real runtime path.
 
@@ -995,7 +985,6 @@ func test_collision_policy_culled_builds_nothing_until_culling_runs() -> void:
 		"The built collider must be the chunk under the query point.")
 
 
-##@@
 # --- PARKING AND THE RETENTION LIMIT ---
 
 
@@ -1115,7 +1104,6 @@ func test_switching_policy_to_none_releases_existing_colliders() -> void:
 	assert_eq(_count_bodies(), 0, "Switching to NONE must release every collider.")
 
 
-##@@
 # --- COLLISION DEBUG OVERLAY ---
 
 
@@ -1170,7 +1158,6 @@ func test_collision_overlay_is_off_by_default_in_tests() -> void:
 		"No overlay instances may exist while the overlay is inactive.")
 
 
-##@@
 # --- REGRESSION GUARDS ---
 
 

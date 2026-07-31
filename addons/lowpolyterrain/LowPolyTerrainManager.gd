@@ -153,7 +153,6 @@ func _center_global_position_to_origin() -> void:
 	notify_property_list_changed()
 
 
-##@@
 
 ## Settings that only ever take effect for TerrainBackend.SERVERS.
 const SERVER_ONLY_PROPERTIES: PackedStringArray = [
@@ -336,7 +335,6 @@ func _generate_noise_terrain() -> void:
 ## Controls the sharpness of the brush edges. 0.0 is completely sharp/linear, 1.0 is soft smoothstep.
 @export_range(0.0, 1.0, 0.05) var brush_falloff_strength: float = 0.0
 
-##@@
 
 @export_group("Terrain Smoothing")
 ## Blending weight factor used during smoothing operations. Higher values result in more
@@ -475,6 +473,49 @@ enum CollisionDebugDraw {
 ## directly parallel to this manager.
 @export_tool_button("Bake Live Collisions", "StaticBody3D")
 var bake_collisions_button: Callable = func() -> void: _bake_live_collisions_as_child()
+
+
+## Extends the activity array to cover the current world size, defaulting only the entries
+## that were not there before to active.
+##
+## The regular resize path is _migrate_grid_data(), which remaps every chunk by coordinate and
+## is what "Apply Dimension Changes" uses. This is the safety net for an array that is short
+## for some other reason, such as data written by an older version. Filling the whole array
+## here instead would reactivate every chunk the user had deactivated.
+func _grow_chunk_activity_data() -> void:
+	var expected_total_chunks: int = world_chunks.x * world_chunks.y
+	var previous_count: int = chunk_activity_data.size()
+	if previous_count >= expected_total_chunks:
+		return
+
+	chunk_activity_data.resize(expected_total_chunks)
+	for i in range(previous_count, expected_total_chunks):
+		chunk_activity_data[i] = 1
+
+
+# One quad and one material shared by every deactivated chunk. Both used to be rebuilt inline
+# at two separate places, which allocated a fresh ArrayMesh and StandardMaterial3D per chunk
+# and meant a geometry fix had to be applied three times to take effect everywhere.
+var _preview_mesh_cache: ArrayMesh = null
+var _preview_mesh_dims: Vector2 = Vector2.ZERO
+var _preview_material_cache: StandardMaterial3D = null
+
+
+## The flat red quad marking a deactivated chunk, rebuilt only when the dimensions change.
+func _get_deactivated_preview_mesh() -> ArrayMesh:
+	var dims := Vector2(float(chunk_size), cell_size)
+	if _preview_mesh_cache == null or _preview_mesh_dims != dims:
+		_preview_mesh_cache = LowPolyTerrainMeshBuilder.build_deactivated_preview_mesh(
+			chunk_size, cell_size)
+		_preview_mesh_dims = dims
+	return _preview_mesh_cache
+
+
+## The material for that quad. A single instance serves the whole terrain.
+func _get_deactivated_preview_material() -> StandardMaterial3D:
+	if _preview_material_cache == null:
+		_preview_material_cache = LowPolyTerrainMeshBuilder.build_deactivated_preview_material()
+	return _preview_material_cache
 
 
 ## Helper function to check if a chunk at specific grid coordinates is currently active.
@@ -619,17 +660,17 @@ func _ready() -> void:
 	# Cache matrix constraints instantly for flat O(1) memory mapping functions
 	_recalculate_matrix_bounds()
 	
-	# Compute the dynamic expected collision container name to match the structural safety rules
-	var dynamic_collision_name: String = name + "_Collisions"
-	
-	# Purge old visual RAM chunk nodes on startup, while protecting transient brush gizmos,
-	# collisions, and assets
+	# Purge chunk nodes left over from a previous session. They are rebuilt from the height
+	# matrix below, so dropping them loses nothing.
+	#
+	# Only LowPolyTerrainChunk children, deliberately. This loop used to free everything that
+	# was not on a short list of known infrastructure names, which silently destroyed anything
+	# a user had parented to the terrain - a spawn marker, a prop, a light - and it did so at
+	# runtime too, because _ready() is not editor-only.
 	for child in get_children():
-		if child.name == dynamic_collision_name or child.name == "DEBUG_BrushGizmo_Transient" \
-		or child.name == "Terrain_Assets" or child.name == CHUNK_GRID_NODE_NAME:
-			continue
-		child.free()
-		
+		if child is LowPolyTerrainChunk:
+			child.free()
+
 	# Automatically spawn the persistent asset container inside the editor tree if it's missing
 	if Engine.is_editor_hint() and not has_node("Terrain_Assets"):
 		var asset_container := Node3D.new()
@@ -683,7 +724,6 @@ func get_height_at(x: int, z: int) -> float:
 		return global_height_data[z * _total_vertices_x + x]
 	return 0.0
 
-##@@
 
 ## Highly optimized O(1) mutation method tailored for zero-latency brush sculpting.
 func set_height_at(x: int, z: int, value: float) -> void:
@@ -691,7 +731,6 @@ func set_height_at(x: int, z: int, value: float) -> void:
 		global_height_data[z * _total_vertices_x + x] = value
 
 
-##@@
 
 ## Returns the terrain height at a world-space XZ position, in WORLD space.
 ##
@@ -706,10 +745,7 @@ func set_height_at(x: int, z: int, value: float) -> void:
 ##
 ##     jitter_strength * (height change between neighbouring vertices)
 ##
-## and was measured up to roughly 1.4x that product. Concretely, on a 3x3 chunk terrain with
-## cell_size 1.0 and jitter_strength 0.5: a gentle 0.26 m per cell relief deviates by 6 mm on
-## average and 4.5 cm at worst, while a steep 0.77 m per cell relief deviates by 10 cm on
-## average and 53 cm at worst. A larger cell_size reduces it, since the slope per metre drops.
+## A larger cell_size reduces the error, because the slope per metre drops with it.
 ##
 ## So: exact on unjittered terrain, good enough for placing props and AI queries on gentle
 ## jittered terrain, and not a substitute for a raycast on steep jittered terrain.
@@ -869,7 +905,6 @@ func _migrate_grid_data() -> void:
 	signal_brush_settings_changed.emit()
 
 
-##@@
 
 ## Cleans, tracks, and instantiates RAM-only chunks, assigning localized sub-arrays 
 ## extracted from the global packed continuous float matrix layout.
@@ -895,35 +930,31 @@ func rebuild_chunks_structure() -> void:
 		return
 
 	# 1. HARD CLEANUP: Remove ANY child chunk that falls outside the active world size boundaries
-	var dynamic_collision_name: String = name + "_Collisions"
 	chunks_dict.clear()
-	
+
 	# Pre-calculate spatial stride to safely reverse-engineer coordinates from world positions
 	var meters_per_chunk: float = float(chunk_size) * cell_size
-	
+
+	# Only chunk nodes are touched. Everything else belongs to the user or to the plugin's own
+	# infrastructure; freeing it here used to destroy any node parented to the terrain.
 	for child in get_children():
-		# Protect vital infrastructure containers from being wiped during resize passes
-		if child.name == "DEBUG_BrushGizmo_Transient" or child.name == dynamic_collision_name \
-		or child.name == "Terrain_Assets" or child.name == CHUNK_GRID_NODE_NAME:
+		if not (child is LowPolyTerrainChunk) or child.name.contains("@"):
 			continue
-			
-		if child is LowPolyTerrainChunk and not child.name.contains("@"):
-			var coord: Vector2i = child.chunk_coord
-			
-			# Robust position-based healing fallback for scene loading sequence synchronization
-			if coord == Vector2i.ZERO and not is_zero_approx(meters_per_chunk):
-				var cx_pos: int = roundi(child.position.x / meters_per_chunk)
-				var cz_pos: int = roundi(-child.position.z / meters_per_chunk)
-				coord = Vector2i(cx_pos, cz_pos)
-				child.chunk_coord = coord
-			
-			if coord.x >= world_chunks.x or coord.y >= world_chunks.y:
-				child.free() 
-			else:
-				chunks_dict[coord] = child
-		else:
+
+		var coord: Vector2i = child.chunk_coord
+
+		# Robust position-based healing fallback for scene loading sequence synchronization
+		if coord == Vector2i.ZERO and not is_zero_approx(meters_per_chunk):
+			var cx_pos: int = roundi(child.position.x / meters_per_chunk)
+			var cz_pos: int = roundi(-child.position.z / meters_per_chunk)
+			coord = Vector2i(cx_pos, cz_pos)
+			child.chunk_coord = coord
+
+		if coord.x >= world_chunks.x or coord.y >= world_chunks.y:
 			child.free()
-			
+		else:
+			chunks_dict[coord] = child
+
 	# Automated self-healing anchor to guarantee the default asset node always exists
 	if not has_node("Terrain_Assets"):
 		var asset_container := Node3D.new()
@@ -933,11 +964,8 @@ func rebuild_chunks_structure() -> void:
 			asset_container.set_owner(get_tree().edited_scene_root)
 
 	# 2. INITIALIZE REFRESHED CHUNK NODES & SYNC LOCAL HEIGHT SUB-ARRAYS
-	var expected_total_chunks: int = world_chunks.x * world_chunks.y
-	if chunk_activity_data.size() < expected_total_chunks:
-		chunk_activity_data.resize(expected_total_chunks)
-		chunk_activity_data.fill(1)
-	
+	_grow_chunk_activity_data()
+
 	for cz in range(world_chunks.y):
 		for cx in range(world_chunks.x):
 			var coord := Vector2i(cx, cz)
@@ -961,29 +989,14 @@ func rebuild_chunks_structure() -> void:
 			# If the chunk is deactivated but show_deactivated_chunks is enabled, 
 			# we generate a flat box collision mesh for raycasting directly inside the update engine
 			if not is_chunk_active(cx, cz) and bool(show_deactivated_chunks) and Engine.is_editor_hint():
-				var st_box := SurfaceTool.new()
-				st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
-				var w: float = float(chunk_size) * cell_size
-				var p0 := Vector3(0, 0.05, 0)
-				var p1 := Vector3(w, 0.05, 0)
-				var p2 := Vector3(w, 0.05, -w)
-				var p3 := Vector3(0, 0.05, -w)
-				st_box.add_vertex(p0); st_box.add_vertex(p1); st_box.add_vertex(p2)
-				st_box.add_vertex(p0); st_box.add_vertex(p2); st_box.add_vertex(p3)
-				chunks_dict[coord].mesh = st_box.commit()
-				
-				var red_mat := StandardMaterial3D.new()
-				red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
-				red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-				red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-				chunks_dict[coord].material_override = red_mat
+				chunks_dict[coord].mesh = _get_deactivated_preview_mesh()
+				chunks_dict[coord].material_override = _get_deactivated_preview_material()
 			
 			# Use the unified clean update method to initialize states fluidly
 			_update_single_chunk(coord)
 
 
 
-##@@
 
 ## Global multi-pass cross-filter operation that processes and blurs the entire grid structure smoothly.
 func _smooth_entire_terrain() -> void:
@@ -1035,7 +1048,6 @@ func _smooth_entire_terrain() -> void:
 
 
 
-##@@
 
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
@@ -1180,7 +1192,6 @@ func interact_at_world_position(world_pos: Vector3, is_alternative: bool) -> voi
 		_update_single_chunk(coord)
 
 
-##@@
 
 ## Checks mathematical boundaries to flag all 1-4 edge chunks touching a modified global vertex coordinate.
 func _add_affected_chunks_to_update(gx: int, gz: int, update_list: Array[Vector2i]) -> void:
@@ -1300,28 +1311,8 @@ func _update_single_chunk(coord: Vector2i) -> void:
 			chunk.mesh = null
 			chunk.material_override = null
 		else:
-			# Incremental building of the red preview box
-			var st_box := SurfaceTool.new()
-			st_box.begin(Mesh.PRIMITIVE_TRIANGLES)
-			var w: float = float(chunk_size) * cell_size
-			var p0 := Vector3(0, 0.05, 0)
-			var p1 := Vector3(w, 0.05, 0)
-			var p2 := Vector3(w, 0.05, -w)
-			var p3 := Vector3(0, 0.05, -w)
-			
-			st_box.add_vertex(p0)
-			st_box.add_vertex(p1)
-			st_box.add_vertex(p2)
-			st_box.add_vertex(p0)
-			st_box.add_vertex(p2)
-			st_box.add_vertex(p3)
-			chunk.mesh = st_box.commit()
-			
-			var red_mat := StandardMaterial3D.new()
-			red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
-			red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-			red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-			chunk.material_override = red_mat
+			chunk.mesh = _get_deactivated_preview_mesh()
+			chunk.material_override = _get_deactivated_preview_material()
 
 		return
 
@@ -1546,7 +1537,6 @@ func _apply_historical_snapshot(target_matrix: PackedFloat32Array) -> void:
 	notify_property_list_changed()
 
 
-##@@
 # =====================================================================================
 # SERVER BACKEND
 # A raw RenderingServer instance has no parent and no place in the SceneTree, so every
@@ -1579,13 +1569,9 @@ func _rebuild_server_chunks() -> void:
 	if _server_backend == null:
 		return
 
-	# Clear out any chunk node left behind by a previous MESH_NODES session, while protecting
-	# the infrastructure containers exactly like the node path does.
-	var dynamic_collision_name: String = name + "_Collisions"
+	# Clear out any chunk node left behind by a previous MESH_NODES session. Nothing else is
+	# touched: infrastructure containers and anything the user parented here are not ours.
 	for child in get_children():
-		if child.name == "DEBUG_BrushGizmo_Transient" or child.name == dynamic_collision_name \
-		or child.name == "Terrain_Assets" or child.name == CHUNK_GRID_NODE_NAME:
-			continue
 		if child is LowPolyTerrainChunk:
 			child.free()
 	chunks_dict.clear()
@@ -1598,10 +1584,7 @@ func _rebuild_server_chunks() -> void:
 		if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
 			asset_container.set_owner(get_tree().edited_scene_root)
 
-	var expected_total_chunks: int = world_chunks.x * world_chunks.y
-	if chunk_activity_data.size() < expected_total_chunks:
-		chunk_activity_data.resize(expected_total_chunks)
-		chunk_activity_data.fill(1)
+	_grow_chunk_activity_data()
 
 	_server_backend.prune_out_of_bounds(world_chunks)
 
@@ -1616,7 +1599,6 @@ func _rebuild_server_chunks() -> void:
 			_update_single_chunk(coord)
 
 
-##@@
 
 ## Central entry point for TerrainBackend changes made through the inspector.
 func _switch_terrain_backend(from_backend: TerrainBackend, to_backend: TerrainBackend) -> void:
@@ -1630,12 +1612,8 @@ func _switch_terrain_backend(from_backend: TerrainBackend, to_backend: TerrainBa
 ## during this, so the switch is lossless in both directions.
 func _activate_server_backend(remove_baked_collisions: bool) -> void:
 	# Chunk nodes are RAM-only (added without set_owner), so freeing them loses nothing that
-	# is not fully reproducible from global_height_data.
-	var dynamic_collision_name: String = name + "_Collisions"
+	# is not fully reproducible from global_height_data. Nothing else is touched.
 	for child in get_children():
-		if child.name == "DEBUG_BrushGizmo_Transient" or child.name == dynamic_collision_name \
-		or child.name == "Terrain_Assets" or child.name == CHUNK_GRID_NODE_NAME:
-			continue
 		if child is LowPolyTerrainChunk:
 			child.free()
 	chunks_dict.clear()
@@ -1759,7 +1737,6 @@ func _leave_collision_group() -> void:
 	_joined_collision_group = ""
 
 
-##@@
 
 ## Mirrors the node bookkeeping that a MeshInstance3D child would otherwise inherit for free.
 func _notification(what: int) -> void:
@@ -1796,7 +1773,6 @@ func _notification(what: int) -> void:
 				_server_backend = null
 
 
-##@@
 
 ## Returns the coordinates of every chunk tracked by whichever backend is currently active.
 func get_chunk_coords() -> Array:
@@ -1878,7 +1854,6 @@ func _has_chunk(coord: Vector2i) -> bool:
 	return chunks_dict.has(coord)
 
 
-##@@
 
 ## Removes the baked collider container, because the server bodies replace it entirely and
 ## keeping both alive would produce duplicated physics geometry.
@@ -1912,7 +1887,6 @@ func _delete_baked_collision_container() -> void:
 		+ "'Bake Live Collisions' to regenerate it from the terrain data.")
 
 
-##@@
 # =====================================================================================
 # DISTANCE BASED COLLISION CULLING
 # The chunk grid is regular, so the set of chunks near the player can be derived
@@ -1983,7 +1957,7 @@ func _begin_culling_pass() -> void:
 			_server_backend.notify_culling_active()
 
 		# Seed the bookkeeping with everything that is currently switched ON, because that is
-		# the true starting state: baked MESH_NODES colliders and SERVERS bodies under the ALL
+		# the true starting state: baked MESH_NODES colliders and SERVERS bodies under the PREBUILT
 		# policy all begin enabled. Without this the very first pass compares against an empty
 		# set, so it can only ever ADD chunks and never disables the ones outside the radius -
 		# leaving the whole terrain collidable until a target happens to walk through a chunk
@@ -2096,10 +2070,9 @@ func _warn_if_culling_never_started() -> void:
 	push_warning("LowPolyTerrain '%s': runtime_collision is LAZY but " % name
 		+ "update_collision_culling() has never been called, so this terrain currently has no "
 		+ "collision at all. Call it once per physics frame with the player position, or "
-		+ "switch runtime_collision to ALL.")
+		+ "switch runtime_collision to PREBUILT.")
 
 
-##@@
 # --- AUTOMATIC CULLING TARGETS ---
 
 
@@ -2233,14 +2206,13 @@ func _warn_on_culling_policy_mismatch() -> void:
 
 	if runtime_collision == RuntimeCollision.PREBUILT:
 		push_warning("LowPolyTerrain '%s': culling targets are assigned, but " % name
-			+ "runtime_collision is ALL, so every chunk keeps its collider and the culling "
+			+ "runtime_collision is PREBUILT, so every chunk keeps its collider and the culling "
 			+ "only toggles them. Switch to LAZY to actually reclaim the memory.")
 	elif runtime_collision == RuntimeCollision.NONE:
 		push_warning("LowPolyTerrain '%s': culling targets are assigned, but " % name
 			+ "runtime_collision is NONE, so there is no collision to cull at all.")
 
 
-##@@
 
 ## Releases the culling bookkeeping and hands collider lifetime back to the active policy.
 func reset_collision_culling() -> void:

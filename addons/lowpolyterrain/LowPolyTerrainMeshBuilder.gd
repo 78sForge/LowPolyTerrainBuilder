@@ -260,12 +260,25 @@ static func build_deactivated_preview_mesh(chunk_size: int, cell_size: float) ->
 	var p2 := Vector3(w, PREVIEW_PLANE_Y, -w)
 	var p3 := Vector3(0, PREVIEW_PLANE_Y, -w)
 
+	# Wound p0,p2,p1 rather than p0,p1,p2, and carrying an explicit normal.
+	#
+	# Godot treats CLOCKWISE triangles as front-facing, so an upward-facing quad needs a
+	# NEGATIVE y in (b - a).cross(c - a). The obvious vertex order gives a positive one, which
+	# points the quad at the ground: it was only visible from underneath. The surface also
+	# carried no normals at all, which leaves a lit material with nothing to shade against.
+	st_box.set_normal(Vector3.UP)
 	st_box.add_vertex(p0)
+	st_box.set_normal(Vector3.UP)
+	st_box.add_vertex(p2)
+	st_box.set_normal(Vector3.UP)
 	st_box.add_vertex(p1)
-	st_box.add_vertex(p2)
+
+	st_box.set_normal(Vector3.UP)
 	st_box.add_vertex(p0)
-	st_box.add_vertex(p2)
+	st_box.set_normal(Vector3.UP)
 	st_box.add_vertex(p3)
+	st_box.set_normal(Vector3.UP)
+	st_box.add_vertex(p2)
 	return st_box.commit()
 
 
@@ -370,4 +383,7 @@ static func build_deactivated_preview_material() -> StandardMaterial3D:
 	red_mat.albedo_color = Color(1.0, 0.0, 0.0, 0.25)
 	red_mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
 	red_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# A marker, not a surface. Lit, its colour would depend on where the scene's sun happens to
+	# be, so a chunk could read as deactivated in one scene and barely register in another.
+	red_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	return red_mat

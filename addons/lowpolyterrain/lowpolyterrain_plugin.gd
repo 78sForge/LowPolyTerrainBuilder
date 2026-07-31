@@ -89,7 +89,14 @@ func _enter_tree() -> void:
 func _exit_tree() -> void:
 	remove_custom_type("LowPolyTerrainManager")
 	_destroy_brush_ui_panel()
-	
+
+	# Both overlays live OUTSIDE this plugin node - the ring under the terrain manager, the
+	# label under the editor's base control - so freeing the plugin does not take them with it.
+	# Without this, disabling the plugin or reloading this @tool script leaves a stray label
+	# behind in the editor UI, and another one appears on every re-enable.
+	_release_active_manager()
+	_destroy_3d_brush_gizmo()
+
 	var settings := EditorInterface.get_editor_settings()
 	if settings and settings.settings_changed.is_connected(_on_editor_settings_changed):
 		settings.settings_changed.disconnect(_on_editor_settings_changed)
@@ -107,13 +114,7 @@ func _exit_tree() -> void:
 ## Automatically fired by Godot 4.7 when the user switches between open scene tabs.
 func _on_editor_scene_changed(new_scene_root: Node) -> void:
 	# Reset the active manager to put the plugin to sleep
-	if active_manager and is_instance_valid(active_manager):
-		active_manager.set_meta("_edit_lock_", false)
-		if "is_paint_stroke_active" in active_manager:
-			active_manager.is_paint_stroke_active = false
-			
-	active_manager = null
-	is_drawing = false
+	_release_active_manager()
 	_faces_cache.clear()
 
 	# Instantly clear UI visual fragments
@@ -129,19 +130,36 @@ func _handles(object: Object) -> bool:
 	return object is LowPolyTerrainManager
 
 
-func _edit(object: Object) -> void:
-	# Disconnect old signal handlers cleanly to prevent double bindings
+## Detaches from whichever manager is being edited: disconnects its signals, clears the edit
+## lock and drops the reference.
+##
+## Shared by every path that stops editing a terrain. _on_editor_scene_changed() used to only
+## null the reference, which left the previous manager wired to this plugin: switching scene
+## tabs meant a manager in the background could still rescale the active one's brush, and
+## _edit() could no longer reach it to disconnect, because the reference was already gone.
+func _release_active_manager() -> void:
+	var inspector := EditorInterface.get_inspector()
+	if inspector and inspector.property_edited.is_connected(_on_inspector_property_edited):
+		inspector.property_edited.disconnect(_on_inspector_property_edited)
+
 	if active_manager and is_instance_valid(active_manager):
-		if active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
-			active_manager.disconnect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
-			
+		if active_manager.signal_brush_settings_changed.is_connected(_on_signal_brush_settings_changed):
+			active_manager.signal_brush_settings_changed.disconnect(_on_signal_brush_settings_changed)
+
 		# Explicitly unbind the custom export signal from the previous manager instance
-		if active_manager.is_connected("signal_export_requested", _open_export_dialog_from_plugin):
-			active_manager.disconnect("signal_export_requested", _open_export_dialog_from_plugin)
-			
-		var inspector := EditorInterface.get_inspector()
-		if inspector and inspector.is_connected("property_edited", _on_inspector_property_edited):
-			inspector.disconnect("property_edited", _on_inspector_property_edited)
+		if active_manager.signal_export_requested.is_connected(_open_export_dialog_from_plugin):
+			active_manager.signal_export_requested.disconnect(_open_export_dialog_from_plugin)
+
+		active_manager.set_meta("_edit_lock_", false)
+		if "is_paint_stroke_active" in active_manager:
+			active_manager.is_paint_stroke_active = false
+
+	active_manager = null
+	is_drawing = false
+
+
+func _edit(object: Object) -> void:
+	_release_active_manager()
 
 	if object is LowPolyTerrainManager and object.is_inside_tree():
 		active_manager = object
@@ -156,17 +174,17 @@ func _edit(object: Object) -> void:
 			active_manager.stroke_started(get_undo_redo())
 		
 		# Connect only the custom scaling/hotkey signal
-		if not active_manager.is_connected("signal_brush_settings_changed", _on_signal_brush_settings_changed):
-			active_manager.connect("signal_brush_settings_changed", _on_signal_brush_settings_changed)
-			
+		if not active_manager.signal_brush_settings_changed.is_connected(_on_signal_brush_settings_changed):
+			active_manager.signal_brush_settings_changed.connect(_on_signal_brush_settings_changed)
+
 		# Securely bridge the manager button with the isolated editor plugin UI pipeline
-		if not active_manager.is_connected("signal_export_requested", _open_export_dialog_from_plugin):
-			active_manager.connect("signal_export_requested", _open_export_dialog_from_plugin)
-			
+		if not active_manager.signal_export_requested.is_connected(_open_export_dialog_from_plugin):
+			active_manager.signal_export_requested.connect(_open_export_dialog_from_plugin)
+
 		# Connect the inspector click hook safely
 		var inspector := EditorInterface.get_inspector()
-		if inspector and not inspector.is_connected("property_edited", _on_inspector_property_edited):
-			inspector.connect("property_edited", _on_inspector_property_edited)
+		if inspector and not inspector.property_edited.is_connected(_on_inspector_property_edited):
+			inspector.property_edited.connect(_on_inspector_property_edited)
 			
 		_create_3d_brush_gizmo()
 		_show_brush_ui_panel(true)
@@ -178,14 +196,7 @@ func _edit(object: Object) -> void:
 		# [FIX] Force-update the 3D ring mesh and 2D text label to instantly match the newly selected manager
 		_update_gizmo_scale()
 	else:
-		if active_manager and is_instance_valid(active_manager):
-			active_manager.set_meta("_edit_lock_", false)
-			if "is_paint_stroke_active" in active_manager:
-				active_manager.is_paint_stroke_active = false
-				
-		active_manager = null
-		is_drawing = false
-		
+		# _release_active_manager() already ran at the top of this function.
 		if mouse_label:
 			mouse_label.visible = false
 			
@@ -196,11 +207,11 @@ func _edit(object: Object) -> void:
 
 func _make_visible(visible: bool) -> void:
 	if not visible:
-		if active_manager:
-			active_manager.set_meta("_edit_lock_", false)
-		active_manager = null
-		is_drawing = false
+		_release_active_manager()
 		_destroy_3d_brush_gizmo()
+		# The toolbar was left visible here while active_manager was already null, so it kept
+		# showing a depressed tool button for a terrain the plugin no longer had a handle on.
+		_show_brush_ui_panel(false)
 
 
 
@@ -541,7 +552,6 @@ func _process_paint_stroke(camera: Camera3D, mouse_pos: Vector2, is_shift: bool)
 ## Target handler fired when custom hotkeys or script calls update the brush properties.
 func _on_signal_brush_settings_changed() -> void:
 	if active_manager and brush_gizmo:
-		print("_on_signal_brush_settings_changed -> Updating 3D gizmo scale!")
 		_update_gizmo_scale()
 
 

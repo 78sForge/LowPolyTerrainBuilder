@@ -108,7 +108,6 @@ func setup(manager: LowPolyTerrainManager) -> void:
 	_manager = manager
 
 
-##@@
 
 ## Points every allocated resource at the world the manager currently lives in.
 func attach_to_world(world: World3D) -> void:
@@ -153,7 +152,6 @@ func detach_from_world() -> void:
 	_space = RID()
 
 
-##@@
 
 ## Mirrors the manager's world transform onto every server resource. A raw RenderingServer
 ## instance has no parent, so this is the only thing keeping the chunks aligned with the node.
@@ -260,7 +258,6 @@ func on_visibility_changed(is_visible: bool) -> void:
 			RenderingServer.instance_set_visible(rid, is_visible)
 
 
-##@@
 
 ## Aligns a raw RenderingServer instance with the state a MeshInstance3D would have configured
 ## for itself. Without this the two backends differ in shadow casting and global illumination,
@@ -353,7 +350,6 @@ func refresh_materials() -> void:
 		_apply_material(_records[coord])
 
 
-##@@
 # --- PHYSICS ---
 # Bodies exist at runtime only. Editor-side baking is deliberately absent, because rebuilding a
 # ConcavePolygonShape3D on every _update_single_chunk() would fire once per brush stroke frame.
@@ -599,7 +595,6 @@ func get_debug_parked_count() -> int:
 	return _parked.size()
 
 
-##@@
 # --- COLLISION DEBUG OVERLAY ---
 # Reuses Shape3D.get_debug_mesh(), the very geometry CollisionShape3D renders, so the overlay
 # shows the real collider rather than an approximation of it.
@@ -691,7 +686,6 @@ func get_debug_collision_overlay_count() -> int:
 	return total
 
 
-##@@
 
 ## Re-applies the manager's collision layer to every live body.
 func refresh_collision_layer() -> void:
@@ -711,7 +705,6 @@ func _apply_material(rec: ChunkRecord) -> void:
 	RenderingServer.instance_geometry_set_material_override(rec.instance_rid, material_rid)
 
 
-##@@
 
 ## Releases records whose coordinates fall outside the current world dimensions.
 func prune_out_of_bounds(world_chunks: Vector2i) -> void:
@@ -770,7 +763,6 @@ func _destroy_record(rec: ChunkRecord) -> void:
 	rec.has_terrain = false
 
 
-##@@
 
 ## Drops a chunk's terrain geometry while keeping its instance allocated for later reuse.
 func _clear_terrain_geometry(coord: Vector2i) -> void:
@@ -855,7 +847,6 @@ func _local_transform_for(coord: Vector2i) -> Transform3D:
 	)
 
 
-##@@
 
 ## Returns every chunk coordinate this backend currently tracks, including preview-only ones.
 func get_coords() -> Array:
