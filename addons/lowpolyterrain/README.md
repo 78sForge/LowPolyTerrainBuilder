@@ -31,6 +31,9 @@ Key additions:
 * Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
 * Rotated Bake Fix: Baked colliders now follow a rotated terrain instead of forming a staircase.
 * Ramp Tool: Click two points and a graded slope connects them, at brush width and falloff.
+* Ramp Preview: A translucent surface shows the exact result before the second click commits it.
+* Two-Tone Preview: The ramp's top and its cuts to the ground are coloured apart to read the shape.
+* Falloff Hotkeys: 'Shift' with the two brush size keys sharpens or softens the brush edge.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -444,13 +447,18 @@ Collisions** to regenerate it instead.
 ## ⌨️ Viewport Hotkeys
 
 * **Brush Size:** Hold `,` (Comma) to shrink or `.` (Period) to expand the selection circle seamlessly.
+* **Brush Falloff:** Hold `Shift` with the same two keys to soften or sharpen the brush edge.
 * **Polarity Inversion:** Hold `Shift` during sculpt passes to instantly flip `Raise` into `Lower`.
-* **Ramp:** Click once to anchor one end, move the cursor along the preview line, click again to
-  build the slope. `Escape` or a right-click drops a pending anchor, as does switching tools.
-  Both ends take their height from the terrain, `Brush Radius` sets the width and
-  `Brush Falloff Strength` how softly the edges meet the surrounding ground. `Shift` does not
-  invert this tool - swapping it between the two clicks would apply something the preview never
-  showed. Scriptable as `terrain.apply_ramp(from_world, to_world)`.
+* **Ramp:** Click once to anchor one end, then move the cursor - a translucent surface shows the
+  slope that would be built, at full brush width. Its upward facing part carries the tool colour
+  while the cuts down to the surrounding ground are drawn darker, so you can read how far the
+  ramp reaches and how steeply it lands. Click again to commit it. `Escape` or a right-click
+  drops a pending anchor, as does switching tools.
+  Both ends take their height from the terrain, `Brush Radius` sets the corridor width and
+  `Brush Falloff Strength` how softly its edges meet the surrounding ground - at `0` they step,
+  above it they curve down onto the existing surface, and the preview shows that shape. `Shift`
+  does not invert this tool: swapping it between the two clicks would apply something the
+  preview never promised. Scriptable as `terrain.apply_ramp(from_world, to_world)`.
 * **Tool Swapping:** No key assigned out of the box. Pick your own under
   `Editor Settings > Plugins > Low Poly Terrain Builder > Shortcuts`, then click the toolbar
   buttons or use your key.

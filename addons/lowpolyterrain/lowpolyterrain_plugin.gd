@@ -70,6 +70,16 @@ var _ramp_anchor_set: bool = false
 var _ramp_anchor: Vector3 = Vector3.ZERO
 var _ramp_line: MeshInstance3D = null
 var _ramp_line_material: StandardMaterial3D = null
+var _ramp_flank_material: StandardMaterial3D = null
+
+## Opacity of the ramp preview's upward facing surface. Low enough to read the terrain
+## underneath, high enough to judge the shape it would take.
+const RAMP_PREVIEW_ALPHA: float = 0.4
+
+## The cuts the ramp makes down to the surrounding ground, in a darker tone and more opaque.
+## Tinting them like the top made the whole preview read as one flat patch of colour, which hid
+## the very thing worth seeing: how far the ramp reaches and how steeply it lands.
+const RAMP_FLANK_COLOR: Color = Color(0.55, 0.22, 0.02, 0.6)
 
 ## Default opacity of the brush disc. Kept low deliberately: the ring marks where the brush
 ## sits, and the terrain being sculpted has to stay readable underneath it. Bright terrain can
@@ -393,6 +403,20 @@ func _set_shift_held(held: bool) -> void:
 	_update_gizmo_scale()
 
 
+## Step the falloff moves per keypress. Matches the inspector slider's own increment, so the
+## keyboard cannot reach values the slider refuses to show.
+const FALLOFF_STEP: float = 0.05
+
+
+## The bare keycode a mode's shortcut is bound to, or KEY_NONE when it has none.
+func _shortcut_keycode(mode: int) -> int:
+	var shortcut: Shortcut = brush_shortcuts.get(mode) as Shortcut
+	if shortcut == null or shortcut.events.is_empty():
+		return KEY_NONE
+	var first: InputEventKey = shortcut.events[0] as InputEventKey
+	return first.keycode if first != null else KEY_NONE
+
+
 ## Applies whichever brush shortcut matches the event. Returns true when one did.
 ##
 ## Shared by the two delivery paths below rather than living in either, because they differ
@@ -400,6 +424,30 @@ func _set_shift_held(held: bool) -> void:
 func _try_handle_brush_shortcut(event: InputEventKey) -> bool:
 	if active_manager == null:
 		return false
+
+	# Shift turns the two size keys into falloff keys.
+	#
+	# Checked before the loop and against the bare keycode, because matches_event() compares
+	# modifiers exactly: the stored shortcut carries no Shift, so a shifted press never matches
+	# it and would otherwise fall through to nothing at all.
+	if event.shift_pressed:
+		var step: float = 0.0
+		if event.keycode == _shortcut_keycode(
+				LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS):
+			step = -FALLOFF_STEP
+		elif event.keycode == _shortcut_keycode(
+				LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS):
+			step = FALLOFF_STEP
+
+		if not is_zero_approx(step):
+			active_manager.brush_falloff_strength = clampf(
+				active_manager.brush_falloff_strength + step, 0.0, 1.0
+			)
+			active_manager.notify_property_list_changed.call_deferred()
+			# brush_falloff_strength emits no signal of its own, unlike brush_radius, so the
+			# overlays are refreshed here rather than waiting for one.
+			_update_gizmo_scale()
+			return true
 
 	for mode: int in brush_shortcuts.keys():
 		var sc: Shortcut = brush_shortcuts[mode]
@@ -580,8 +628,10 @@ func _create_3d_brush_gizmo() -> void:
 	# ring mesh only changes when a setting does. Sharing one mesh would rebuild both.
 	_ramp_line = MeshInstance3D.new()
 	_ramp_line.name = "DEBUG_RampLine_Transient"
+	# Per-surface overrides rather than material_override, which would tint both surfaces alike
+	# and defeat the split.
 	_ramp_line_material = _new_brush_material()
-	_ramp_line.material_override = _ramp_line_material
+	_ramp_flank_material = _new_brush_material()
 	_ramp_line.visible = false
 	active_manager.add_child(_ramp_line)
 
@@ -682,6 +732,10 @@ func _update_gizmo_scale() -> void:
 	if mouse_label:
 		mouse_label.text = _build_brush_label(active_manager, mode_idx, _shift_held)
 
+	# The ramp preview is built from brush_radius and brush_falloff_strength, so it belongs to
+	# this refresh too. Hanging it off mouse motion alone left it stale until the cursor moved.
+	_update_ramp_line()
+
 	var plane_y: float = 0.03
 	var center_vertex := Vector3(0.0, plane_y, 0.0)
 
@@ -739,6 +793,7 @@ func _destroy_3d_brush_gizmo() -> void:
 	_brush_fill_material = null
 	_brush_outline_material = null
 	_ramp_line_material = null
+	_ramp_flank_material = null
 
 	if mouse_label:
 		if mouse_label.get_parent():
@@ -830,8 +885,14 @@ func _cancel_ramp() -> void:
 		_ramp_line.visible = false
 
 
-## Redraws the span from the anchor to the cursor. Built in the manager's local space, so a
-## moved, rotated or scaled terrain needs no special casing.
+## Redraws the surface the ramp would leave behind, from the anchor to the cursor.
+##
+## A thin line only showed WHERE the ramp would run, not what it would do. The manager builds
+## the mesh through the same evaluation the tool writes with, so the width follows brush_radius
+## and the edges show how brush_falloff_strength feathers them into the ground.
+##
+## Built in the manager's local space and parented to it, so a moved, rotated or scaled terrain
+## needs no special casing here.
 func _update_ramp_line() -> void:
 	if _ramp_line == null or active_manager == null:
 		return
@@ -840,17 +901,29 @@ func _update_ramp_line() -> void:
 		_ramp_line.visible = false
 		return
 
-	var from_local: Vector3 = active_manager.to_local(_ramp_anchor)
-	var to_local_pos: Vector3 = active_manager.to_local(brush_gizmo.global_position)
+	var preview: ArrayMesh = active_manager.build_ramp_preview_mesh(
+		_ramp_anchor, brush_gizmo.global_position
+	)
+	if preview == null:
+		_ramp_line.visible = false
+		return
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_LINE_STRIP)
-	st.add_vertex(from_local)
-	st.add_vertex(to_local_pos)
-	_ramp_line.mesh = st.commit()
+	_ramp_line.mesh = preview
 
 	if _ramp_line_material:
-		_ramp_line_material.albedo_color = BRUSH_COLORS[LowPolyTerrainManager.BrushMode.RAMP]
+		var tool_color: Color = BRUSH_COLORS[LowPolyTerrainManager.BrushMode.RAMP]
+		_ramp_line_material.albedo_color = Color(
+			tool_color.r, tool_color.g, tool_color.b, RAMP_PREVIEW_ALPHA
+		)
+	if _ramp_flank_material:
+		_ramp_flank_material.albedo_color = RAMP_FLANK_COLOR
+
+	# Surface 0 is the top by construction. The flanks are absent when the ramp lands on ground
+	# it already matches, so the second override is only assigned when there is one.
+	_ramp_line.set_surface_override_material(0, _ramp_line_material)
+	if preview.get_surface_count() > 1:
+		_ramp_line.set_surface_override_material(1, _ramp_flank_material)
+
 	_ramp_line.visible = true
 
 

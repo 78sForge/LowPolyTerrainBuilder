@@ -858,6 +858,141 @@ func test_ramp_survives_two_identical_points() -> void:
 		"Its neighbours inside the radius take that height too.")
 
 
+## The preview must show the result, not an impression of it.
+##
+## Both go through the same _ramp_height_at(), which is the whole point: a preview computed
+## separately would drift from the tool the moment either side changed, and the drift would be
+## invisible until someone compared them by hand.
+func test_ramp_preview_matches_what_the_tool_applies() -> void:
+	for falloff: float in [0.0, 0.5, 1.0]:
+		_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+		manager.brush_radius = 3
+		manager.brush_falloff_strength = falloff
+
+		var from_world: Vector3 = manager.global_transform * Vector3(4.0, 0.0, -4.0)
+		var to_world: Vector3 = manager.global_transform * Vector3(20.0, 0.0, -4.0)
+
+		var preview: ArrayMesh = manager.build_ramp_preview_mesh(from_world, to_world)
+		assert_not_null(preview, "A ramp across the terrain must produce a preview.")
+		if preview == null:
+			continue
+
+		# Collect the height the preview promises per grid vertex.
+		var promised: Dictionary = {}
+		for vertex: Vector3 in (preview.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+				as PackedVector3Array):
+			promised[Vector2i(roundi(vertex.x), roundi(-vertex.z))] = vertex.y
+
+		manager.apply_ramp(from_world, to_world)
+
+		for coord: Vector2i in promised:
+			assert_almost_eq(
+				manager.get_height_at(coord.x, coord.y), float(promised[coord]), 0.0001,
+				"Preview and result disagree at %s with falloff %.1f." % [coord, falloff])
+
+
+## The preview is a surface, not a line: it has to be wide enough to judge the corridor.
+func test_ramp_preview_covers_the_brush_width() -> void:
+	_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+	manager.brush_radius = 4
+
+	var from_world: Vector3 = manager.global_transform * Vector3(8.0, 0.0, -8.0)
+	var to_world: Vector3 = manager.global_transform * Vector3(20.0, 0.0, -8.0)
+	var preview: ArrayMesh = manager.build_ramp_preview_mesh(from_world, to_world)
+	assert_not_null(preview, "Precondition: a preview was produced.")
+
+	var min_z: float = INF
+	var max_z: float = -INF
+	for vertex: Vector3 in (preview.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			as PackedVector3Array):
+		min_z = minf(min_z, -vertex.z)
+		max_z = maxf(max_z, -vertex.z)
+
+	# Radius either side of the axis at z=8, plus the border row that stitches it to the ground.
+	assert_lt(min_z, 8.0 - float(manager.brush_radius) + 0.001,
+		"The preview must reach a full radius to one side of the axis.")
+	assert_gt(max_z, 8.0 + float(manager.brush_radius) - 0.001,
+		"The preview must reach a full radius to the other side of the axis.")
+
+
+## A diagonal ramp must preview a corridor, not the box that contains it.
+##
+## Regression: the mesh was built over the axis-aligned bounding box of the affected capsule.
+## For a diagonal that box is nearly the whole terrain, and outside the radius the preview sits
+## exactly on the existing surface - so the entire terrain turned the preview's colour while
+## only a narrow strip was going to change.
+func test_diagonal_ramp_preview_stays_near_its_axis() -> void:
+	_flat_terrain_with_peak(Vector2i(2, 2), 10.0)
+	manager.brush_radius = 3
+
+	var last: int = manager._total_vertices_x - 1
+	var from_grid := Vector2(2.0, 2.0)
+	var to_grid := Vector2(float(last - 2), float(last - 2))
+
+	var preview: ArrayMesh = manager.build_ramp_preview_mesh(
+		manager.global_transform * Vector3(from_grid.x, 0.0, -from_grid.y),
+		manager.global_transform * Vector3(to_grid.x, 0.0, -to_grid.y)
+	)
+	assert_not_null(preview, "Precondition: a diagonal ramp produces a preview.")
+
+	var axis: Vector2 = to_grid - from_grid
+	var axis_length_sq: float = axis.length_squared()
+	var worst: float = 0.0
+
+	for vertex: Vector3 in (preview.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			as PackedVector3Array):
+		var point := Vector2(vertex.x / manager.cell_size, -vertex.z / manager.cell_size)
+		var t: float = clampf((point - from_grid).dot(axis) / axis_length_sq, 0.0, 1.0)
+		worst = maxf(worst, point.distance_to(from_grid + axis * t))
+
+	# A quad survives the cull when its NEAREST corner is within radius + 1.5, so its FARTHEST
+	# corner can still be one cell diagonal beyond that. Anything past this bound means whole
+	# quads are being kept that have no business being drawn.
+	var bound: float = float(manager.brush_radius) + 1.5 + sqrt(2.0)
+	assert_lt(worst, bound + 0.001,
+		"No preview vertex may sit far from the ramp axis; the box would reach the corners.")
+
+	# And the cull has to actually cull: the bounding box of this diagonal is the whole terrain.
+	var half_diagonal: float = (to_grid - from_grid).length() * 0.5
+	assert_lt(bound, half_diagonal,
+		"Precondition: the bound must be well inside the box, or this test proves nothing.")
+
+
+## The preview splits into an upward facing surface and the cuts down to the ground.
+##
+## One flat tint made the shape almost unreadable, so the editor colours the two apart. That
+## only works while surface 0 really is the top and surface 1 really is the flanks - the
+## overrides are assigned by index.
+func test_ramp_preview_separates_top_from_flanks() -> void:
+	_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+	manager.brush_radius = 3
+
+	var preview: ArrayMesh = manager.build_ramp_preview_mesh(
+		manager.global_transform * Vector3(4.0, 0.0, -4.0),
+		manager.global_transform * Vector3(20.0, 0.0, -4.0)
+	)
+	assert_not_null(preview, "Precondition: a preview was produced.")
+	assert_eq(preview.get_surface_count(), 2,
+		"A ramp onto flat ground has both a top and flanks.")
+
+	var threshold: float = LowPolyTerrainManager.PREVIEW_FLANK_THRESHOLD
+	for surface: int in [0, 1]:
+		var verts: PackedVector3Array = preview.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+		assert_gt(verts.size(), 0, "Surface %d must carry geometry." % surface)
+
+		for i in range(0, verts.size(), 3):
+			# Godot's front faces are clockwise, which puts the right-hand-rule normal of an
+			# upward facing triangle on the negative y axis.
+			var upward: float = -((verts[i + 1] - verts[i]).cross(
+				verts[i + 2] - verts[i])).normalized().y
+			if surface == 0:
+				assert_gte(upward, threshold,
+					"Surface 0 must hold only upward facing triangles.")
+			else:
+				assert_lt(upward, threshold,
+					"Surface 1 must hold only the flanks.")
+
+
 ## Shift must not swap the tool between the two clicks of a ramp.
 func test_shift_leaves_the_ramp_tool_alone() -> void:
 	manager.tool_mode = LowPolyTerrainManager.BrushMode.RAMP

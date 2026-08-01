@@ -1114,18 +1114,66 @@ func _smooth_entire_terrain() -> void:
 ##
 ## Public so it can be scripted and unit tested; the editor's RAMP brush is only the two clicks
 ## that supply the endpoints.
+## Converts a world position into fractional grid coordinates, the space the ramp works in.
+func _world_to_grid(world_pos: Vector3) -> Vector2:
+	var local: Vector3 = to_local(world_pos)
+	return Vector2(local.x / cell_size, -local.z / cell_size)
+
+
+## The height the ramp would leave at one grid point, given the current height there.
+##
+## The single source of truth for the ramp's shape: apply_ramp() writes what this returns, and
+## the editor preview draws it. Splitting the two would let the overlay promise a surface the
+## tool does not build.
+##
+## Outside the radius the blend factor is zero, so the answer is simply the existing height.
+## That is what lets the preview mesh be evaluated over a slightly larger box and still meet
+## the surrounding ground exactly.
+func _ramp_projection(
+	point: Vector2, a: Vector2, axis: Vector2, axis_length_sq: float
+) -> Vector2:
+	# Clamped so both ends round off rather than extending the ramp beyond the picked points.
+	var t: float = 0.0
+	if not is_zero_approx(axis_length_sq):
+		t = clampf((point - a).dot(axis) / axis_length_sq, 0.0, 1.0)
+	return Vector2(t, point.distance_to(a + axis * t))
+
+
+func _ramp_height_at(
+	point: Vector2,
+	a: Vector2,
+	axis: Vector2,
+	axis_length_sq: float,
+	radius: float,
+	height_a: float,
+	height_b: float,
+	current: float
+) -> float:
+	var projection: Vector2 = _ramp_projection(point, a, axis, axis_length_sq)
+	var t: float = projection.x
+	var distance: float = projection.y
+	if distance >= radius:
+		return current
+
+	# Same curve the sculpting brushes use, so the tool feels like the others.
+	var radius_factor: float = distance / radius
+	var smooth_curve: float = clampf(
+		1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor)), 0.0, 1.0
+	)
+	var falloff: float = lerpf(1.0, smooth_curve, brush_falloff_strength)
+
+	return lerpf(current, lerpf(height_a, height_b, t), falloff)
+
+
 func apply_ramp(from_world: Vector3, to_world: Vector3) -> void:
 	if is_zero_approx(cell_size) or global_height_data.is_empty():
 		return
 	if brush_radius <= 0:
 		return
 
-	var from_local: Vector3 = to_local(from_world)
-	var to_local_pos: Vector3 = to_local(to_world)
-
 	# Everything below happens in grid units, where brush_radius is already expressed.
-	var a := Vector2(from_local.x / cell_size, -from_local.z / cell_size)
-	var b := Vector2(to_local_pos.x / cell_size, -to_local_pos.z / cell_size)
+	var a: Vector2 = _world_to_grid(from_world)
+	var b: Vector2 = _world_to_grid(to_world)
 
 	var height_a: float = sample_grid_height(a.x, a.y)
 	var height_b: float = sample_grid_height(b.x, b.y)
@@ -1146,34 +1194,21 @@ func apply_ramp(from_world: Vector3, to_world: Vector3) -> void:
 
 	for z in range(min_z, max_z + 1):
 		for x in range(min_x, max_x + 1):
-			var point := Vector2(float(x), float(z))
-
-			# Projection onto the segment, clamped so both ends round off rather than
-			# extending the ramp beyond the picked points.
-			var t: float = 0.0
-			if not is_zero_approx(axis_length_sq):
-				t = clampf((point - a).dot(axis) / axis_length_sq, 0.0, 1.0)
-
-			var distance: float = point.distance_to(a + axis * t)
-			if distance > radius:
-				continue
-
 			var cx: int = clampi(x / chunk_size, 0, world_chunks.x - 1)
 			var cz: int = clampi(z / chunk_size, 0, world_chunks.y - 1)
 			if not is_chunk_active(cx, cz):
 				continue
 
-			# Same curve the sculpting brushes use, so the tool feels like the others.
-			var radius_factor: float = distance / radius
-			var smooth_curve: float = clampf(
-				1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor)), 0.0, 1.0
-			)
-			var falloff: float = lerpf(1.0, smooth_curve, brush_falloff_strength)
-
 			var index: int = z * _total_vertices_x + x
-			global_height_data[index] = lerpf(
-				global_height_data[index], lerpf(height_a, height_b, t), falloff
+			var current: float = global_height_data[index]
+			var updated: float = _ramp_height_at(
+				Vector2(float(x), float(z)), a, axis, axis_length_sq, radius,
+				height_a, height_b, current
 			)
+			if is_equal_approx(updated, current):
+				continue
+
+			global_height_data[index] = updated
 
 			touched[Vector2i(cx, cz)] = true
 			# A vertex on a chunk border belongs to its neighbours as well, or the seam splits.
@@ -1187,6 +1222,131 @@ func apply_ramp(from_world: Vector3, to_world: Vector3) -> void:
 			_update_single_chunk(coord)
 
 	_register_ramp_undo(old_state)
+
+
+## How much of a triangle's normal has to point up before it counts as the ramp's top rather
+## than as one of its flanks. Roughly 45 degrees, which separates a walkable slope from the
+## cuts the ramp makes down to the surrounding ground.
+const PREVIEW_FLANK_THRESHOLD: float = 0.7
+
+
+## Builds the surface apply_ramp() would leave behind, in this manager's LOCAL space.
+##
+## Evaluated through the very same _ramp_height_at() the tool writes with, so the overlay shows
+## the result rather than an impression of it: the corridor width comes out of brush_radius and
+## the way it feathers into the surrounding ground out of brush_falloff_strength. At falloff 0
+## the edges are a clean step, above it they curve down onto the existing surface.
+##
+## The box is one cell wider than the affected capsule on every side. Outside the radius the
+## evaluation returns the current terrain height, so that border row stitches the preview onto
+## the ground instead of ending in mid-air.
+##
+## Returns null when there is nothing to show.
+func build_ramp_preview_mesh(from_world: Vector3, to_world: Vector3) -> ArrayMesh:
+	if is_zero_approx(cell_size) or global_height_data.is_empty() or brush_radius <= 0:
+		return null
+
+	var a: Vector2 = _world_to_grid(from_world)
+	var b: Vector2 = _world_to_grid(to_world)
+	var height_a: float = sample_grid_height(a.x, a.y)
+	var height_b: float = sample_grid_height(b.x, b.y)
+
+	var axis: Vector2 = b - a
+	var axis_length_sq: float = axis.length_squared()
+	var radius: float = float(brush_radius)
+
+	var min_x: int = clampi(floori(minf(a.x, b.x) - radius) - 1, 0, _total_vertices_x - 1)
+	var max_x: int = clampi(ceili(maxf(a.x, b.x) + radius) + 1, 0, _total_vertices_x - 1)
+	var min_z: int = clampi(floori(minf(a.y, b.y) - radius) - 1, 0, _total_vertices_z - 1)
+	var max_z: int = clampi(ceili(maxf(a.y, b.y) + radius) + 1, 0, _total_vertices_z - 1)
+
+	if max_x <= min_x or max_z <= min_z:
+		return null
+
+	# Heights are read once per vertex rather than once per quad corner, which would evaluate
+	# every interior vertex four times over. The distance is kept alongside them, because the
+	# quad loop below needs it to decide what is worth drawing at all.
+	var width: int = max_x - min_x + 1
+	var depth: int = max_z - min_z + 1
+	var heights := PackedFloat32Array()
+	var distances := PackedFloat32Array()
+	heights.resize(width * depth)
+	distances.resize(width * depth)
+
+	for z in range(min_z, max_z + 1):
+		for x in range(min_x, max_x + 1):
+			var point := Vector2(float(x), float(z))
+			var slot: int = (z - min_z) * width + (x - min_x)
+			distances[slot] = _ramp_projection(point, a, axis, axis_length_sq).y
+			heights[slot] = _ramp_height_at(
+				point, a, axis, axis_length_sq, radius,
+				height_a, height_b, global_height_data[z * _total_vertices_x + x]
+			)
+
+	# One cell diagonal beyond the radius, so the ring that stitches the surface onto the ground
+	# is kept and nothing further is.
+	var draw_limit: float = radius + 1.5
+
+	# Two surfaces so the editor can colour them apart. A single flat tint made the shape almost
+	# unreadable: the sloping top and the near-vertical cuts down to the surrounding ground came
+	# out identical, and those cuts are exactly what tells you how far the ramp reaches.
+	var top := SurfaceTool.new()
+	top.begin(Mesh.PRIMITIVE_TRIANGLES)
+	top.set_smooth_group(-1)
+
+	var flanks := SurfaceTool.new()
+	flanks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	flanks.set_smooth_group(-1)
+
+	for z in range(depth - 1):
+		for x in range(width - 1):
+			# The bounding box is axis aligned, so a diagonal ramp reaches almost every cell in
+			# it while touching only a narrow corridor. Without this the preview covered the
+			# whole terrain in colour, sitting flush on ground it never intended to change.
+			if minf(
+				minf(distances[z * width + x], distances[z * width + x + 1]),
+				minf(distances[(z + 1) * width + x], distances[(z + 1) * width + x + 1])
+			) > draw_limit:
+				continue
+
+			var gx: float = float(min_x + x) * cell_size
+			var gz: float = -float(min_z + z) * cell_size
+			var step: float = cell_size
+
+			var p00 := Vector3(gx, heights[z * width + x], gz)
+			var p10 := Vector3(gx + step, heights[z * width + x + 1], gz)
+			var p01 := Vector3(gx, heights[(z + 1) * width + x], gz - step)
+			var p11 := Vector3(gx + step, heights[(z + 1) * width + x + 1], gz - step)
+
+			# Clockwise, matching the terrain: Godot treats that winding as front facing.
+			_add_preview_triangle(top, flanks, p00, p01, p10)
+			_add_preview_triangle(top, flanks, p10, p01, p11)
+
+	top.generate_normals()
+	flanks.generate_normals()
+
+	# Surface 0 is always the upward facing part, so the editor can address the two by index.
+	# The flanks may legitimately be empty - a ramp laid onto ground it already matches has no
+	# cuts at all - in which case the mesh simply carries one surface.
+	var mesh: ArrayMesh = top.commit()
+	if mesh == null:
+		return null
+	flanks.commit(mesh)
+	return mesh
+
+
+## Sorts one preview triangle into the upward facing surface or into the flanks.
+static func _add_preview_triangle(
+	top: SurfaceTool, flanks: SurfaceTool, a: Vector3, b: Vector3, c: Vector3
+) -> void:
+	# Godot treats clockwise as front facing, which puts the right-hand-rule cross product of an
+	# upward facing triangle on the NEGATIVE y axis. Hence the sign flip before comparing.
+	var upward: float = -((b - a).cross(c - a)).normalized().y
+	var target: SurfaceTool = top if upward >= PREVIEW_FLANK_THRESHOLD else flanks
+
+	target.add_vertex(a)
+	target.add_vertex(b)
+	target.add_vertex(c)
 
 
 ## Commits one undo entry for a completed ramp, mirroring the global generators.
