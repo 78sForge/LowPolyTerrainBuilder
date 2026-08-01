@@ -1336,7 +1336,24 @@ func _bake_live_collisions_as_child() -> void:
 				
 				var half_bounds: float = (chunk.chunk_size * chunk.cell_size) / 2.0
 				var center_offset := Vector3(half_bounds, 0.0, -half_bounds)
-				static_body.global_position = chunk.global_position + center_offset
+
+				# The WHOLE transform, not just the origin.
+				#
+				# The body is built as a child of the chunk, where it inherits the manager's
+				# orientation for free, and is then reparented into a container that is a
+				# SIBLING of the manager and therefore unrotated. Godot carries the local
+				# transform across a reparent, not the global one, so assigning only the
+				# position left every collider axis-aligned while the terrain was tilted - the
+				# chunk origins stepped down the slope and the flat colliders formed a
+				# staircase under the mesh.
+				#
+				# center_offset is a chunk-local vector (bake_collision() shifts the faces by
+				# its negative), so it has to travel through the same transform rather than
+				# being added in world space.
+				static_body.global_transform = Transform3D(
+					chunk.global_transform.basis,
+					chunk.global_transform * center_offset
+				)
 				
 				for grp in static_body.get_groups():
 					static_body.remove_from_group(grp)

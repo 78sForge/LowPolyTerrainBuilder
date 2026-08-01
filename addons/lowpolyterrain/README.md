@@ -29,6 +29,7 @@ Key additions:
 * Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
 * Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
 * Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
+* Rotated Bake Fix: Baked colliders now follow a rotated terrain instead of forming a staircase.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -358,8 +359,29 @@ jittered terrain, while a steep jittered slope can drift far enough to matter. A
 `cell_size` reduces it, since the slope per metre drops. Where that precision is not enough,
 use a raycast instead.
 
-> Height at an XZ position stops being well defined if the manager is rotated around X or Z,
-> because a vertical ray can then cross the surface more than once.
+### Tilting the terrain is not supported
+
+**Yaw is fine, tilt is not.** Rotating the manager around **Y** is exact, at any angle. Rotating
+it around **X** or **Z** breaks every XZ-based query - `get_height_at_world_coords()`,
+`get_height_at_world_position()` and `is_inside_terrain()` alike - and the error grows with the
+angle rather than staying within any tolerance.
+
+The reason is structural, not a rounding problem. These functions take an X and a Z and have to
+pick a point on the vertical world line above them. While the terrain's local Y axis is parallel
+to the world Y axis, every point on that line maps to the same grid cell, so the choice does not
+matter. Tilt the manager and it does: the line is no longer vertical in local space, each height
+along it lands in a different cell, and the lookup answers for the wrong one. A tilted terrain
+can also put two surface points above the same XZ position, at which point no single number is
+the right answer.
+
+**Build slopes by sculpting, not by tilting.** A ramp is a height gradient, which is exactly what
+the height matrix is for - and then the queries, the colliders and the brush all keep working.
+Tilting the manager fights the tool: "Y is up" is baked into the brush picking, the collision
+culling and the chunk activation as well, not only into these queries. The one thing a height
+matrix genuinely cannot express is an overhang, and no amount of rotation changes that.
+
+Collision is unaffected either way: baked colliders and server bodies follow the manager's full
+transform, tilt included.
 
 ---
 

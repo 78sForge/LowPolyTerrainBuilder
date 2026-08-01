@@ -731,6 +731,52 @@ func test_baked_collider_uses_the_uncached_soup() -> void:
 		"The baked shape must be built from the uncached soup.")
 
 
+## A baked collider has to sit exactly where its chunk does, orientation included.
+##
+## Regression: the bake assigned only global_position. The bodies are built as children of
+## their chunk, where they inherit the manager's orientation, and are then reparented into a
+## container that is a SIBLING of the manager and therefore unrotated - and Godot carries the
+## LOCAL transform across a reparent. On a tilted terrain every collider stayed axis-aligned
+## while the chunk origins stepped down the slope, so the colliders formed a staircase under
+## the mesh. Nothing caught it, because every test until now used an unrotated manager.
+func test_baked_colliders_follow_a_rotated_terrain() -> void:
+	for rotation: Vector3 in [Vector3.ZERO, Vector3(-20.0, 0.0, 0.0), Vector3(-20.0, 45.0, 7.0)]:
+		manager.rotation_degrees = rotation
+		manager.rebuild_chunks_structure()
+		manager._bake_live_collisions_as_child()
+
+		var half: float = (float(manager.chunk_size) * manager.cell_size) / 2.0
+		var offset := Vector3(half, 0.0, -half)
+
+		for coord: Vector2i in manager.chunks_dict.keys():
+			var chunk: LowPolyTerrainChunk = manager.chunks_dict[coord]
+			var body: StaticBody3D = _find_baked_body(coord)
+			assert_not_null(body, "Chunk %s must have a baked body at %s." % [coord, rotation])
+			if body == null:
+				continue
+
+			# bake_collision() shifts the faces by -offset, so the body carries it back. That
+			# vector is chunk-local and has to travel through the chunk's transform.
+			assert_almost_eq(
+				body.global_position.distance_to(chunk.global_transform * offset), 0.0, 0.0001,
+				"Collider of %s sits in the wrong place at %s." % [coord, rotation])
+			assert_almost_eq(
+				(body.global_rotation_degrees - chunk.global_rotation_degrees).length(),
+				0.0, 0.001,
+				"Collider of %s is not oriented like its chunk at %s." % [coord, rotation])
+
+
+## Locates the baked StaticBody3D of a chunk inside the sibling container.
+func _find_baked_body(coord: Vector2i) -> StaticBody3D:
+	var container: Node = manager.get_parent().find_child(
+		manager.name + "_Collisions", false, false
+	)
+	if container == null:
+		return null
+	return container.find_child("Static_Chunk_%d_%d" % [coord.x, coord.y], false, false) \
+		as StaticBody3D
+
+
 # --- CHUNK BOUNDARY GRID OVERLAY ---
 # Replaced the former per-chunk Label3D overlay. The builder is pure and runtime-safe, so the
 # geometry can be asserted here even though the overlay node itself is editor-only.
