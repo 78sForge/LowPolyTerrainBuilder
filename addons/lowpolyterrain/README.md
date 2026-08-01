@@ -30,6 +30,7 @@ Key additions:
 * Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
 * Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
 * Rotated Bake Fix: Baked colliders now follow a rotated terrain instead of forming a staircase.
+* Ramp Tool: Click two points and a graded slope connects them, at brush width and falloff.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -375,10 +376,11 @@ can also put two surface points above the same XZ position, at which point no si
 the right answer.
 
 **Build slopes by sculpting, not by tilting.** A ramp is a height gradient, which is exactly what
-the height matrix is for - and then the queries, the colliders and the brush all keep working.
-Tilting the manager fights the tool: "Y is up" is baked into the brush picking, the collision
-culling and the chunk activation as well, not only into these queries. The one thing a height
-matrix genuinely cannot express is an overhang, and no amount of rotation changes that.
+the height matrix is for - use the **Ramp** brush for it - and then the queries, the colliders
+and the brush all keep working. Tilting the manager fights the tool: "Y is up" is baked into the
+brush picking, the collision culling and the chunk activation as well, not only into these
+queries. The one thing a height matrix genuinely cannot express is an overhang, and no amount of
+rotation changes that.
 
 Collision is unaffected either way: baked colliders and server bodies follow the manager's full
 transform, tilt included.
@@ -443,6 +445,12 @@ Collisions** to regenerate it instead.
 
 * **Brush Size:** Hold `,` (Comma) to shrink or `.` (Period) to expand the selection circle seamlessly.
 * **Polarity Inversion:** Hold `Shift` during sculpt passes to instantly flip `Raise` into `Lower`.
+* **Ramp:** Click once to anchor one end, move the cursor along the preview line, click again to
+  build the slope. `Escape` or a right-click drops a pending anchor, as does switching tools.
+  Both ends take their height from the terrain, `Brush Radius` sets the width and
+  `Brush Falloff Strength` how softly the edges meet the surrounding ground. `Shift` does not
+  invert this tool - swapping it between the two clicks would apply something the preview never
+  showed. Scriptable as `terrain.apply_ramp(from_world, to_world)`.
 * **Tool Swapping:** No key assigned out of the box. Pick your own under
   `Editor Settings > Plugins > Low Poly Terrain Builder > Shortcuts`, then click the toolbar
   buttons or use your key.

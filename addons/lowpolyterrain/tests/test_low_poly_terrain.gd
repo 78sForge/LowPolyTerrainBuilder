@@ -777,6 +777,94 @@ func _find_baked_body(coord: Vector2i) -> StaticBody3D:
 		as StaticBody3D
 
 
+# --- RAMP TOOL ---
+
+
+## Prepares a flat terrain with one raised vertex, so a ramp from it has somewhere to go.
+func _flat_terrain_with_peak(peak: Vector2i, height: float) -> void:
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			manager.set_height_at(gx, gz, 0.0)
+	manager.set_height_at(peak.x, peak.y, height)
+	manager.brush_falloff_strength = 0.0    # hard edges keep the expected values exact
+	manager.rebuild_chunks_structure()
+
+
+## The stored enum values are what scenes carry in tool_mode, so they must never shift.
+func test_brush_mode_values_stay_stable_for_saved_scenes() -> void:
+	var expected: Dictionary = {
+		LowPolyTerrainManager.BrushMode.RAISE: 0,
+		LowPolyTerrainManager.BrushMode.LOWER: 1,
+		LowPolyTerrainManager.BrushMode.FLATTEN: 2,
+		LowPolyTerrainManager.BrushMode.SMOOTH: 3,
+		LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: 4,
+		LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: 5,
+	}
+	for mode: int in expected:
+		assert_eq(mode, expected[mode],
+			"Renumbering a stored BrushMode silently changes the tool in existing scenes.")
+
+	assert_eq(int(LowPolyTerrainManager.BrushMode.RAMP), 6,
+		"RAMP was appended after the stored values on purpose.")
+	assert_eq(int(LowPolyTerrainManager.BrushMode.NO_FURTHER_BUTTONS), 6,
+		"The toolbar cutoff has to include RAMP, or its button never appears.")
+
+
+## Along the segment the height interpolates linearly between the two picked ends.
+func test_ramp_interpolates_between_its_endpoints() -> void:
+	_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+	manager.brush_radius = 3
+
+	var from_world: Vector3 = manager.global_transform * Vector3(4.0, 0.0, -4.0)
+	var to_world: Vector3 = manager.global_transform * Vector3(20.0, 0.0, -4.0)
+	manager.apply_ramp(from_world, to_world)
+
+	for gx: int in [4, 8, 12, 16, 20]:
+		var t: float = float(gx - 4) / 16.0
+		assert_almost_eq(manager.get_height_at(gx, 4), lerpf(10.0, 0.0, t), 0.001,
+			"Height at x=%d must follow the straight line between the ends." % gx)
+
+
+## Distance is measured to the SEGMENT, so the ramp rounds off instead of running on.
+func test_ramp_does_not_extend_past_its_endpoints() -> void:
+	_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+	manager.brush_radius = 3
+
+	manager.apply_ramp(
+		manager.global_transform * Vector3(4.0, 0.0, -4.0),
+		manager.global_transform * Vector3(20.0, 0.0, -4.0)
+	)
+
+	# Four cells before the start, i.e. outside the radius of the rounded cap.
+	assert_almost_eq(manager.get_height_at(0, 4), 0.0, 0.001,
+		"Ground beyond the first endpoint must stay untouched.")
+	# And sideways beyond the width.
+	assert_almost_eq(manager.get_height_at(12, 8), 0.0, 0.001,
+		"Ground outside the corridor width must stay untouched.")
+
+
+## Both clicks landing on the same spot must not divide by zero.
+func test_ramp_survives_two_identical_points() -> void:
+	_flat_terrain_with_peak(Vector2i(4, 4), 10.0)
+	manager.brush_radius = 2
+
+	var point: Vector3 = manager.global_transform * Vector3(4.0, 0.0, -4.0)
+	manager.apply_ramp(point, point)
+
+	# Degenerates into a flatten disc at that height rather than erroring out.
+	assert_almost_eq(manager.get_height_at(4, 4), 10.0, 0.001,
+		"A zero-length ramp must keep the height it sampled.")
+	assert_almost_eq(manager.get_height_at(5, 4), 10.0, 0.001,
+		"Its neighbours inside the radius take that height too.")
+
+
+## Shift must not swap the tool between the two clicks of a ramp.
+func test_shift_leaves_the_ramp_tool_alone() -> void:
+	manager.tool_mode = LowPolyTerrainManager.BrushMode.RAMP
+	assert_eq(manager.resolve_brush_mode(true), LowPolyTerrainManager.BrushMode.RAMP,
+		"Inverting mid-operation would apply a tool the preview never promised.")
+
+
 # --- CHUNK BOUNDARY GRID OVERLAY ---
 # Replaced the former per-chunk Label3D overlay. The builder is pure and runtime-safe, so the
 # geometry can be asserted here even though the overlay node itself is editor-only.
@@ -949,12 +1037,35 @@ func test_brush_label_lists_only_the_settings_that_apply() -> void:
 	assert_string_contains(smooth, "S: 2.50", "SMOOTH scales its blend by brush_strength.")
 	assert_false(smooth.contains("F: "), "SMOOTH ignores brush_falloff_strength.")
 
+	# RAMP takes its heights from the terrain, so brush_strength never reaches it - but the
+	# falloff shapes its corridor edges exactly like the sculpting brushes.
+	var ramp: String = plugin._build_brush_label(
+		manager, LowPolyTerrainManager.BrushMode.RAMP, false)
+	assert_string_contains(ramp, "R: 7", "Radius sets the corridor width.")
+	assert_string_contains(ramp, "F: 0.35", "Falloff softens the corridor edges.")
+	assert_false(ramp.contains("S: "), "RAMP ignores brush_strength.")
+
 	# The chunk brushes work per chunk, so neither value reaches them.
 	var activate: String = plugin._build_brush_label(
 		manager, LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, false)
 	assert_string_contains(activate, "R: 7", "Radius still selects which chunks are hit.")
 	assert_false(activate.contains("S: "), "Chunk activation ignores brush_strength.")
 	assert_false(activate.contains("F: "), "Chunk activation ignores brush_falloff_strength.")
+
+
+## Every value the caption prints must also trigger a refresh when edited in the inspector.
+##
+## Regression: the refresh used a chain of name comparisons that never learned about
+## brush_falloff_strength. Editing the radius updated the readout, editing the falloff did not,
+## so the caption kept advertising a value the brush had already stopped using.
+func test_every_caption_value_refreshes_from_the_inspector() -> void:
+	var plugin: GDScript = load("res://addons/lowpolyterrain/lowpolyterrain_plugin.gd")
+	for property: String in ["tool_mode", "brush_radius", "brush_strength",
+			"brush_falloff_strength"]:
+		assert_true(plugin.BRUSH_OVERLAY_PROPERTIES.has(property),
+			"'%s' reaches the brush overlay, so editing it has to refresh it." % property)
+		assert_true(property in manager,
+			"'%s' must still exist on the manager, or the entry is dead weight." % property)
 
 
 ## While Shift is held the caption must name the inverted tool, and say why.

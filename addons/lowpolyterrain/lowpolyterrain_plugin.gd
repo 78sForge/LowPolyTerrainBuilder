@@ -12,7 +12,8 @@ const BRUSH_COLORS: Dictionary = {
 	LowPolyTerrainManager.BrushMode.FLATTEN: Color(0.75, 0.4, 0.2, 0.8),            # Orange (Flatten)
 	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),             # Purple (Smooth)
 	LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
-	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75) # Red (Deactivate)
+	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75), # Red (Deactivate)
+	LowPolyTerrainManager.BrushMode.RAMP: Color(0.95, 0.8, 0.2, 0.85)               # Gold (Ramp)
 }
 const FallBackColor := Color(1.0, 1.0, 1.0, 0.9) # Default fallback color
 # Centralized definition array driven directly by the manager's master enum
@@ -36,6 +37,7 @@ const BRUSH_TOOL_DEFINITIONS: Array = [
 	[LowPolyTerrainManager.BrushMode.SMOOTH, "smooth_terrain", "Smooth", "res://addons/lowpolyterrain/icons/smooth.svg", ""],
 	[LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", ""],
 	[LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", ""],
+	[LowPolyTerrainManager.BrushMode.RAMP, "ramp_terrain", "Ramp", "res://addons/lowpolyterrain/icons/ramp.svg", ""],
 	[LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"], # Plugin specific helper index
 	[LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]   # Plugin specific helper index
 ]
@@ -61,6 +63,14 @@ const FULL_STRENGTH_DISTANCE_CELLS: float = 0.25
 ## Brush position of the previous sculpting frame, for the movement measure above.
 var _last_paint_position: Vector3 = Vector3.ZERO
 
+# --- RAMP TOOL ---
+# Two clicks rather than a stroke: the first anchors one end, the second commits the ramp. In
+# between, a line follows the cursor so the span being built is visible before it is applied.
+var _ramp_anchor_set: bool = false
+var _ramp_anchor: Vector3 = Vector3.ZERO
+var _ramp_line: MeshInstance3D = null
+var _ramp_line_material: StandardMaterial3D = null
+
 ## Default opacity of the brush disc. Kept low deliberately: the ring marks where the brush
 ## sits, and the terrain being sculpted has to stay readable underneath it. Bright terrain can
 ## swallow it entirely, which is why the value is a setting rather than a constant.
@@ -79,6 +89,20 @@ const SETTING_OUTLINE_ALPHA: String = "plugins/low_poly_terrain_builder/brush/ou
 ## Segment count of the brush circle. Higher than the disc alone needed, because the outline
 ## now defines the silhouette and a coarse one reads as a polygon rather than a circle.
 const BRUSH_RING_SEGMENTS: int = 64
+
+## Every manager property the brush ring or its caption is built from. Editing one of them in
+## the inspector has to refresh both at once.
+##
+## A named list rather than a chain of comparisons, because the chain went stale exactly the way
+## such chains do: brush_falloff_strength reached the caption and nobody added it here, so the
+## readout kept showing the previous value while the brush already used the new one. Adding a
+## brush setting now means adding one line to this list.
+const BRUSH_OVERLAY_PROPERTIES: PackedStringArray = [
+	"tool_mode",
+	"brush_radius",
+	"brush_strength",
+	"brush_falloff_strength",
+]
 
 # Split across two surfaces so the outline can stay opaque while the disc is barely there.
 var _brush_fill_material: StandardMaterial3D = null
@@ -278,6 +302,13 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if event is InputEventWithModifiers:
 		_set_shift_held((event as InputEventWithModifiers).shift_pressed)
 
+	# Escape drops a pending ramp anchor. Consumed only when there is something to drop, so
+	# Escape keeps its usual editor meaning the rest of the time.
+	if event is InputEventKey and event.pressed and not event.echo:
+		if (event as InputEventKey).keycode == KEY_ESCAPE and _ramp_anchor_set:
+			_cancel_ramp()
+			return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
+
 	# Process brush size and tool switching shortcuts inside the 3D viewport
 	if event is InputEventKey and event.pressed:
 		if _try_handle_brush_shortcut(event as InputEventKey):
@@ -305,6 +336,19 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 			
 	# Process active mouse click strokes for sculpting operations
 	if event is InputEventMouseButton:
+		# RAMP is a two-click operation, not a stroke. Handled before the stroke branch so it
+		# never sets is_drawing and therefore never reaches the per-frame sculpting path.
+		if active_manager.resolve_brush_mode(_shift_held) == LowPolyTerrainManager.BrushMode.RAMP:
+			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+				if _handle_ramp_click():
+					return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
+			# Right-click abandons a pending anchor rather than orbiting straight out of the
+			# half-finished operation.
+			elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and _ramp_anchor_set:
+				_cancel_ramp()
+				return 1 # EditorPlugin.AFTER_GUI_INPUT_STOP
+			return 0 # EditorPlugin.AFTER_GUI_INPUT_PASS
+
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_drawing = event.pressed
 			
@@ -502,6 +546,10 @@ func _hide_brush_visuals() -> void:
 		mouse_label.visible = false
 	if brush_gizmo and brush_gizmo.visible:
 		brush_gizmo.visible = false
+	# The anchor itself survives leaving the viewport; only its line stops being drawn, since
+	# it would otherwise point at a cursor position that is no longer meaningful.
+	if _ramp_line and _ramp_line.visible:
+		_ramp_line.visible = false
 
 ## Shared setup for both brush materials: unlit, alpha blended, visible through the terrain and
 ## from either side, so the ring reads the same however the camera is angled.
@@ -527,6 +575,15 @@ func _create_3d_brush_gizmo() -> void:
 	# happen through per-surface overrides; see _update_gizmo_scale().
 	_brush_fill_material = _new_brush_material()
 	_brush_outline_material = _new_brush_material()
+
+	# Separate node from the ring: its endpoints move with the cursor every frame, while the
+	# ring mesh only changes when a setting does. Sharing one mesh would rebuild both.
+	_ramp_line = MeshInstance3D.new()
+	_ramp_line.name = "DEBUG_RampLine_Transient"
+	_ramp_line_material = _new_brush_material()
+	_ramp_line.material_override = _ramp_line_material
+	_ramp_line.visible = false
+	active_manager.add_child(_ramp_line)
 
 	# Instantiate the 2D canvas label on top of the editor base viewport
 	if not mouse_label:
@@ -586,9 +643,12 @@ static func _build_brush_label(
 	or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH:
 		parts.append("S: %.2f" % manager.brush_strength)
 
+	# RAMP belongs here too: it shapes the corridor edges with the very same curve, even though
+	# it takes its heights from the terrain rather than from brush_strength.
 	if mode_idx == LowPolyTerrainManager.BrushMode.RAISE \
 	or mode_idx == LowPolyTerrainManager.BrushMode.LOWER \
-	or mode_idx == LowPolyTerrainManager.BrushMode.FLATTEN:
+	or mode_idx == LowPolyTerrainManager.BrushMode.FLATTEN \
+	or mode_idx == LowPolyTerrainManager.BrushMode.RAMP:
 		parts.append("F: %.2f" % manager.brush_falloff_strength)
 
 	return "%s\n%s" % [mode_name, " | ".join(parts)]
@@ -668,9 +728,17 @@ func _destroy_3d_brush_gizmo() -> void:
 		brush_gizmo.free()
 		brush_gizmo = null
 
+	if _ramp_line:
+		if _ramp_line.get_parent():
+			_ramp_line.get_parent().remove_child(_ramp_line)
+		_ramp_line.free()
+		_ramp_line = null
+	_ramp_anchor_set = false
+
 	# Dropped with the instance they belonged to; _create_3d_brush_gizmo() makes fresh ones.
 	_brush_fill_material = null
 	_brush_outline_material = null
+	_ramp_line_material = null
 
 	if mouse_label:
 		if mouse_label.get_parent():
@@ -730,6 +798,60 @@ func _update_gizmo_position(camera: Camera3D, mouse_pos: Vector2) -> void:
 		brush_gizmo.global_position = world_hit_point
 	else:
 		brush_gizmo.visible = false
+
+	# The span follows the cursor, so it is redrawn wherever the ring moves. Frame guarded
+	# along with the pick above, not per motion event.
+	_update_ramp_line()
+
+
+## Handles one click for the two-click ramp tool. Returns true when the click was consumed.
+func _handle_ramp_click() -> bool:
+	if active_manager == null or brush_gizmo == null or not brush_gizmo.visible:
+		return false
+
+	if not _ramp_anchor_set:
+		_ramp_anchor = brush_gizmo.global_position
+		_ramp_anchor_set = true
+		_update_ramp_line()
+		return true
+
+	active_manager.apply_ramp(_ramp_anchor, brush_gizmo.global_position)
+	_cancel_ramp()
+	return true
+
+
+## Drops a pending first click. Also the exit for Escape, right-click and any tool change, so
+## an anchor can never survive into a context where the next click would mean something else.
+func _cancel_ramp() -> void:
+	if not _ramp_anchor_set:
+		return
+	_ramp_anchor_set = false
+	if _ramp_line:
+		_ramp_line.visible = false
+
+
+## Redraws the span from the anchor to the cursor. Built in the manager's local space, so a
+## moved, rotated or scaled terrain needs no special casing.
+func _update_ramp_line() -> void:
+	if _ramp_line == null or active_manager == null:
+		return
+
+	if not _ramp_anchor_set or brush_gizmo == null or not brush_gizmo.visible:
+		_ramp_line.visible = false
+		return
+
+	var from_local: Vector3 = active_manager.to_local(_ramp_anchor)
+	var to_local_pos: Vector3 = active_manager.to_local(brush_gizmo.global_position)
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_LINE_STRIP)
+	st.add_vertex(from_local)
+	st.add_vertex(to_local_pos)
+	_ramp_line.mesh = st.commit()
+
+	if _ramp_line_material:
+		_ramp_line_material.albedo_color = BRUSH_COLORS[LowPolyTerrainManager.BrushMode.RAMP]
+	_ramp_line.visible = true
 
 
 ## Applies the brush exactly once, at wherever the ring currently sits.
@@ -948,6 +1070,11 @@ func _show_brush_ui_panel(visible: bool) -> void:
 ## Updates the manager state and forces property list synchronization on click.
 func _select_brush_mode(mode_idx: int) -> void:
 	if not active_manager: return
+
+	# A pending ramp anchor must not survive a tool change, or the next click would mean
+	# something entirely different from what the visible line promises.
+	_cancel_ramp()
+
 	active_manager.tool_mode = mode_idx as LowPolyTerrainManager.BrushMode
 	
 	if mode_idx == LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK or mode_idx == LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK:
@@ -1025,10 +1152,10 @@ func _on_inspector_property_edited(property_name: String) -> void:
 		_open_export_dialog_from_plugin()
 		return
 		
-	if property_name == "tool_mode" or property_name == "brush_radius" or property_name == "brush_strength":
+	if BRUSH_OVERLAY_PROPERTIES.has(property_name):
 		# 1. Update the 3D visual circle mesh and floating text label
 		_update_gizmo_scale()
-		
+
 		# 2. Force the toolbar radio buttons to depress the correct tool icon instantly
 		_sync_ui_buttons_with_manager()
 

@@ -22,6 +22,10 @@ const PATH_SIZE_METERS := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP
 const PATH_TOTAL_VERTICES := GROUP_DIMENSIONS + "/" + SUBGROUP_METRICS + "/" + PROP_TOTAL_VERTICES
 
 # Centralized terrain sculpting and chunk state tools
+# Values 0..5 are STORED in scenes through tool_mode, so they must never be renumbered.
+# RAMP was appended as 6 and the two plugin-internal helpers moved up accordingly; those two
+# never reach tool_mode, because the shortcut handler acts on them and returns before the
+# selection is written.
 enum BrushMode {
 	RAISE = 0,
 	LOWER = 1,
@@ -29,9 +33,10 @@ enum BrushMode {
 	SMOOTH = 3,
 	ACTIVATE_CHUNK = 4,
 	DEACTIVATE_CHUNK = 5,
-	NO_FURTHER_BUTTONS = 5,
-	DECREASE_BRUSH_RADIUS = 6,
-	INCREASE_BRUSH_RADIUS = 7
+	RAMP = 6,
+	NO_FURTHER_BUTTONS = 6,
+	DECREASE_BRUSH_RADIUS = 7,
+	INCREASE_BRUSH_RADIUS = 8
 }
 
 
@@ -794,18 +799,16 @@ func set_height_at(x: int, z: int, value: float) -> void:
 ## Note that "the height at an XZ position" stops being well defined if this manager is rotated
 ## around X or Z, because a vertical ray can then cross the surface more than once. Translation,
 ## scale and rotation around Y are all handled correctly.
-func get_height_at_world_coords(world_x: float, world_z: float) -> float:
-	if is_zero_approx(cell_size) or global_height_data.is_empty():
-		return 0.0
-	if _total_vertices_x <= 0 or _total_vertices_z <= 0:
+## Bilinearly samples the height matrix at fractional GRID coordinates, in LOCAL units.
+##
+## Shared by the world-space query and by the ramp tool so both read the surface the same way.
+## Coordinates outside the grid are clamped to the border rather than rejected: the cell origin
+## stops one short of the last vertex so the +1 neighbours stay in range, and the interpolation
+## factors then carry the clamping.
+func sample_grid_height(grid_x: float, grid_z: float) -> float:
+	if _total_vertices_x <= 0 or _total_vertices_z <= 0 or global_height_data.is_empty():
 		return 0.0
 
-	var local: Vector3 = to_local(Vector3(world_x, 0.0, world_z))
-	var grid_x: float = local.x / cell_size
-	var grid_z: float = -local.z / cell_size
-
-	# The cell origin is clamped one short of the last vertex so the +1 neighbours below stay
-	# in range; the interpolation factors then carry the clamping for out-of-bounds queries.
 	var x0: int = clampi(floori(grid_x), 0, maxi(_total_vertices_x - 2, 0))
 	var z0: int = clampi(floori(grid_z), 0, maxi(_total_vertices_z - 2, 0))
 	var x1: int = mini(x0 + 1, _total_vertices_x - 1)
@@ -817,11 +820,21 @@ func get_height_at_world_coords(world_x: float, world_z: float) -> float:
 	var row0: int = z0 * _total_vertices_x
 	var row1: int = z1 * _total_vertices_x
 
-	var height: float = lerpf(
+	return lerpf(
 		lerpf(global_height_data[row0 + x0], global_height_data[row0 + x1], tx),
 		lerpf(global_height_data[row1 + x0], global_height_data[row1 + x1], tx),
 		tz
 	)
+
+
+func get_height_at_world_coords(world_x: float, world_z: float) -> float:
+	if is_zero_approx(cell_size) or global_height_data.is_empty():
+		return 0.0
+	if _total_vertices_x <= 0 or _total_vertices_z <= 0:
+		return 0.0
+
+	var local: Vector3 = to_local(Vector3(world_x, 0.0, world_z))
+	var height: float = sample_grid_height(local.x / cell_size, -local.z / cell_size)
 
 	# Sampled in local space, handed back in world space, so a moved or scaled manager reports
 	# the height the caller can actually place something at.
@@ -1089,6 +1102,115 @@ func _smooth_entire_terrain() -> void:
 
 
 ## Core brush manipulation engine triggered directly by the editor plugin.
+## Blends a straight ramp between two world positions into the terrain.
+##
+## The heights at both ends are read from the terrain itself, so the ramp starts and finishes
+## flush with whatever is already there. Along the connecting segment the target height is
+## interpolated linearly; across it, `brush_radius` sets the width and `brush_falloff_strength`
+## how softly the edges meet the surrounding ground.
+##
+## Distance is measured to the SEGMENT, not to the infinite line, which gives the corridor
+## rounded caps: the ramp runs out at its endpoints instead of being cut off square.
+##
+## Public so it can be scripted and unit tested; the editor's RAMP brush is only the two clicks
+## that supply the endpoints.
+func apply_ramp(from_world: Vector3, to_world: Vector3) -> void:
+	if is_zero_approx(cell_size) or global_height_data.is_empty():
+		return
+	if brush_radius <= 0:
+		return
+
+	var from_local: Vector3 = to_local(from_world)
+	var to_local_pos: Vector3 = to_local(to_world)
+
+	# Everything below happens in grid units, where brush_radius is already expressed.
+	var a := Vector2(from_local.x / cell_size, -from_local.z / cell_size)
+	var b := Vector2(to_local_pos.x / cell_size, -to_local_pos.z / cell_size)
+
+	var height_a: float = sample_grid_height(a.x, a.y)
+	var height_b: float = sample_grid_height(b.x, b.y)
+
+	var axis: Vector2 = b - a
+	var axis_length_sq: float = axis.length_squared()
+	var radius: float = float(brush_radius)
+
+	var old_state: PackedFloat32Array = global_height_data.duplicate()
+
+	# Only the capsule around the segment can change, so the sweep stays local to it.
+	var min_x: int = clampi(floori(minf(a.x, b.x) - radius), 0, _total_vertices_x - 1)
+	var max_x: int = clampi(ceili(maxf(a.x, b.x) + radius), 0, _total_vertices_x - 1)
+	var min_z: int = clampi(floori(minf(a.y, b.y) - radius), 0, _total_vertices_z - 1)
+	var max_z: int = clampi(ceili(maxf(a.y, b.y) + radius), 0, _total_vertices_z - 1)
+
+	var touched: Dictionary = {}
+
+	for z in range(min_z, max_z + 1):
+		for x in range(min_x, max_x + 1):
+			var point := Vector2(float(x), float(z))
+
+			# Projection onto the segment, clamped so both ends round off rather than
+			# extending the ramp beyond the picked points.
+			var t: float = 0.0
+			if not is_zero_approx(axis_length_sq):
+				t = clampf((point - a).dot(axis) / axis_length_sq, 0.0, 1.0)
+
+			var distance: float = point.distance_to(a + axis * t)
+			if distance > radius:
+				continue
+
+			var cx: int = clampi(x / chunk_size, 0, world_chunks.x - 1)
+			var cz: int = clampi(z / chunk_size, 0, world_chunks.y - 1)
+			if not is_chunk_active(cx, cz):
+				continue
+
+			# Same curve the sculpting brushes use, so the tool feels like the others.
+			var radius_factor: float = distance / radius
+			var smooth_curve: float = clampf(
+				1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor)), 0.0, 1.0
+			)
+			var falloff: float = lerpf(1.0, smooth_curve, brush_falloff_strength)
+
+			var index: int = z * _total_vertices_x + x
+			global_height_data[index] = lerpf(
+				global_height_data[index], lerpf(height_a, height_b, t), falloff
+			)
+
+			touched[Vector2i(cx, cz)] = true
+			# A vertex on a chunk border belongs to its neighbours as well, or the seam splits.
+			if x % chunk_size == 0 and cx > 0:
+				touched[Vector2i(cx - 1, cz)] = true
+			if z % chunk_size == 0 and cz > 0:
+				touched[Vector2i(cx, cz - 1)] = true
+
+	for coord: Vector2i in touched:
+		if _has_chunk(coord):
+			_update_single_chunk(coord)
+
+	_register_ramp_undo(old_state)
+
+
+## Commits one undo entry for a completed ramp, mirroring the global generators.
+func _register_ramp_undo(old_state: PackedFloat32Array) -> void:
+	if not Engine.is_editor_hint():
+		return
+
+	if _active_undo_redo_manager == null:
+		var editor: Object = Engine.get_singleton("EditorInterface")
+		if editor and editor.has_method("get_undo_redo"):
+			_active_undo_redo_manager = editor.call("get_undo_redo")
+	if _active_undo_redo_manager == null:
+		return
+
+	_active_undo_redo_manager.create_action("Terrain Ramp", 0, self)
+	_active_undo_redo_manager.add_do_method(
+		self, _apply_historical_snapshot.get_method(), global_height_data.duplicate()
+	)
+	_active_undo_redo_manager.add_undo_method(
+		self, _apply_historical_snapshot.get_method(), old_state
+	)
+	_active_undo_redo_manager.commit_action()
+
+
 ## The brush mode that actually runs for the given modifier state.
 ##
 ## Public because the editor plugin needs the very same answer to colour the brush ring and
@@ -1107,6 +1229,10 @@ func resolve_brush_mode(is_alternative: bool) -> BrushMode:
 			return BrushMode.DEACTIVATE_CHUNK
 		BrushMode.DEACTIVATE_CHUNK:
 			return BrushMode.ACTIVATE_CHUNK
+		BrushMode.RAMP:
+			# Deliberately unchanged. RAMP is a two-click operation, and swapping the tool
+			# under the user between the first and the second click would be hostile.
+			return BrushMode.RAMP
 
 	# FLATTEN and SMOOTH have no natural opposite, so the modifier reaches for SMOOTH.
 	return BrushMode.SMOOTH
