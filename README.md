@@ -194,12 +194,38 @@ func _physics_process(_delta: float) -> void:
 		terrain_manager.update_collision_culling(player.global_position, 40.0)
 ```
 
-`update_collision_culling_multi(positions, radius_meters)` takes several centres at once.
+For several centres at once - split-screen players, companion NPCs - the enabled set is the
+union of all their radii:
 
-The chunk grid is regular, so the affected chunks are derived arithmetically rather than by
-measuring the distance to every collider. Cost scales with the radius instead of the world
-size, and only the delta is pushed to the physics engine, so no amortization across frames
-and therefore no reaction delay is required.
+```gdscript
+terrain_manager.update_collision_culling_multi(
+	[player_a.global_position, player_b.global_position], 40.0
+)
+```
+
+That is the whole API. Four things are worth knowing about it:
+
+**Positions are world space, the radius is metres.** The manager converts into its own local
+space, so a moved, rotated or scaled terrain needs no preparation on your side.
+
+**Call it every physics frame, not sparingly.** There is no internal throttling and none is
+needed: affected chunks are derived arithmetically from the regular grid rather than by
+measuring the distance to every collider, cost scales with the radius instead of the world
+size, and only the delta reaches the physics engine. Calling less often saves almost nothing
+and risks gaps.
+
+**Under `LAZY` the radius is lead time, not a display setting.** A collider is *built* on first
+contact, inside the physics step, so the radius has to be wide enough that a chunk is finished
+before your player arrives. Fast movers need more than walkers.
+
+**Leave `Enable Collision Culling` off while driving it yourself.** It only governs the
+automatic target-following pass; with it off the manager runs no `_physics_process` at all, so
+you do not pay for a pass you are replacing. Manual calls are unaffected by it.
+
+One asymmetry to watch: `update_collision_culling_multi()` with an **empty** array does
+nothing - it does not release anything. If every target disappears and you want the collision
+gone, call `update_collision_culling()` with a far-away position, or set `Runtime Collision`
+to `NONE`.
 
 ### Runtime Collision applies to the SERVERS backend only
 

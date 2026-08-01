@@ -2132,8 +2132,11 @@ func _warn_if_culling_never_started() -> void:
 		return
 	if runtime_collision != RuntimeCollision.LAZY:
 		return
-	# Targets drive the culling automatically, so their presence is not a misconfiguration.
-	if not collision_cull_targets.is_empty():
+	# Targets drive the culling automatically, so their presence is not a misconfiguration -
+	# but only while enable_collision_culling actually lets them. Without that second half,
+	# assigned targets plus an unticked checkbox silenced this warning while producing exactly
+	# the situation it exists to report: a LAZY terrain nothing ever builds collision for.
+	if enable_collision_culling and not collision_cull_targets.is_empty():
 		return
 
 	push_warning("LowPolyTerrain '%s': runtime_collision is LAZY but " % name
