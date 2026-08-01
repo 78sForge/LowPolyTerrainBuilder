@@ -235,6 +235,59 @@ func _usage_of(prop: String) -> int:
 	return -1
 
 
+## The culling settings follow their own checkbox, independently of the backend.
+func test_culling_settings_follow_their_checkbox() -> void:
+	assert_true(manager.enable_collision_culling,
+		"Default must stay on: every scene saved before the switch existed behaved that way.")
+
+	for prop: String in LowPolyTerrainManager.CULLING_ONLY_PROPERTIES:
+		assert_gt(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must be shown while culling is enabled." % prop)
+
+	manager.enable_collision_culling = false
+	for prop: String in LowPolyTerrainManager.CULLING_ONLY_PROPERTIES:
+		assert_eq(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must be hidden once culling is switched off." % prop)
+
+	# Independent of the backend: the culling works in both.
+	_use_servers()
+	for prop: String in LowPolyTerrainManager.CULLING_ONLY_PROPERTIES:
+		assert_eq(_usage_of(prop) & PROPERTY_USAGE_EDITOR, 0,
+			"'%s' must stay hidden under SERVERS too." % prop)
+
+
+## Hiding must never cost the value. This is the exact shape of the regression that once wiped
+## runtime_collision: clearing the whole usage mask drops the storage flag with it, after which
+## the scene loader discards what was saved and the setting silently reverts to its default.
+func test_hidden_culling_settings_are_still_stored() -> void:
+	manager.enable_collision_culling = false
+	for prop: String in LowPolyTerrainManager.CULLING_ONLY_PROPERTIES:
+		assert_gt(_usage_of(prop) & PROPERTY_USAGE_STORAGE, 0,
+			"'%s' must still be saved while hidden." % prop)
+
+	var path := "user://lowpolyterrain_culling_roundtrip.tscn"
+	for enabled: bool in [true, false]:
+		var source := LowPolyTerrainManager.new()
+		source.name = "CullRoundTrip"
+		source.enable_collision_culling = enabled
+		source.collision_cull_radius = 42.5
+
+		var packed := PackedScene.new()
+		assert_eq(packed.pack(source), OK, "Packing must succeed.")
+		assert_eq(ResourceSaver.save(packed, path), OK, "Saving must succeed.")
+
+		var restored: LowPolyTerrainManager = load(path).instantiate()
+		assert_eq(restored.enable_collision_culling, enabled,
+			"enable_collision_culling lost for enabled=%s." % enabled)
+		assert_almost_eq(restored.collision_cull_radius, 42.5, 0.001,
+			"collision_cull_radius lost for enabled=%s." % enabled)
+
+		restored.free()
+		source.free()
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
 func test_retain_limit_is_visible_only_under_lazy() -> void:
 	# It governs colliders being built and released, which only LAZY ever does. Offering it
 	# elsewhere would advertise a setting that cannot take effect.

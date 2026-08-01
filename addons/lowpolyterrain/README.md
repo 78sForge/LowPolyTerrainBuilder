@@ -28,6 +28,7 @@ Key additions:
 * Brush Silhouette: A coloured outline over a barely tinted disc keeps the terrain readable.
 * Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
 * Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
+* Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -200,15 +201,30 @@ measuring the distance to every collider. Cost scales with the radius instead of
 size, and only the delta is pushed to the physics engine, so no amortization across frames
 and therefore no reaction delay is required.
 
-What the call does depends on **Runtime Collision**:
+### Runtime Collision applies to the SERVERS backend only
 
-| `runtime_collision` | Behaviour of `update_collision_culling()` |
+> **`PREBUILT`, `LAZY` and `NONE` do nothing in `MESH_NODES`.** They decide when the SERVERS
+> backend creates its `PhysicsServer3D` bodies. `MESH_NODES` has no such step: its collision
+> comes from `StaticBody3D` nodes you create yourself with **Bake Live Collisions**, and it
+> exists from the moment you bake it, whatever `Runtime Collision` is set to.
+
+This is why the setting disappears from the inspector while `MESH_NODES` is active - it is not
+missing, it simply has nothing to act on. The value you picked is still stored and comes back
+when you switch to `SERVERS`.
+
+Culling itself is a different question and works in **both** backends. In `MESH_NODES` it
+toggles `disabled` on the baked `CollisionShape3D` nodes; in `SERVERS` it acts on the body RIDs.
+So a `MESH_NODES` terrain can absolutely use **Collision Cull Targets** - it just cannot choose
+*when* colliders come into existence, because baking already decided that.
+
+| `runtime_collision` (SERVERS only) | Behaviour of `update_collision_culling()` |
 | :--- | :--- |
 | `PREBUILT` (default) | Colliders exist everywhere; the radius only enables/disables them. Cheapest to toggle, highest memory. |
 | `LAZY` | A collider is **built** the first time a target comes near. Leaving parks it rather than destroying it, so returning is cheap. Lowest memory. |
 | `NONE` | No effect; there is no runtime collision. |
+| *(MESH_NODES)* | Setting ignored. Culling enables and disables the baked collider nodes. |
 
-### Choosing between PREBUILT and LAZY
+### Choosing between PREBUILT and LAZY (SERVERS only)
 
 The two differ in *when* a collider is created, and that is a direct trade of frame time
 against memory.
@@ -344,7 +360,8 @@ use a raycast instead.
 | **Custom Material** | Terrain Properties | `Resource` | Slot for custom 3D shader or standard materials. |
 | **Export Target Path** | Data Export | `String` | Target path where the exported `.gltf` file will be saved. |
 | **Choose Path & Export Terrain** | Data Export | `Button` | Opens a file dialog to name and save the model asset. |
-| **Runtime Collision** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Decides *when* a collider is created: `PREBUILT` up front, `LAZY` on first approach, `NONE` never. |
+| **Runtime Collision** | Collision Generation | `Enum` | **`SERVERS` only**, hidden and inert under `MESH_NODES`, whose collision comes from the bake button instead. Decides *when* a collider is created: `PREBUILT` up front, `LAZY` on first approach, `NONE` never. |
+| **Enable Collision Culling** | Collision Generation | `bool` | Master switch for the two settings below. On by default. Works in **both** backends. |
 | **Collision Cull Targets** | Collision Generation | `Array[Node3D]` | Nodes the culling follows, typically the player. The manager then drives culling itself once per physics frame. Empty means you drive it manually. |
 | **Collision Cull Radius** | Collision Generation | `float` | Metres of collision kept around each target. Pre-filled with `chunk_size * cell_size * 2` and re-derived on dimension changes unless you overrode it. |
 | **Collision Retain Limit** | Collision Generation | `int` | `LAZY` only, hidden otherwise. How many colliders outside the radius stay built but parked, so returning to them is cheap. Zero releases immediately. |

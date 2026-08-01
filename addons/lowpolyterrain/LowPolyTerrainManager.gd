@@ -171,6 +171,13 @@ const LAZY_ONLY_PROPERTIES: PackedStringArray = [
 	"collision_retain_limit",
 ]
 
+## Settings that only describe HOW the culling follows its targets, and therefore only mean
+## anything once enable_collision_culling is on.
+const CULLING_ONLY_PROPERTIES: PackedStringArray = [
+	"collision_cull_targets",
+	"collision_cull_radius",
+]
+
 
 ## Hides the settings belonging to the other backend. They stay stored, they just stop
 ## advertising themselves in a mode where they genuinely cannot do anything - which is
@@ -187,6 +194,10 @@ func _validate_property(property: Dictionary) -> void:
 			hidden = LAZY_ONLY_PROPERTIES.has(name)
 	else:
 		hidden = SERVER_ONLY_PROPERTIES.has(name) or LAZY_ONLY_PROPERTIES.has(name)
+
+	# A third axis, independent of the backend: the culling works in both of them.
+	if not hidden and not enable_collision_culling:
+		hidden = CULLING_ONLY_PROPERTIES.has(name)
 
 	if hidden:
 		# Clear ONLY the editor bit. Assigning PROPERTY_USAGE_NO_EDITOR outright would replace
@@ -359,7 +370,16 @@ enum RuntimeCollision {
 	NONE = 2,     ## No runtime collision at all.
 }
 
-## SERVERS backend only; the MESH_NODES backend is unaffected and still uses the bake button.
+## SERVERS BACKEND ONLY. Under MESH_NODES this setting does nothing at all, which is why the
+## inspector hides it there rather than offering a choice that cannot take effect.
+##
+## The reason is that the two backends obtain their collision from different places. SERVERS
+## creates PhysicsServer3D bodies itself, so it can decide when to do so - that is what this
+## setting picks. MESH_NODES has no such step: its collision consists of StaticBody3D nodes
+## produced by the Bake Live Collisions button, and those exist from the moment you bake them.
+##
+## Collision CULLING is a separate question and works in both backends: it enables and disables
+## whatever colliders exist. Only their creation is what this setting governs.
 ##
 ## Decides WHEN a chunk's collider is created, which is a trade of frame time against memory.
 ##
@@ -422,6 +442,24 @@ enum CollisionDebugDraw {
 	set(v):
 		collision_debug_draw = v
 		_sync_collision_debug_draw()
+
+## Lets the manager keep collision loaded around moving targets instead of everywhere at once.
+##
+## The targets and the radius below only mean anything while this is on, so they are hidden
+## when it is off. Turning it off does not clear either of them, and any chunk the culling was
+## holding is handed back on the next frame.
+##
+## Defaults to on, which is what every scene did before this switch existed. Untick it to take
+## the two settings out of the inspector on a terrain that has no use for them.
+##
+## Independent of runtime_collision, which decides WHEN a collider is built. This decides
+## WHERE. Manual update_collision_culling() calls work regardless of this setting.
+@export var enable_collision_culling: bool = true:
+	set(v):
+		enable_collision_culling = v
+		# The two settings below appear and disappear with this one.
+		notify_property_list_changed()
+		_refresh_culling_target_state()
 
 ## Nodes the collision culling should follow, typically the player's CharacterBody3D.
 ##
@@ -2112,6 +2150,14 @@ func _warn_if_culling_never_started() -> void:
 func add_culling_target(target: Node3D) -> void:
 	if target == null or collision_cull_targets.has(target):
 		return
+
+	# Warned rather than auto-enabled: silently switching an inspector checkbox from code would
+	# be worse than saying nothing happened, and this is the only symptom a caller would get.
+	if not enable_collision_culling:
+		push_warning("LowPolyTerrain '%s': add_culling_target() was called but " % name
+			+ "enable_collision_culling is off, so the target will not be followed. Tick "
+			+ "Enable Collision Culling in the inspector, or set it from code.")
+
 	collision_cull_targets.append(target)
 	_cull_target_cells.clear()
 	_refresh_culling_target_state()
@@ -2139,11 +2185,14 @@ func _refresh_culling_target_state() -> void:
 		return
 
 	var has_target: bool = false
-	for target in collision_cull_targets:
-		if is_instance_valid(target):
-			has_target = true
-			break
+	if enable_collision_culling:
+		for target in collision_cull_targets:
+			if is_instance_valid(target):
+				has_target = true
+				break
 
+	# Switching the feature off is treated exactly like losing the last target, so the chunks it
+	# was holding are handed back below instead of staying resident for the rest of the session.
 	set_physics_process(has_target)
 
 	if not has_target:
