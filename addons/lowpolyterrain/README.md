@@ -3,6 +3,25 @@
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic
 low-poly landscapes inside the Godot 4 editor.
 
+## ✅ **Update information for v1.1.1 (The Ramp & Brush Feedback Update):**
+Version 1.1.1 adds a tool for building slopes and makes the brush show what it is about to do
+before it does it.
+Key additions:
+* Ramp Tool: Click two points and a graded slope connects them, at brush width and falloff.
+* Ramp Preview: A translucent surface shows the exact result before the second click commits it.
+* Two-Tone Preview: The ramp's top and its cuts to the ground are coloured apart to read the shape.
+* Brush Silhouette: A coloured outline over a barely tinted disc keeps the terrain readable.
+* Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
+* Brush Readout: The caption lists the falloff value, and only the settings the active tool reads.
+* Modifier Preview: Holding Shift recolours and recaptions the brush to the tool it will perform.
+* Falloff Hotkeys: 'Shift' with the two brush size keys sharpens or softens the brush edge.
+* Held-Button Sculpting: Holding the mouse button keeps sculpting without moving the cursor.
+* Frame-Paced Strokes: The brush applies once per frame instead of once per motion event.
+* Resting Strokes: A stroke held on one spot applies at reduced strength instead of full force.
+* Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
+* Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
+* Rotated Bake Fix: Baked colliders now follow a rotated terrain instead of forming a staircase.
+
 ## ✅ **Update information for v1.1.0 (The Server Backend Update):**
 Version 1.1.0 adds a second, node-free rendering and physics pipeline alongside the classic one,
 together with runtime collision control and a world-space height query.
@@ -20,20 +39,6 @@ Key additions:
 * Chunk Grid Overlay: 'show_chunk_grid' replaces the per-chunk labels and stays legible at any zoom.
 * Chunk Activation Undo: Activate Chunk and Deactivate Chunk strokes are now undoable.
 * Brush Handling: The ring hides outside the viewport, and its reach is no longer capped.
-* Brush Readout: The caption lists the falloff value, and only the settings the active tool reads.
-* Modifier Preview: Holding Shift recolours and recaptions the brush to the tool it will perform.
-* Held-Button Sculpting: Holding the mouse button keeps sculpting without moving the cursor.
-* Frame-Paced Strokes: The brush applies once per frame instead of once per motion event.
-* Resting Strokes: A stroke held on one spot applies at reduced strength instead of full force.
-* Brush Silhouette: A coloured outline over a barely tinted disc keeps the terrain readable.
-* Visible Chunk Markers: Deactivated chunks read through other terrain, just like the grid does.
-* Adjustable Brush Opacity: Two Editor Settings sliders, for terrain the default washes out on.
-* Culling Toggle: 'enable_collision_culling' hides the targets and radius where they are unused.
-* Rotated Bake Fix: Baked colliders now follow a rotated terrain instead of forming a staircase.
-* Ramp Tool: Click two points and a graded slope connects them, at brush width and falloff.
-* Ramp Preview: A translucent surface shows the exact result before the second click commits it.
-* Two-Tone Preview: The ramp's top and its cuts to the ground are coloured apart to read the shape.
-* Falloff Hotkeys: 'Shift' with the two brush size keys sharpens or softens the brush edge.
 * Configurable Shortcuts: Brush tools ship unassigned to avoid clashing with Godot's viewport keys.
 * Shared Geometry Factory: One stateless builder guarantees identical meshes across both backends.
 * Uncached Triangle Soups: Colliders and picking avoid the permanent cache inside 'get_faces()'.
@@ -90,6 +95,7 @@ on my mobile device, achieving up to 1000 FPS within the editor.
 * **Dynamic Chunk Management:** Grid blocks are handled fluidly without cluttering scene files.
 * **Organic Delaunay Topology:** Creates organic triangle networks for typical landscape looks.
 * **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower, Flatten, and Smooth tools.
+* **Two-Click Ramp Builder:** Connects two picked points with a graded slope, previewed live.
 * **Procedural Noise Injector:** Generates seamless Perlin or Cellular landscapes instantly.
 * **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu with clear SVG icons.
 * **Dynamic Color Indicators:** Features a colored 3D brush circle aligned to active tool colors.
