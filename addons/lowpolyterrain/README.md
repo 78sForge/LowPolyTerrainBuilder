@@ -3,6 +3,15 @@
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic
 low-poly landscapes inside the Godot 4 editor.
 
+## 💬 Bugs, requests and ideas
+
+Found something broken, missing a feature, or have an idea for the tool? Please open an issue:
+
+**https://github.com/78sForge/LowPolyTerrainBuilder**
+
+Bug reports are most useful with your Godot version, the renderer you are on, whether the
+terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that reproduce it.
+
 ## ✅ **Update information for v1.1.1 (The Ramp & Brush Feedback Update):**
 Version 1.1.1 adds a tool for building slopes and makes the brush show what it is about to do
 before it does it.

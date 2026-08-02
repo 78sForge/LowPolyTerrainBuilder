@@ -4,6 +4,7 @@ shader_type spatial;
 render_mode world_vertex_coords;
 
 uniform vec4 base_color : source_color = vec4(0.3, 0.6, 0.2, 1.0);
+uniform float roughness : hint_range(0.0, 1.0) = 0.8;
 uniform sampler2D noise_texture : source_color;
 uniform float noise_scale = 0.015;
 uniform float noise_strength = 0.3;
@@ -36,6 +37,6 @@ void fragment() {
 	
 	ALBEDO = final_color;
 	
-	ROUGHNESS = 0.8;
+	ROUGHNESS = roughness;
 	SPECULAR = 0.1;
 }

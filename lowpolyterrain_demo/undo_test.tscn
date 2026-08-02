@@ -1,0 +1,34 @@
+[gd_scene format=4 uid="uid://bms1p4bvae8a0"]
+
+[ext_resource type="Script" uid="uid://dxq4p56omxx80" path="res://addons/lowpolyterrain/LowPolyTerrainManager.gd" id="1_u0gkg"]
+[ext_resource type="Shader" uid="uid://cr0kikye8k030" path="res://addons/lowpolyterrain/shader/terrain_lowpoly.gdshader" id="2_268r8"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4deps"]
+render_priority = 0
+shader = ExtResource("2_268r8")
+shader_parameter/base_color = Color(0.51, 0.557, 0.157, 1)
+shader_parameter/roughness = 0.8
+shader_parameter/noise_scale = 0.015
+shader_parameter/noise_strength = 0.3
+shader_parameter/color_steps = 3
+
+[node name="UndoTest" type="Node3D" unique_id=983971205]
+
+[node name="LowPolyTerrainManager" type="Node3D" parent="." unique_id=251852466]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 0, 0.7)
+script = ExtResource("1_u0gkg")
+chunk_activity_data = PackedByteArray("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
+preview_world_chunks = Vector2i(16, 14)
+preview_chunk_size = 1
+preview_cell_size = 0.1
+show_chunk_grid = true
+custom_material = SubResource("ShaderMaterial_4deps")
+brush_radius = 1
+brush_strength = 0.05
+collision_cull_radius = 0.2
+_derived_cull_radius = 0.2
+global_height_data = PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7.484591e-05, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+metadata/_custom_type_script = "uid://dxq4p56omxx80"
+metadata/_edit_lock_ = false
+
+[node name="Terrain_Assets" type="Node3D" parent="LowPolyTerrainManager" unique_id=282778459]
