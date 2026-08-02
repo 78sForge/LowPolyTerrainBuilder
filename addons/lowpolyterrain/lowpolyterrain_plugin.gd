@@ -13,7 +13,8 @@ const BRUSH_COLORS: Dictionary = {
 	LowPolyTerrainManager.BrushMode.SMOOTH: Color(0.6, 0.2, 0.85, 0.8),             # Purple (Smooth)
 	LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK: Color(0.15, 0.85, 0.15, 0.75),  # Green (Activate)
 	LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK: Color(0.85, 0.15, 0.15, 0.75), # Red (Deactivate)
-	LowPolyTerrainManager.BrushMode.RAMP: Color(0.95, 0.8, 0.2, 0.85)               # Gold (Ramp)
+	LowPolyTerrainManager.BrushMode.RAMP: Color(0.95, 0.8, 0.2, 0.85),              # Gold (Ramp)
+	LowPolyTerrainManager.BrushMode.PAINT: Color(0.9, 0.35, 0.75, 0.8)              # Magenta (Paint)
 }
 const FallBackColor := Color(1.0, 1.0, 1.0, 0.9) # Default fallback color
 # Centralized definition array driven directly by the manager's master enum
@@ -38,6 +39,7 @@ const BRUSH_TOOL_DEFINITIONS: Array = [
 	[LowPolyTerrainManager.BrushMode.ACTIVATE_CHUNK, "activate_chunk", "Activate Chunk", "res://addons/lowpolyterrain/icons/activate.svg", ""],
 	[LowPolyTerrainManager.BrushMode.DEACTIVATE_CHUNK, "deactivate_chunk", "Deactivate Chunk", "res://addons/lowpolyterrain/icons/deactivate.svg", ""],
 	[LowPolyTerrainManager.BrushMode.RAMP, "ramp_terrain", "Ramp", "res://addons/lowpolyterrain/icons/ramp.svg", ""],
+	[LowPolyTerrainManager.BrushMode.PAINT, "paint_terrain", "Paint", "res://addons/lowpolyterrain/icons/paint.svg", ""],
 	[LowPolyTerrainManager.BrushMode.DECREASE_BRUSH_RADIUS, "decrease_brush_radius", "Decrease Brush Size", "", "COMMA"], # Plugin specific helper index
 	[LowPolyTerrainManager.BrushMode.INCREASE_BRUSH_RADIUS, "increase_brush_radius", "Increase Brush Size", "", "PERIOD"]   # Plugin specific helper index
 ]
@@ -112,6 +114,8 @@ const BRUSH_OVERLAY_PROPERTIES: PackedStringArray = [
 	"brush_radius",
 	"brush_strength",
 	"brush_falloff_strength",
+	"paint_layer",
+	"paint_material",
 ]
 
 # Split across two surfaces so the outline can stay opaque while the disc is barely there.
@@ -127,6 +131,9 @@ var button_group: ButtonGroup = null
 
 # List of native editor shortcut resources tied to each specific brush profile
 var brush_shortcuts: Dictionary = {}
+
+## Draws paint_layer as four buttons instead of a slider. Registered in _enter_tree().
+var _inspector_plugin: EditorInspectorPlugin = null
 
 func _get_plugin_name() -> String:
 	return "Low Poly Terrain Builder"
@@ -146,6 +153,10 @@ func _enter_tree() -> void:
 	_initialize_editor_shortcuts()
 	_initialize_brush_appearance_settings()
 	_create_brush_ui_panel()
+
+	# Turns the paint_layer slider into a row of colour-tinted buttons.
+	_inspector_plugin = LowPolyTerrainInspector.new()
+	add_inspector_plugin(_inspector_plugin)
 	
 	# Listen for global editor setting updates
 	var settings := EditorInterface.get_editor_settings()
@@ -162,6 +173,10 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	remove_custom_type("LowPolyTerrainManager")
+
+	if _inspector_plugin != null:
+		remove_inspector_plugin(_inspector_plugin)
+		_inspector_plugin = null
 	_destroy_brush_ui_panel()
 
 	# Both overlays live OUTSIDE this plugin node - the ring under the terrain manager, the
@@ -544,6 +559,7 @@ func _process(_delta: float) -> void:
 	_set_shift_held(Input.is_key_pressed(KEY_SHIFT))
 
 	_drive_held_paint_stroke()
+	_refresh_layer_swatches_if_changed()
 
 
 ## Keeps a held mouse button sculpting even while the cursor stays perfectly still.
@@ -690,7 +706,8 @@ static func _build_brush_label(
 
 	if mode_idx == LowPolyTerrainManager.BrushMode.RAISE \
 	or mode_idx == LowPolyTerrainManager.BrushMode.LOWER \
-	or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH:
+	or mode_idx == LowPolyTerrainManager.BrushMode.SMOOTH \
+	or mode_idx == LowPolyTerrainManager.BrushMode.PAINT:
 		parts.append("S: %.2f" % manager.brush_strength)
 
 	# RAMP belongs here too: it shapes the corridor edges with the very same curve, even though
@@ -698,10 +715,30 @@ static func _build_brush_label(
 	if mode_idx == LowPolyTerrainManager.BrushMode.RAISE \
 	or mode_idx == LowPolyTerrainManager.BrushMode.LOWER \
 	or mode_idx == LowPolyTerrainManager.BrushMode.FLATTEN \
-	or mode_idx == LowPolyTerrainManager.BrushMode.RAMP:
+	or mode_idx == LowPolyTerrainManager.BrushMode.RAMP \
+	or mode_idx == LowPolyTerrainManager.BrushMode.PAINT:
 		parts.append("F: %.2f" % manager.brush_falloff_strength)
 
+	# Which layer is about to be deposited is the one thing PAINT cannot be read off the ring.
+	if mode_idx == LowPolyTerrainManager.BrushMode.PAINT:
+		parts.append("L: %d" % manager.paint_layer)
+
 	return "%s\n%s" % [mode_name, " | ".join(parts)]
+
+
+
+## The colour the brush ring is drawn in for a given tool.
+##
+## PAINT is the exception: a fixed tool colour there would say nothing about WHICH of the four
+## layers the next stroke deposits, which is the one thing the ring cannot otherwise show. The
+## configured layer colour is used instead, at the tool colour's opacity.
+func _brush_color_for(mode_idx: int) -> Color:
+	var fallback: Color = BRUSH_COLORS[mode_idx] if BRUSH_COLORS.has(mode_idx) else FallBackColor
+	if mode_idx != LowPolyTerrainManager.BrushMode.PAINT or active_manager == null:
+		return fallback
+
+	var layer: Color = active_manager.get_paint_layer_color(active_manager.paint_layer)
+	return Color(layer.r, layer.g, layer.b, fallback.a)
 
 
 func _update_gizmo_scale() -> void:
@@ -714,7 +751,7 @@ func _update_gizmo_scale() -> void:
 	var mode_idx: int = active_manager.resolve_brush_mode(_shift_held)
 	var current_radius: float = float(active_manager.brush_radius) * active_manager.cell_size
 
-	var tool_color: Color = BRUSH_COLORS[mode_idx] if BRUSH_COLORS.has(mode_idx) else FallBackColor
+	var tool_color: Color = _brush_color_for(mode_idx)
 
 	# The outline carries the colour, the disc only hints at the area. Splitting the alpha this
 	# way is what makes the terrain under the brush readable while sculpting it.
@@ -1121,7 +1158,8 @@ func _create_brush_ui_panel() -> void:
 
 		btn.pressed.connect(_on_brush_button_pressed.bind(mode_idx))
 		brush_panel_container.add_child(btn)
-		
+
+	_create_layer_buttons()
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, brush_panel_container)
 
 
@@ -1147,6 +1185,11 @@ func _select_brush_mode(mode_idx: int) -> void:
 	# A pending ramp anchor must not survive a tool change, or the next click would mean
 	# something entirely different from what the visible line promises.
 	_cancel_ramp()
+
+	# Created on SELECTION, not on the first stroke: the layer colours are what you set up
+	# before painting, and an empty inspector slot offers nothing to set up.
+	if mode_idx == LowPolyTerrainManager.BrushMode.PAINT:
+		active_manager.ensure_paint_material()
 
 	active_manager.tool_mode = mode_idx as LowPolyTerrainManager.BrushMode
 	
@@ -1178,6 +1221,115 @@ func _sync_ui_buttons_with_manager() -> void:
 			
 			# Force immediate redrawing update on active state color toggles
 			child.queue_redraw()
+
+	_sync_layer_buttons()
+
+
+
+# --- PAINT LAYER SELECTOR ---
+# Sits beside the tool buttons rather than in the inspector, because the layer is a decision
+# made WHILE painting: switching it should not need the cursor to leave the viewport. The
+# inspector carries the same property, and the two stay in step through paint_layer itself.
+
+## The four layer buttons, in order. Shown only while the Paint tool is active.
+var _layer_buttons: Array[Button] = []
+var _layer_button_group: ButtonGroup = null
+var _layer_separator: VSeparator = null
+
+
+## Builds the layer selector once, alongside the tool buttons.
+func _create_layer_buttons() -> void:
+	if brush_panel_container == null:
+		return
+
+	_layer_separator = VSeparator.new()
+	brush_panel_container.add_child(_layer_separator)
+
+	# A group of its own: these are not tools, and putting them in the tool group would let
+	# picking a layer un-press the active brush.
+	_layer_button_group = ButtonGroup.new()
+	_layer_buttons.clear()
+
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.button_group = _layer_button_group
+		btn.text = str(layer)
+		btn.tooltip_text = "Paint layer %d" % layer
+		# The editor theme tints button icons by state - icon_pressed_color and
+		# icon_focus_color above all. On a tool glyph that reads as feedback; on a colour
+		# swatch it destroys the one thing the swatch is there to show, so every state is
+		# pinned to white and the texture keeps its own colour.
+		for state in ["icon_normal_color", "icon_pressed_color", "icon_hover_color",
+				"icon_focus_color", "icon_disabled_color", "icon_hover_pressed_color"]:
+			btn.add_theme_color_override(state, Color.WHITE)
+		btn.pressed.connect(_on_layer_button_pressed.bind(layer))
+		brush_panel_container.add_child(btn)
+		_layer_buttons.append(btn)
+
+
+func _on_layer_button_pressed(layer: int) -> void:
+	if active_manager == null:
+		return
+	active_manager.paint_layer = layer
+	# The ring is tinted with the layer colour, so it has to follow immediately.
+	_update_gizmo_scale()
+
+
+## Shows the selector only in Paint mode, marks the active layer and tints each button with the
+## colour it stands for - a number alone says nothing about what is about to be painted.
+func _sync_layer_buttons() -> void:
+	if active_manager == null or _layer_buttons.is_empty():
+		return
+
+	var painting: bool = active_manager.tool_mode == LowPolyTerrainManager.BrushMode.PAINT
+	if _layer_separator:
+		_layer_separator.visible = painting
+
+	for i in range(_layer_buttons.size()):
+		var btn: Button = _layer_buttons[i]
+		btn.visible = painting
+		btn.set_pressed_no_signal(active_manager.paint_layer == i + 1)
+		if painting:
+			btn.icon = _layer_swatch(active_manager.get_paint_layer_color(i + 1))
+
+
+## Last layer colours the swatches were drawn from, to notice an edit to them.
+var _layer_swatch_colors: PackedColorArray = PackedColorArray()
+
+
+## Redraws the layer swatches when a layer colour was edited.
+##
+## Polled rather than driven by a signal: ShaderMaterial does NOT emit changed() when a shader
+## parameter is set - measured, only assigning the shader itself does - so there is nothing to
+## connect to. Four colour comparisons per frame, and only while the Paint tool is active.
+func _refresh_layer_swatches_if_changed() -> void:
+	if active_manager == null or _layer_buttons.is_empty():
+		return
+	if active_manager.tool_mode != LowPolyTerrainManager.BrushMode.PAINT:
+		return
+
+	var current := PackedColorArray()
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		current.append(active_manager.get_paint_layer_color(layer))
+
+	if current == _layer_swatch_colors:
+		return
+	_layer_swatch_colors = current
+
+	for i in range(_layer_buttons.size()):
+		_layer_buttons[i].icon = _layer_swatch(current[i])
+	# The ring is tinted with the active layer, so it follows the same edit.
+	_update_gizmo_scale()
+
+
+## A small solid-colour texture standing in for a layer. Rebuilt per sync rather than cached,
+## because the colours are inspector values that can change at any moment and the swatch is
+## sixteen pixels square.
+func _layer_swatch(color: Color) -> ImageTexture:
+	var image := Image.create_empty(16, 16, false, Image.FORMAT_RGBA8)
+	image.fill(Color(color.r, color.g, color.b, 1.0))
+	return ImageTexture.create_from_image(image)
 
 
 ## Automatically fired when the user modifies any configuration inside the Editor Settings.

@@ -11,32 +11,85 @@ class_name LowPolyTerrainMeshBuilder
 ## that the produced geometry is bit-identical across backends.
 
 
+## True when two grid points carry identical paint. Compared byte for byte on purpose: the
+## weights are quantised precisely so that neighbours inside one painted area come out equal
+## and can still be decimated away.
+static func _same_paint(
+	paint_data: PackedByteArray, vert_count: int, ax: int, az: int, bx: int, bz: int
+) -> bool:
+	var a: int = (ax + az * vert_count) * 4
+	var b: int = (bx + bz * vert_count) * 4
+	if a < 0 or b < 0 or a + 3 >= paint_data.size() or b + 3 >= paint_data.size():
+		return false
+
+	return (paint_data[a] == paint_data[b] and paint_data[a + 1] == paint_data[b + 1]
+		and paint_data[a + 2] == paint_data[b + 2] and paint_data[a + 3] == paint_data[b + 3])
+
+
+## Reads one grid point's paint weights as a Color for the mesh's vertex colour channel.
+static func _paint_color(
+	paint_data: PackedByteArray, vert_count: int, x: int, z: int, steps: int
+) -> Color:
+	var base: int = (x + z * vert_count) * 4
+	if base < 0 or base + 3 >= paint_data.size():
+		return Color(0.0, 0.0, 0.0, 0.0)
+
+	var scale: float = 1.0 / float(maxi(steps - 1, 1))
+	return Color(
+		float(paint_data[base]) * scale,
+		float(paint_data[base + 1]) * scale,
+		float(paint_data[base + 2]) * scale,
+		float(paint_data[base + 3]) * scale
+	)
+
+
 ## Core geometry generation engine. Parses the heightmap grid, runs decimation rules,
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 ## Returns null when the supplied data cannot produce any triangle.
+## `paint_data` carries four bytes of layer weight per grid point, or is EMPTY when the terrain
+## was never painted. It reaches the mesh as vertex colours and, just as importantly, takes part
+## in the decimation below: two neighbouring points only count as flat when their PAINT matches
+## as well, because a vertex that was thrown away cannot carry a colour.
 static func build_chunk_mesh(
 	chunk_coord: Vector2i,
 	chunk_size: int,
 	cell_size: float,
 	height_data: PackedFloat32Array,
 	jitter_strength: float,
-	jitter_slope_threshold: float
+	jitter_slope_threshold: float,
+	paint_data: PackedByteArray = PackedByteArray(),
+	paint_steps: int = 8
 ) -> ArrayMesh:
 	if height_data.is_empty():
 		return null
 	var vert_count: int = chunk_size + 1
 
+	# An unpainted terrain keeps the exact behaviour it had before painting existed: white
+	# vertices, and a flatness test that only looks at heights.
+	var has_paint: bool = paint_data.size() >= vert_count * vert_count * 4
+
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var c := Color(1.0, 1.0, 1.0)
+
+	# Zero, not white. The vertex colour now means one thing only - "how much of each paint
+	# layer is on this point" - and an unpainted terrain has none of any. White would read as
+	# all four layers at full weight and cover the base material completely.
+	#
+	# Safe to change because no shipped shader ever read COLOR, and StandardMaterial3D ignores
+	# it unless vertex_color_use_as_albedo is switched on.
+	var c := Color(0.0, 0.0, 0.0, 0.0)
 
 	# --- STEP 1: PRE-ALLOCATE ARRAYS TO ELIMINATE RE-ALLOCATION LATENCY ---
 	var max_points: int = vert_count * vert_count
 	var points_2d := PackedVector2Array()
 	var points_3d := PackedVector3Array()
+	# Parallel to the two above: the paint of every point that survives decimation, so the
+	# triangle assembly can hand each vertex its own weights.
+	var points_paint := PackedColorArray()
 
 	points_2d.resize(max_points)
 	points_3d.resize(max_points)
+	points_paint.resize(max_points)
 
 	# Tracker index for direct O(1) array insertions
 	var active_count: int = 0
@@ -60,6 +113,13 @@ static func build_chunk_mesh(
 				if is_equal_approx(current_h, h_r) and is_equal_approx(current_h, h_l) and \
 				is_equal_approx(current_h, h_d) and is_equal_approx(current_h, h_u):
 					is_flat_center = true
+				if is_flat_center and has_paint:
+					is_flat_center = (
+						_same_paint(paint_data, vert_count, x, z, x + 1, z)
+						and _same_paint(paint_data, vert_count, x, z, x - 1, z)
+						and _same_paint(paint_data, vert_count, x, z, x, z + 1)
+						and _same_paint(paint_data, vert_count, x, z, x, z - 1)
+					)
 
 			# Boundary edge decimation designed to bypass the spiderweb artifact pattern
 			var is_flat_edge_point: bool = false
@@ -69,11 +129,21 @@ static func build_chunk_mesh(
 					var h_right: float = height_data[(x+1) + z * vert_count]
 					if is_equal_approx(current_h, h_left) and is_equal_approx(current_h, h_right):
 						is_flat_edge_point = true
+					if is_flat_edge_point and has_paint:
+						is_flat_edge_point = (
+							_same_paint(paint_data, vert_count, x, z, x - 1, z)
+							and _same_paint(paint_data, vert_count, x, z, x + 1, z)
+						)
 				elif x == 0 or x == chunk_size:
 					var h_up: float = height_data[x + (z-1) * vert_count]
 					var h_down: float = height_data[x + (z+1) * vert_count]
 					if is_equal_approx(current_h, h_up) and is_equal_approx(current_h, h_down):
 						is_flat_edge_point = true
+					if is_flat_edge_point and has_paint:
+						is_flat_edge_point = (
+							_same_paint(paint_data, vert_count, x, z, x, z - 1)
+							and _same_paint(paint_data, vert_count, x, z, x, z + 1)
+						)
 
 			# Radical geometry optimization for planar interior surfaces
 			if is_flat_center:
@@ -125,11 +195,15 @@ static func build_chunk_mesh(
 			# Direct O(1) assignment into the pre-allocated memory blocks
 			points_2d[active_count] = Vector2(pos_x, pos_z)
 			points_3d[active_count] = Vector3(pos_x, current_h, pos_z)
+			points_paint[active_count] = (
+				_paint_color(paint_data, vert_count, x, z, paint_steps) if has_paint else c
+			)
 			active_count += 1
 
 	# Shrink arrays down to the actual active Delaunay points in a single operation
 	points_2d.resize(active_count)
 	points_3d.resize(active_count)
+	points_paint.resize(active_count)
 
 	# --- STEP 2: GODOT DELAUNAY TRIANGULATION ---
 	var triangles: PackedInt32Array = Geometry2D.triangulate_delaunay(points_2d)
@@ -185,18 +259,19 @@ static func build_chunk_mesh(
 		var uv1 := Vector2(p1.x / max_size, -p1.z / max_size)
 		var uv2 := Vector2(p2.x / max_size, -p2.z / max_size)
 
-		# Push Vertex 0 data into the SurfaceTool format stack
-		st.set_color(c)
+		# Push Vertex 0 data into the SurfaceTool format stack. The colour is per vertex now:
+		# it carries this point's paint weights into the shader.
+		st.set_color(points_paint[idx0])
 		st.set_uv(uv0)
 		st.add_vertex(p0)
 
 		# Push Vertex 1 data into the SurfaceTool format stack
-		st.set_color(c)
+		st.set_color(points_paint[idx1])
 		st.set_uv(uv1)
 		st.add_vertex(p1)
 
 		# Push Vertex 2 data into the SurfaceTool format stack
-		st.set_color(c)
+		st.set_color(points_paint[idx2])
 		st.set_uv(uv2)
 		st.add_vertex(p2)
 

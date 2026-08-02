@@ -18,6 +18,9 @@ var jitter_slope_threshold: float = 0.5
 # It is therefore passed straight through to the builder instead.
 var custom_material: Material = null
 
+## Overlay that draws the painted layers on top. Null while nothing is painted.
+var paint_overlay: Material = null
+
 
 func _ready() -> void:
 	if name.contains("@"): return
@@ -29,7 +32,7 @@ func _ready() -> void:
 
 
 ## Called by the manager to safely pass initialized tracking states, configurations, and raw height arrays.
-func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, manager_data: PackedFloat32Array, m_jitter: float, m_threshold: float, m_material: Material) -> void:
+func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, manager_data: PackedFloat32Array, m_jitter: float, m_threshold: float, m_material: Material, paint_window: PackedByteArray = PackedByteArray(), paint_steps: int = 8, m_paint_overlay: Material = null) -> void:
 	chunk_coord = coord
 	chunk_size = c_size
 	cell_size = cell_s
@@ -37,6 +40,7 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 	jitter_strength = m_jitter
 	jitter_slope_threshold = m_threshold
 	custom_material = m_material
+	paint_overlay = m_paint_overlay
 	
 	# [FIX] Ensure the visibility state from the manager is respected on scene load
 	if not visible:
@@ -62,14 +66,18 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 		0.0,
 		float(-coord.y * chunk_size) * cell_size
 	)
-	generate_mesh(heights)
+	generate_mesh(heights, paint_window, paint_steps)
 
 
 ## Core geometry generation engine. Parses the heightmap grid, runs decimation rules, 
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 ## The height window is a parameter rather than a field: it is dead weight once the mesh
 ## exists, and storing it per chunk duplicated the manager's whole height matrix.
-func generate_mesh(heights: PackedFloat32Array) -> void:
+func generate_mesh(
+	heights: PackedFloat32Array,
+	paint_window: PackedByteArray = PackedByteArray(),
+	paint_steps: int = 8
+) -> void:
 	if heights.is_empty() or not visible:
 		mesh = null
 		return
@@ -78,7 +86,8 @@ func generate_mesh(heights: PackedFloat32Array) -> void:
 	# RenderingServer backend always emit bit-identical geometry from identical inputs.
 	mesh = LowPolyTerrainMeshBuilder.build_chunk_mesh(
 		chunk_coord, chunk_size, cell_size, heights,
-		jitter_strength, jitter_slope_threshold
+		jitter_strength, jitter_slope_threshold,
+		paint_window, paint_steps
 	)
 	
 	# Attach your specific rendering logic, material properties, or visual effects
@@ -95,6 +104,8 @@ func _get_jitter_offset(local_x: int, local_z: int) -> Vector3:
 ## Maps materials and generates an ultra-high performance editor wireframe overlay.
 func _apply_custom_shader() -> void:
 	material_override = custom_material
+	# Drawn over the material rather than replacing it, so painting works with any base shader.
+	material_overlay = paint_overlay
 
 
 ## Generates runtime physical collider shape matrices aligned with the generated mesh.

@@ -34,9 +34,10 @@ enum BrushMode {
 	ACTIVATE_CHUNK = 4,
 	DEACTIVATE_CHUNK = 5,
 	RAMP = 6,
-	NO_FURTHER_BUTTONS = 6,
-	DECREASE_BRUSH_RADIUS = 7,
-	INCREASE_BRUSH_RADIUS = 8
+	PAINT = 7,
+	NO_FURTHER_BUTTONS = 7,
+	DECREASE_BRUSH_RADIUS = 8,
+	INCREASE_BRUSH_RADIUS = 9
 }
 
 
@@ -334,6 +335,7 @@ func _generate_noise_terrain() -> void:
 
 
 
+
 @export_group("Brush Settings")
 
 # [FIX] Changed from @export to @export_storage to completely hide the redundant dropdown from the inspector
@@ -350,6 +352,30 @@ func _generate_noise_terrain() -> void:
 
 ## Controls the sharpness of the brush edges. 0.0 is completely sharp/linear, 1.0 is soft smoothstep.
 @export_range(0.0, 1.0, 0.05) var brush_falloff_strength: float = 0.0
+
+## Which paint layer the Paint brush deposits, 1 to 4.
+##
+## The layers live in the four channels of the vertex colour; whatever they leave unused belongs
+## to the base material, so an unpainted terrain shows the base alone. Hold Shift while painting
+## to wipe back towards it.
+@export_range(1, 4, 1) var paint_layer: int = 1
+
+## Draws the painted layers on top of whatever custom_material produces.
+##
+## An OVERLAY, not a replacement: your terrain shader keeps doing everything it does - slope
+## blending, triplanar cliffs, noise - and the painted layers are blended over the result. That
+## is why painting works with any base material, not only with the ones shipped here.
+##
+## Left empty, a copy of the bundled overlay shader is created on the first stroke, so the four
+## layer colours and roughness values belong to this terrain alone. Assign your own to share one
+## look across several terrains. Only applied while something is actually painted.
+##
+## For a single draw call, and for blending the material PROPERTIES rather than the lit results,
+## include terrain_paint.gdshaderinc in your own shader instead and clear this slot.
+@export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial") var paint_material: Material = null:
+	set(v):
+		paint_material = v
+		_queue_setup()
 
 
 @export_group("Terrain Smoothing")
@@ -632,6 +658,31 @@ func set_chunk_status_in_radius(center_pos: Vector3, activate: bool) -> void:
 # --- PERFORMANCE CRITICAL: Flattened array structure instead of Dictionary ---
 @export_storage var global_height_data: PackedFloat32Array = PackedFloat32Array()
 
+## Per-vertex paint weights, four bytes per grid point, indexed exactly like the heights above.
+##
+## The four bytes are the weights of paint layers 1 to 4; whatever is left over belongs to the
+## base material. All zero therefore means "not painted", which is why an EMPTY array is a
+## valid state and the default one: a terrain that was never painted stores nothing at all and
+## renders exactly as it did before this feature existed.
+@export_storage var global_paint_data: PackedByteArray = PackedByteArray()
+
+## Number of distinct values a paint weight can take.
+##
+## Not a storage concern - a byte would hold 256. It exists so the mesh decimation can compare
+## neighbouring weights for EQUALITY: an evenly painted area otherwise gives every grid point a
+## slightly different value, nothing is ever "flat", and painting would cost the full vertex
+## count even where the result is uniform.
+##
+## Set to 32 rather than the 8 the decimation alone would prefer. Eight steps left a soft edge
+## with too few levels to read as a gradient, and worse, a per-pass deposit smaller than half a
+## step rounded away to nothing on every pass, so the outer ring of a soft brush could never
+## take any paint at all. The extra levels cost roughly a sixth more vertices on a soft stroke,
+## measured, and buy an edge that is actually soft.
+const PAINT_STEPS: int = 32
+
+## How many layers can be painted on top of the base material. One per colour channel.
+const PAINT_LAYER_COUNT: int = 4
+
 # Cached structural bounds variables to achieve zero-latency lookup performance
 var _total_vertices_x: int = 0
 var _total_vertices_z: int = 0
@@ -666,6 +717,10 @@ var _undo_sparse_delta: Dictionary = {} # Format: { global_index (int): old_heig
 ## Same idea for the Activate/Deactivate Chunk brushes.
 ## Format: { chunk_index (int): old_activity (int) }
 var _undo_activity_delta: Dictionary = {}
+
+## Same idea for the Paint brush.
+## Format: { byte offset of the grid point (int): the four bytes it held (PackedByteArray) }
+var _undo_paint_delta: Dictionary = {}
 
 var _active_undo_redo_manager: Object = null
 
@@ -799,6 +854,208 @@ func set_height_at(x: int, z: int, value: float) -> void:
 ## Note that "the height at an XZ position" stops being well defined if this manager is rotated
 ## around X or Z, because a vertical ray can then cross the surface more than once. Translation,
 ## scale and rotation around Y are all handled correctly.
+## Snapshot of the paint array taken before a dimension change rewrites the grid bounds.
+## Held as a field rather than passed along, because the height migration already commits the
+## new bounds before the paint can be remapped against the old ones.
+var _paint_migration_source: PackedByteArray = PackedByteArray()
+
+
+## Carries the paint across a dimension change, coordinate by coordinate.
+##
+## The array is indexed by row width, so growing or shrinking the world moves every point to a
+## different slot - copying it verbatim would smear the paint diagonally across the terrain.
+func _migrate_paint_data(old_vertices_x: int, old_vertices_z: int) -> void:
+	if _paint_migration_source.is_empty():
+		global_paint_data = PackedByteArray()
+		return
+
+	var migrated := PackedByteArray()
+	migrated.resize(_total_vertices_x * _total_vertices_z * 4)
+
+	for z in range(mini(_total_vertices_z, old_vertices_z)):
+		for x in range(mini(_total_vertices_x, old_vertices_x)):
+			var source: int = (z * old_vertices_x + x) * 4
+			var target: int = (z * _total_vertices_x + x) * 4
+			if source + 3 >= _paint_migration_source.size():
+				continue
+			for channel in range(4):
+				migrated[target + channel] = _paint_migration_source[source + channel]
+
+	global_paint_data = migrated
+	_paint_migration_source = PackedByteArray()
+
+
+## Path of the bundled overlay shader, instantiated when the Paint tool is first selected.
+const PAINT_OVERLAY_SHADER: String = \
+	"res://addons/lowpolyterrain/shader/terrain_paint_overlay.gdshader"
+
+## Starting look of the four layers: sand, rock, snow, soil.
+##
+## These MIRROR the defaults written into terrain_paint.gdshaderinc, which exist so the shader
+## still looks sensible when someone includes it by hand. Change one, change the other.
+const PAINT_LAYER_DEFAULT_COLORS: PackedColorArray = [
+	Color(0.76, 0.70, 0.50),
+	Color(0.45, 0.45, 0.47),
+	Color(0.95, 0.96, 1.00),
+	Color(0.35, 0.26, 0.18),
+]
+const PAINT_LAYER_DEFAULT_ROUGHNESS: PackedFloat32Array = [0.85, 0.70, 0.25, 0.90]
+
+
+## Returns the paint material, creating the bundled one if this terrain has none yet.
+##
+## Called when the Paint tool is SELECTED rather than when the first stroke lands: the layer
+## colours are what you want to set up before painting, and an empty slot in the inspector gives
+## you nothing to set up. Stored on this terrain, so its four layers are its own.
+func ensure_paint_material() -> Material:
+	if paint_material != null:
+		return paint_material
+
+	var shader: Shader = load(PAINT_OVERLAY_SHADER) as Shader
+	if shader == null:
+		push_warning("LowPolyTerrain '%s': the bundled paint overlay shader is missing at %s."
+			% [name, PAINT_OVERLAY_SHADER])
+		return null
+
+	var created := ShaderMaterial.new()
+	created.shader = shader
+
+	# Written out rather than left to the shader's own defaults, because Godot exposes no way to
+	# READ those back: get_shader_parameter() reports null for anything not explicitly set, and
+	# the RenderingServer route needs a compiled shader. The brush ring has to know the layer
+	# colour to tint itself with, so the values have to exist as parameters.
+	for layer in range(PAINT_LAYER_COUNT):
+		created.set_shader_parameter(
+			"paint_layer_%d_color" % (layer + 1), PAINT_LAYER_DEFAULT_COLORS[layer]
+		)
+		created.set_shader_parameter(
+			"paint_layer_%d_roughness" % (layer + 1), PAINT_LAYER_DEFAULT_ROUGHNESS[layer]
+		)
+
+	paint_material = created
+	return paint_material
+
+
+## The overlay to actually draw with, or null while there is nothing painted.
+##
+## Deliberately separate from ensure_paint_material(): the material may exist so its layers can
+## be configured, while the overlay is still not worth hanging on the chunks. An overlay that
+## discards every fragment costs a second pass over the whole terrain for no result.
+func get_active_paint_material() -> Material:
+	return paint_material if has_paint_data() else null
+
+
+## The configured colour of one paint layer, 1 to 4. Falls back to white when the material does
+## not carry the uniform, which is the case for a hand-written shader that only implements some
+## of them.
+func get_paint_layer_color(layer: int) -> Color:
+	var shader_material: ShaderMaterial = paint_material as ShaderMaterial
+	if shader_material == null:
+		return Color.WHITE
+
+	var index: int = clampi(layer, 1, PAINT_LAYER_COUNT)
+	var value: Variant = shader_material.get_shader_parameter("paint_layer_%d_color" % index)
+	if value is Color:
+		return value
+
+	# Unset means either a hand-written shader that omits this uniform, or a material built
+	# without ensure_paint_material(). Falling back to the shipped default beats reporting a
+	# colour the brush would then wrongly advertise.
+	return PAINT_LAYER_DEFAULT_COLORS[index - 1]
+
+
+## True once anything has been painted. An unpainted terrain keeps an empty array, so this is
+## also the cheap way to skip every paint-related code path entirely.
+func has_paint_data() -> bool:
+	return not global_paint_data.is_empty()
+
+
+## Allocates the paint array on first use. Deliberately not done in _ready(): a terrain that is
+## never painted should not carry a second full-size array in its scene file.
+func _ensure_paint_data() -> void:
+	var required: int = _total_vertices_x * _total_vertices_z * 4
+	if required <= 0:
+		return
+	if global_paint_data.size() == required:
+		return
+
+	var previous: PackedByteArray = global_paint_data
+	global_paint_data = PackedByteArray()
+	global_paint_data.resize(required)
+	# resize() zero-fills, which is exactly "unpainted", so only an existing array needs copying.
+	if not previous.is_empty():
+		var shared: int = mini(previous.size(), required)
+		for i in range(shared):
+			global_paint_data[i] = previous[i]
+
+
+## The four layer weights at a grid point, as a Color in the 0..1 range the mesh expects.
+func get_paint_at(x: int, z: int) -> Color:
+	if global_paint_data.is_empty():
+		return Color(0.0, 0.0, 0.0, 0.0)
+	if x < 0 or x >= _total_vertices_x or z < 0 or z >= _total_vertices_z:
+		return Color(0.0, 0.0, 0.0, 0.0)
+
+	var base: int = (z * _total_vertices_x + x) * 4
+	var scale: float = 1.0 / float(PAINT_STEPS - 1)
+	return Color(
+		float(global_paint_data[base]) * scale,
+		float(global_paint_data[base + 1]) * scale,
+		float(global_paint_data[base + 2]) * scale,
+		float(global_paint_data[base + 3]) * scale
+	)
+
+
+## Writes the four layer weights at a grid point, quantised and normalised.
+##
+## Normalised because the base material occupies whatever the four layers leave unused: letting
+## them sum past 1 would drive the base out entirely and make the last stroke win rather than
+## blend, which is not what a weight is.
+func set_paint_at(x: int, z: int, weights: Color) -> void:
+	if x < 0 or x >= _total_vertices_x or z < 0 or z >= _total_vertices_z:
+		return
+	_ensure_paint_data()
+	if global_paint_data.is_empty():
+		return
+
+	var r: float = maxf(weights.r, 0.0)
+	var g: float = maxf(weights.g, 0.0)
+	var b: float = maxf(weights.b, 0.0)
+	var a: float = maxf(weights.a, 0.0)
+
+	var total: float = r + g + b + a
+	if total > 1.0:
+		r /= total
+		g /= total
+		b /= total
+		a /= total
+
+	var top: int = PAINT_STEPS - 1
+	var steps: PackedInt32Array = [
+		clampi(roundi(r * float(top)), 0, top),
+		clampi(roundi(g * float(top)), 0, top),
+		clampi(roundi(b * float(top)), 0, top),
+		clampi(roundi(a * float(top)), 0, top),
+	]
+
+	# Normalising in floats is not enough: each channel then rounds up independently and the
+	# sum creeps back past the limit. Trimming the largest channel repairs that in the domain
+	# the values are actually stored in. At most three passes - four channels can exceed the
+	# limit by at most three steps once each was individually clamped to it.
+	var total_steps: int = steps[0] + steps[1] + steps[2] + steps[3]
+	while total_steps > top:
+		var largest: int = 0
+		for channel in range(1, 4):
+			if steps[channel] > steps[largest]:
+				largest = channel
+		steps[largest] -= 1
+		total_steps -= 1
+
+	var base: int = (z * _total_vertices_x + x) * 4
+	for channel in range(4):
+		global_paint_data[base + channel] = steps[channel]
+
+
 ## Bilinearly samples the height matrix at fractional GRID coordinates, in LOCAL units.
 ##
 ## Shared by the world-space query and by the ramp tool so both read the surface the same way.
@@ -898,6 +1155,7 @@ func _migrate_grid_data() -> void:
 	var old_vertices_x: int = _total_vertices_x
 	var old_vertices_z: int = _total_vertices_z
 	var old_height_data: PackedFloat32Array = global_height_data.duplicate()
+	_paint_migration_source = global_paint_data.duplicate()
 	
 	# Commit preview values to active configuration
 	world_chunks = preview_world_chunks
@@ -947,6 +1205,7 @@ func _migrate_grid_data() -> void:
 				new_height_data[new_index] = 0.0
 				
 	global_height_data = new_height_data
+	_migrate_paint_data(old_vertices_x, old_vertices_z)
 
 	# The culling radius is expressed in metres, so it has to follow the new chunk dimensions.
 	_apply_derived_cull_radius()
@@ -1371,6 +1630,201 @@ func _register_ramp_undo(old_state: PackedFloat32Array) -> void:
 	_active_undo_redo_manager.commit_action()
 
 
+## Blends the selected paint layer into the grid around a LOCAL position.
+##
+## Works on weights rather than heights, but through the same brush settings: brush_radius sets
+## the footprint, brush_falloff_strength the edge, and brush_strength how much of the layer one
+## pass deposits. Holding Shift wipes back towards the base material instead.
+func _apply_paint_at(local_pos: Vector3, erase: bool, strength_scale: float) -> void:
+	if is_zero_approx(cell_size) or brush_radius <= 0:
+		return
+	if global_height_data.is_empty():
+		return
+
+	var layer: int = clampi(paint_layer - 1, 0, PAINT_LAYER_COUNT - 1)
+
+	# The alpha of a layer's colour caps how much of the surface that layer may claim.
+	#
+	# This is what makes a translucent layer read as a glaze rather than as a replacement. The
+	# four weights share one surface between them, so a layer reaching full weight necessarily
+	# pushes the others out - and then there is nothing left for its transparency to reveal
+	# except the base material. Capping the claim instead leaves room for whatever was already
+	# there, and the two mix.
+	#
+	# It therefore acts while PAINTING, not afterwards: changing the alpha later does not
+	# repaint what is already on the terrain.
+	var layer_opacity: float = clampf(get_paint_layer_color(paint_layer).a, 0.0, 1.0)
+	var centre_x: float = local_pos.x / cell_size
+	var centre_z: float = -local_pos.z / cell_size
+	var radius: float = float(brush_radius)
+
+	# One pass never deposits everything, or the brush would be a stamp rather than a brush.
+	# Divided by the strength slider's own maximum so the two ends of it stay meaningful.
+	var deposit: float = clampf(brush_strength / 15.0, 0.0, 1.0) * strength_scale
+
+	var min_x: int = clampi(floori(centre_x - radius), 0, _total_vertices_x - 1)
+	var max_x: int = clampi(ceili(centre_x + radius), 0, _total_vertices_x - 1)
+	var min_z: int = clampi(floori(centre_z - radius), 0, _total_vertices_z - 1)
+	var max_z: int = clampi(ceili(centre_z + radius), 0, _total_vertices_z - 1)
+
+	var touched: Dictionary = {}
+
+	for z in range(min_z, max_z + 1):
+		for x in range(min_x, max_x + 1):
+			var distance: float = Vector2(float(x) - centre_x, float(z) - centre_z).length()
+			if distance > radius:
+				continue
+
+			var cx: int = clampi(x / chunk_size, 0, world_chunks.x - 1)
+			var cz: int = clampi(z / chunk_size, 0, world_chunks.y - 1)
+			if not is_chunk_active(cx, cz):
+				continue
+
+			# Same curve as the sculpting brushes, so the edge behaves the way users expect.
+			var radius_factor: float = distance / radius
+			var smooth_curve: float = clampf(
+				1.0 - (radius_factor * radius_factor * (3.0 - 2.0 * radius_factor)), 0.0, 1.0
+			)
+			# The falloff is a CEILING, not a per-pass multiplier.
+			#
+			# Scaling the deposit by it instead made the edge unreachable twice over: the small
+			# per-pass amounts out there rounded back to zero on every single pass, so nothing
+			# ever accumulated, while the middle piled up to full weight and the whole stroke
+			# came out as a hard disc that merely shrank as the falloff rose.
+			#
+			# As a ceiling the profile is what the falloff describes and stays that way however
+			# long the button is held: full in the middle, tapering to nothing at the rim.
+			var ceiling: float = lerpf(1.0, smooth_curve, brush_falloff_strength)
+			if not erase:
+				ceiling = minf(ceiling, layer_opacity)
+			if is_zero_approx(ceiling):
+				continue
+
+			_capture_paint_undo(x, z)
+
+			var weights: Color = get_paint_at(x, z)
+			var channels: PackedFloat32Array = [weights.r, weights.g, weights.b, weights.a]
+
+			if erase:
+				# Towards the base means every layer recedes, not just the selected one. No
+				# ceiling here: erasing all the way to nothing is a legitimate destination.
+				for i in range(PAINT_LAYER_COUNT):
+					channels[i] = maxf(channels[i] - deposit * ceiling, 0.0)
+			else:
+				# Approach the ceiling at a constant rate, so the stroke builds up evenly and
+				# settles into the falloff profile rather than past it.
+				#
+				# The outer maxf is what stops the ceiling from ERASING. Without it, a second
+				# stroke laid beside a finished one cut the old paint back to its own soft rim
+				# wherever the two overlapped: min() does not care that the value it lowers was
+				# put there by someone else. A brush adds; only Shift takes away.
+				channels[layer] = maxf(
+					channels[layer], minf(channels[layer] + deposit, ceiling)
+				)
+				# The others give way, so the four weights plus the base stay a partition
+				# rather than piling up and clipping.
+				var room: float = 1.0 - channels[layer]
+				var others: float = 0.0
+				for i in range(PAINT_LAYER_COUNT):
+					if i != layer:
+						others += channels[i]
+				if others > room and others > 0.0:
+					var scale: float = room / others
+					for i in range(PAINT_LAYER_COUNT):
+						if i != layer:
+							channels[i] *= scale
+
+			set_paint_at(x, z, Color(channels[0], channels[1], channels[2], channels[3]))
+			touched[Vector2i(cx, cz)] = true
+
+			# A border vertex belongs to its neighbours too, or the seam would split.
+			if x % chunk_size == 0 and cx > 0:
+				touched[Vector2i(cx - 1, cz)] = true
+			if z % chunk_size == 0 and cz > 0:
+				touched[Vector2i(cx, cz - 1)] = true
+
+	for coord: Vector2i in touched:
+		if _has_chunk(coord):
+			_update_single_chunk(coord)
+
+
+## Turns one painting stroke into a single undo entry.
+##
+## Sparse like the sculpting undo: only the grid points the brush actually touched are stored,
+## with the four bytes they held before the stroke began.
+func _commit_paint_stroke() -> void:
+	if _undo_paint_delta.is_empty():
+		return
+
+	var offsets := PackedInt32Array()
+	var before := PackedByteArray()
+	var after := PackedByteArray()
+
+	for offset: int in _undo_paint_delta:
+		offsets.append(offset)
+		var old_bytes: PackedByteArray = _undo_paint_delta[offset]
+		for channel in range(4):
+			before.append(old_bytes[channel])
+			after.append(global_paint_data[offset + channel])
+
+	_undo_paint_delta.clear()
+
+	_active_undo_redo_manager.create_action("Paint Terrain", 0, self)
+	_active_undo_redo_manager.add_do_method(
+		self, _apply_paint_delta.get_method(), offsets, after
+	)
+	_active_undo_redo_manager.add_undo_method(
+		self, _apply_paint_delta.get_method(), offsets, before
+	)
+	_active_undo_redo_manager.commit_action(false)
+
+
+## Writes a sparse set of paint bytes back and rebuilds only the chunks they belong to.
+func _apply_paint_delta(offsets: PackedInt32Array, values: PackedByteArray) -> void:
+	if offsets.is_empty():
+		return
+	_ensure_paint_data()
+
+	var touched: Dictionary = {}
+	for i in range(offsets.size()):
+		var offset: int = offsets[i]
+		if offset + 3 >= global_paint_data.size():
+			continue
+		for channel in range(4):
+			global_paint_data[offset + channel] = values[i * 4 + channel]
+
+		var point: int = offset / 4
+		var gx: int = point % _total_vertices_x
+		var gz: int = point / _total_vertices_x
+		var cx: int = clampi(gx / chunk_size, 0, world_chunks.x - 1)
+		var cz: int = clampi(gz / chunk_size, 0, world_chunks.y - 1)
+		touched[Vector2i(cx, cz)] = true
+		if gx % chunk_size == 0 and cx > 0:
+			touched[Vector2i(cx - 1, cz)] = true
+		if gz % chunk_size == 0 and cz > 0:
+			touched[Vector2i(cx, cz - 1)] = true
+
+	for coord: Vector2i in touched:
+		if _has_chunk(coord):
+			_update_single_chunk(coord)
+
+
+## Records a grid point's paint once per stroke, before the first change to it.
+func _capture_paint_undo(x: int, z: int) -> void:
+	if not (Engine.is_editor_hint() or _active_undo_redo_manager != null):
+		return
+	_ensure_paint_data()
+
+	var base: int = (z * _total_vertices_x + x) * 4
+	if _undo_paint_delta.has(base) or base + 3 >= global_paint_data.size():
+		return
+
+	_undo_paint_delta[base] = PackedByteArray([
+		global_paint_data[base], global_paint_data[base + 1],
+		global_paint_data[base + 2], global_paint_data[base + 3]
+	])
+
+
 ## The brush mode that actually runs for the given modifier state.
 ##
 ## Public because the editor plugin needs the very same answer to colour the brush ring and
@@ -1393,6 +1847,11 @@ func resolve_brush_mode(is_alternative: bool) -> BrushMode:
 			# Deliberately unchanged. RAMP is a two-click operation, and swapping the tool
 			# under the user between the first and the second click would be hostile.
 			return BrushMode.RAMP
+		BrushMode.PAINT:
+			# Also unchanged: Shift inverts what PAINT does rather than which tool runs. It
+			# wipes back towards the base material, which interact_at_world_position() reads
+			# from its is_alternative argument directly.
+			return BrushMode.PAINT
 
 	# FLATTEN and SMOOTH have no natural opposite, so the modifier reaches for SMOOTH.
 	return BrushMode.SMOOTH
@@ -1423,6 +1882,13 @@ func interact_at_world_position(
 	
 	# Determine operation mode based on current selection and modifier keys
 	var mode: BrushMode = resolve_brush_mode(is_alternative)
+
+	# Painting writes layer weights, never heights, so it leaves before the sculpting pass.
+	# Shift is read straight from is_alternative here rather than through the mode: it inverts
+	# what the tool DOES - wiping back towards the base - not which tool runs.
+	if mode == BrushMode.PAINT:
+		_apply_paint_at(local_pos, is_alternative, strength_scale)
+		return
 
 	# --- RADIUS-AWARE CHUNK VISIBILITY & COLLISION MANIPULATION ---
 	if mode == BrushMode.ACTIVATE_CHUNK or mode == BrushMode.DEACTIVATE_CHUNK:
@@ -1702,7 +2168,9 @@ func _update_single_chunk(coord: Vector2i) -> void:
 	chunk.initialize(
 		coord, chunk_size, cell_size, step_height,
 		chunk_local_heights, jitter_strength,
-		jitter_slope_threshold, custom_material
+		jitter_slope_threshold, custom_material,
+		extract_chunk_paint(coord), PAINT_STEPS,
+		get_active_paint_material()
 	)
 
 
@@ -1756,6 +2224,7 @@ func stroke_finished() -> void:
 
 	# A stroke uses exactly one brush mode, so at most one of these ever has anything to say.
 	_commit_activity_stroke()
+	_commit_paint_stroke()
 
 	if _undo_sparse_delta.is_empty():
 		return
@@ -1929,6 +2398,32 @@ func extract_chunk_heights(coord: Vector2i) -> PackedFloat32Array:
 			chunk_local_heights[local_offset + i] = global_height_data[global_row_start + i]
 
 	return chunk_local_heights
+
+
+## The paint window of one chunk, laid out like extract_chunk_heights() but four bytes wide.
+##
+## Returns an EMPTY array while nothing has been painted, which the builder reads as "no paint
+## anywhere" and skips outright. That keeps an unpainted terrain on exactly the code path it
+## had before this feature.
+func extract_chunk_paint(coord: Vector2i) -> PackedByteArray:
+	if global_paint_data.is_empty():
+		return PackedByteArray()
+
+	var vert_stride: int = chunk_size + 1
+	var window := PackedByteArray()
+	window.resize(vert_stride * vert_stride * 4)
+
+	for lz in range(vert_stride):
+		var global_z: int = (coord.y * chunk_size) + lz
+		var local_offset: int = lz * vert_stride * 4
+		var global_row_start: int = (global_z * _total_vertices_x + (coord.x * chunk_size)) * 4
+
+		for i in range(vert_stride * 4):
+			var source: int = global_row_start + i
+			if source < global_paint_data.size():
+				window[local_offset + i] = global_paint_data[source]
+
+	return window
 
 
 ## SERVERS counterpart of rebuild_chunks_structure(). Registers one RenderingServer instance

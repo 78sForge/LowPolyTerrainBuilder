@@ -806,8 +806,10 @@ func test_brush_mode_values_stay_stable_for_saved_scenes() -> void:
 
 	assert_eq(int(LowPolyTerrainManager.BrushMode.RAMP), 6,
 		"RAMP was appended after the stored values on purpose.")
-	assert_eq(int(LowPolyTerrainManager.BrushMode.NO_FURTHER_BUTTONS), 6,
-		"The toolbar cutoff has to include RAMP, or its button never appears.")
+	assert_eq(int(LowPolyTerrainManager.BrushMode.PAINT), 7,
+		"PAINT was appended after RAMP, for the same reason.")
+	assert_eq(int(LowPolyTerrainManager.BrushMode.NO_FURTHER_BUTTONS), 7,
+		"The toolbar cutoff has to include the last tool, or its button never appears.")
 
 
 ## Along the segment the height interpolates linearly between the two picked ends.
@@ -1220,3 +1222,238 @@ func test_brush_label_names_the_inverted_tool_while_shift_is_held() -> void:
 		"Shift lowers, so the caption must stop claiming Raise.")
 	assert_string_contains(inverted, "Shift",
 		"The hint separates a temporary inversion from a changed toolbar selection.")
+
+
+# --- VERTEX PAINTING ---
+# The weights live in the mesh's vertex colour channel and in a byte array parallel to the
+# heights. Both backends read the same builder, so what is asserted here holds for either.
+
+
+## Sets up a flat terrain with the paint brush ready, and returns the world centre of it.
+func _prepare_paint(radius: int, falloff: float) -> Vector3:
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			manager.set_height_at(gx, gz, 0.0)
+	manager.ensure_paint_material()
+	manager.tool_mode = LowPolyTerrainManager.BrushMode.PAINT
+	manager.brush_radius = radius
+	manager.brush_strength = 15.0
+	manager.brush_falloff_strength = falloff
+	manager.paint_layer = 1
+	manager.rebuild_chunks_structure()
+	return manager.global_transform * Vector3(10.0, 0.0, -10.0)
+
+
+## Applies the paint brush, bypassing the cooldown the way a held stroke does.
+func _paint(at: Vector3, passes: int, erase: bool = false) -> void:
+	for i in range(passes):
+		manager._last_paint_time = -100000.0
+		manager.interact_at_world_position(at, erase)
+
+
+## A terrain nobody painted stores nothing, so existing scenes gain no weight at all.
+func test_unpainted_terrain_stores_no_paint_data() -> void:
+	assert_false(manager.has_paint_data(), "A fresh terrain must carry no paint array.")
+	assert_eq(manager.global_paint_data.size(), 0, "And it must be empty, not merely zeroed.")
+	assert_null(manager.get_active_paint_material(),
+		"No paint means no overlay, or every terrain would pay for a pass that draws nothing.")
+
+
+func test_painting_allocates_and_round_trips() -> void:
+	var centre: Vector3 = _prepare_paint(3, 0.0)
+	_paint(centre, 1)
+
+	assert_true(manager.has_paint_data(), "The first stroke allocates the array.")
+	assert_eq(manager.global_paint_data.size(),
+		manager._total_vertices_x * manager._total_vertices_z * 4,
+		"Four bytes per grid point, indexed exactly like the heights.")
+	assert_almost_eq(manager.get_paint_at(10, 10).r, 1.0, 0.05,
+		"Full strength on layer 1 fills the red channel at the centre.")
+
+
+## Painting must never disturb the surface it is painted on.
+func test_painting_leaves_the_heights_alone() -> void:
+	var centre: Vector3 = _prepare_paint(3, 0.0)
+	var before: PackedFloat32Array = manager.global_height_data.duplicate()
+	_paint(centre, 5)
+	assert_eq(manager.global_height_data, before, "The paint brush writes weights, not heights.")
+
+
+## The four weights plus the base are a partition, so their sum cannot exceed the whole.
+func test_paint_weights_never_exceed_one() -> void:
+	var centre: Vector3 = _prepare_paint(4, 0.0)
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		manager.paint_layer = layer
+		_paint(centre, 3)
+
+	var worst: float = 0.0
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			var c: Color = manager.get_paint_at(gx, gz)
+			worst = maxf(worst, c.r + c.g + c.b + c.a)
+	assert_lte(worst, 1.001, "Painting every layer in turn must not pile the weights up.")
+
+
+## Regression: the falloff was applied as a per-pass multiplier rather than as a ceiling.
+##
+## The middle then climbed to full weight however soft the brush was, while the outer ring got
+## deposits so small that quantisation rounded them away on every single pass - so the stroke
+## came out as a hard disc that merely shrank as the falloff rose, with no gradient at all.
+func test_soft_brush_leaves_a_gradient_that_holds() -> void:
+	var centre: Vector3 = _prepare_paint(8, 1.0)
+	_paint(centre, 40)
+
+	var previous: float = manager.get_paint_at(10, 10).r
+	assert_almost_eq(previous, 1.0, 0.05, "The centre reaches full weight.")
+
+	# Strictly decreasing outwards is the whole point of a falloff.
+	for distance in range(1, 8):
+		var here: float = manager.get_paint_at(10 + distance, 10).r
+		assert_lt(here, previous,
+			"Weight at distance %d must sit below the ring inside it." % distance)
+		previous = here
+
+	assert_almost_eq(manager.get_paint_at(18, 10).r, 0.0, 0.05,
+		"And it must reach nothing at the rim.")
+
+
+## Holding the brush must settle into that gradient rather than filling past it.
+func test_holding_a_soft_brush_does_not_flatten_it() -> void:
+	var centre: Vector3 = _prepare_paint(8, 1.0)
+	_paint(centre, 10)
+	var settled: float = manager.get_paint_at(14, 10).r
+
+	_paint(centre, 60)
+	assert_almost_eq(manager.get_paint_at(14, 10).r, settled, 0.001,
+		"Sixty more passes must not push the edge any further than ten did.")
+
+
+## Regression: the ceiling lowered paint that a previous stroke had put down.
+##
+## min() does not care who wrote the value it reduces, so a second stroke laid beside a first
+## cut the old paint back to its own soft rim wherever the two overlapped - which read as the
+## new circle punching holes into the old one.
+func test_a_second_stroke_does_not_erase_the_first() -> void:
+	var centre: Vector3 = _prepare_paint(6, 1.0)
+	_paint(centre, 10)
+
+	# The OVERLAP is what matters. A second circle six cells to the right reaches back to
+	# x = 12, so 12 to 14 carry real paint from the first stroke AND sit inside the second
+	# one's soft rim - exactly where a ceiling that lowers would do its damage. Points outside
+	# its radius are skipped outright and would prove nothing; points past 14 hold too little
+	# paint to tell a loss from the rounding.
+	var before: PackedFloat32Array = PackedFloat32Array()
+	for gx in range(12, 15):
+		before.append(manager.get_paint_at(gx, 10).r)
+		assert_gt(before[before.size() - 1], 0.1,
+			"Precondition: the first stroke really did paint grid point %d." % gx)
+
+	_paint(manager.global_transform * Vector3(18.0, 0.0, -10.0), 10)
+
+	# Not "unchanged": the second stroke may legitimately RAISE these. It may never lower them.
+	for i in range(before.size()):
+		assert_gte(manager.get_paint_at(12 + i, 10).r, before[i] - 0.001,
+			"Grid point %d lost paint the first stroke had put there." % (12 + i))
+
+
+## A layer colour's alpha caps how much of the surface that layer may claim, which is what
+## turns a translucent layer into a glaze instead of a replacement.
+func test_layer_alpha_leaves_room_for_what_was_there() -> void:
+	var centre: Vector3 = _prepare_paint(3, 0.0)
+
+	manager.paint_layer = 3
+	_paint(centre, 5)
+	assert_almost_eq(manager.get_paint_at(10, 10).b, 1.0, 0.05, "Layer 3 covers the spot.")
+
+	var material: ShaderMaterial = manager.paint_material as ShaderMaterial
+	material.set_shader_parameter("paint_layer_1_color", Color(1.0, 0.0, 0.0, 0.5))
+	manager.paint_layer = 1
+	_paint(centre, 5)
+
+	var result: Color = manager.get_paint_at(10, 10)
+	assert_almost_eq(result.r, 0.5, 0.06, "A half-transparent layer claims about half.")
+	assert_gt(result.b, 0.4, "And the layer beneath keeps the rest instead of vanishing.")
+
+
+## Shift wipes back towards the base material, every layer at once.
+func test_shift_erases_all_layers() -> void:
+	var centre: Vector3 = _prepare_paint(3, 0.0)
+	manager.paint_layer = 1
+	_paint(centre, 5)
+	manager.paint_layer = 3
+	_paint(centre, 2)
+
+	_paint(centre, 20, true)
+	var result: Color = manager.get_paint_at(10, 10)
+	assert_almost_eq(result.r + result.g + result.b + result.a, 0.0, 0.001,
+		"Erasing must reach the base, not merely the selected layer.")
+
+
+## Evenly painted ground still decimates; only the transitions cost vertices.
+func test_uniform_paint_still_decimates() -> void:
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			manager.set_height_at(gx, gz, 0.0)
+	manager.rebuild_chunks_structure()
+	var bare: int = _chunk_vertex_count(Vector2i(0, 0))
+
+	# The same weight everywhere: nothing changes across the surface, so nothing has to be kept.
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			manager.set_paint_at(gx, gz, Color(1.0, 0.0, 0.0, 0.0))
+	manager.rebuild_chunks_structure()
+	assert_eq(_chunk_vertex_count(Vector2i(0, 0)), bare,
+		"Uniform paint carries no detail, so it must not cost a single vertex.")
+
+	# A transition does need vertices to carry it.
+	for gz in range(4, 7):
+		for gx in range(manager._total_vertices_x):
+			manager.set_paint_at(gx, gz, Color(0.0, 1.0, 0.0, 0.0))
+	manager.rebuild_chunks_structure()
+	assert_gt(_chunk_vertex_count(Vector2i(0, 0)), bare,
+		"A painted edge has to be represented, which takes vertices.")
+
+
+func _chunk_vertex_count(coord: Vector2i) -> int:
+	var mesh: ArrayMesh = manager.get_chunk_mesh(coord)
+	if mesh == null:
+		return 0
+	return (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+
+
+## Every channel has to survive into the mesh, the fourth one included.
+func test_all_four_layers_reach_the_vertex_colours() -> void:
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		for gz in range(manager._total_vertices_z):
+			for gx in range(manager._total_vertices_x):
+				manager.set_height_at(gx, gz, 0.0)
+				manager.set_paint_at(gx, gz, Color(0.0, 0.0, 0.0, 0.0))
+
+		var weights := Color(0.0, 0.0, 0.0, 0.0)
+		weights[layer - 1] = 1.0
+		manager.set_paint_at(5, 5, weights)
+		manager.rebuild_chunks_structure()
+
+		var mesh: ArrayMesh = manager.get_chunk_mesh(Vector2i(0, 0))
+		var strongest := Color(0.0, 0.0, 0.0, 0.0)
+		for c: Color in (mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray):
+			if c.r + c.g + c.b + c.a > strongest.r + strongest.g + strongest.b + strongest.a:
+				strongest = c
+		assert_almost_eq(strongest[layer - 1], 1.0, 0.001,
+			"Layer %d must arrive in its own channel of the vertex colour." % layer)
+
+
+## The paint has to follow the grid when the world is resized, not smear across it.
+func test_paint_survives_a_dimension_change() -> void:
+	manager.set_paint_at(3, 3, Color(1.0, 0.0, 0.0, 0.0))
+	manager.set_paint_at(7, 2, Color(0.0, 0.0, 0.0, 1.0))
+
+	manager.preview_world_chunks = Vector2i(3, 3)
+	manager.preview_chunk_size = manager.chunk_size
+	manager.preview_cell_size = manager.cell_size
+	manager._apply_dimension_changes()
+
+	assert_almost_eq(manager.get_paint_at(3, 3).r, 1.0, 0.001,
+		"A painted point keeps its coordinate through a resize.")
+	assert_almost_eq(manager.get_paint_at(7, 2).a, 1.0, 0.001,
+		"The fourth channel migrates with the rest.")

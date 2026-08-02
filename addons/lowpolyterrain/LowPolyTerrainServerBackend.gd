@@ -322,7 +322,9 @@ func update_chunk(coord: Vector2i) -> void:
 		_manager.cell_size,
 		heights,
 		_manager.jitter_strength,
-		_manager.jitter_slope_threshold
+		_manager.jitter_slope_threshold,
+		_manager.extract_chunk_paint(coord),
+		LowPolyTerrainManager.PAINT_STEPS
 	)
 	# New geometry invalidates any collider built from the previous mesh.
 	rec.collision_dirty = true
@@ -724,6 +726,13 @@ func _apply_material(rec: ChunkRecord) -> void:
 	var material: Material = _manager.custom_material if _manager != null else null
 	var material_rid: RID = material.get_rid() if material != null else RID()
 	RenderingServer.instance_geometry_set_material_override(rec.instance_rid, material_rid)
+
+	# The painted layers ride on a material OVERLAY, which is what a MeshInstance3D would call
+	# material_overlay. Keeping it separate is what lets painting work over any base material
+	# without writing anything into it.
+	var overlay: Material = _manager.get_active_paint_material() if _manager != null else null
+	var overlay_rid: RID = overlay.get_rid() if overlay != null else RID()
+	RenderingServer.instance_geometry_set_material_overlay(rec.instance_rid, overlay_rid)
 
 
 

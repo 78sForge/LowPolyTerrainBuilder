@@ -12,10 +12,18 @@ Found something broken, missing a feature, or have an idea for the tool? Please 
 Bug reports are most useful with your Godot version, the renderer you are on, whether the
 terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that reproduce it.
 
-## ✅ **Update information for v1.1.1 (The Ramp & Brush Feedback Update):**
-Version 1.1.1 adds a tool for building slopes and makes the brush show what it is about to do
-before it does it.
+## ✅ **Update information for v1.1.1 (The Painter, Ramp & Brush Feedback Update):**
+Version 1.1.1 adds a brush for blending extra materials into the terrain, a tool for building
+slopes, and makes the brush show what it is about to do before it does it.
 Key additions:
+* Vertex Painter: A new Paint brush blends up to four layers over the existing terrain material.
+* Any Base Shader: Layers are drawn as a material overlay, so no existing shader has to change.
+* Per-Layer Look: Every layer carries its own colour and roughness, blended across transitions.
+* Layer Opacity: A layer colour's alpha caps how much it claims, turning it into a glaze.
+* Layer Selectors: Four colour-tinted buttons, in the viewport toolbar and in the inspector.
+* Paint-Aware Decimation: Evenly painted ground still decimates; only transitions cost vertices.
+* Zero Cost Unpainted: A terrain that was never painted stores nothing and renders as before.
+* Inline Route: Include 'terrain_paint.gdshaderinc' for a single pass in your own shader.
 * Ramp Tool: Click two points and a graded slope connects them, at brush width and falloff.
 * Ramp Preview: A translucent surface shows the exact result before the second click commits it.
 * Two-Tone Preview: The ramp's top and its cuts to the ground are coloured apart to read the shape.
@@ -104,6 +112,7 @@ on my mobile device, achieving up to 1000 FPS within the editor.
 * **Dynamic Chunk Management:** Grid blocks are handled fluidly without cluttering scene files.
 * **Organic Delaunay Topology:** Creates organic triangle networks for typical landscape looks.
 * **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower, Flatten, and Smooth tools.
+* **Four-Layer Vertex Painter:** Blends extra materials over any base shader, brush-controlled.
 * **Two-Click Ramp Builder:** Connects two picked points with a graded slope, previewed live.
 * **Procedural Noise Injector:** Generates seamless Perlin or Cellular landscapes instantly.
 * **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu with clear SVG icons.
@@ -405,6 +414,71 @@ transform, tilt included.
 
 ---
 
+## 🎨 Vertex Painting
+
+The **Paint** brush blends up to four material layers over whatever your terrain shader already
+produces. It does not replace that shader: slope blending, triplanar cliffs and noise keep
+running underneath, and the painted layers are drawn on top of the result. That is why painting
+works with any base material, including your own.
+
+Pick the tool, choose a layer in the viewport toolbar or in the inspector, and paint.
+`Brush Radius` sets the footprint, `Brush Falloff Strength` how softly the edge fades, and
+`Brush Strength` how fast the layer builds up. Hold `Shift` to wipe back towards the base.
+
+### The layers
+
+Each layer carries a **colour** and a **roughness**, so snow can be bright and glossy where
+grass is dull, and the two blend across a transition rather than meeting at a line. They live
+in `Paint Material`, which is created for you the first time you select the Paint tool.
+
+The colour's **alpha** decides how much of the surface that layer may claim. At `1` it takes
+over completely; at `0.5` it leaves half for whatever was already there, which is how you glaze
+a red dust over snow instead of replacing it. Note that this acts while painting - changing the
+alpha afterwards does not repaint what is already down.
+
+Four layers is the ceiling, because the weights live in the four channels of the mesh's vertex
+colour. Between them and the base you have five distinct looks and every mixture of them.
+
+### What it costs
+
+The weights are stored per grid vertex, four bytes each, in a `PackedByteArray` alongside the
+heights. A terrain that was never painted stores **nothing at all** and renders exactly as it
+did before this feature existed.
+
+Painting does cost triangles, and it is worth knowing why. The mesh builder drops vertices whose
+neighbours share their height, which is what keeps flat ground cheap. A vertex cannot carry a
+colour once it has been dropped, so the flatness test looks at the paint as well: evenly painted
+ground still decimates, and only the transitions between layers keep their vertices. In practice
+a painted area costs about what sculpted terrain of the same size costs, and unpainted ground
+costs nothing extra.
+
+### Using your own shader instead of the overlay
+
+By default the layers are drawn as a **material overlay** - a second pass over the chunks, which
+leaves your material untouched. That matters: a material is usually a shared resource, and
+writing into it would change every other object using it.
+
+For a single pass, and for blending the material *properties* rather than the lit results,
+include the blend functions in your own terrain shader and clear the `Paint Material` slot:
+
+```glsl
+#include "res://addons/lowpolyterrain/shader/terrain_paint.gdshaderinc"
+
+void fragment() {
+    // ... your own shading ...
+    ALBEDO    = lpt_paint_albedo(ALBEDO, COLOR);
+    ROUGHNESS = lpt_paint_roughness(ROUGHNESS, COLOR);
+}
+```
+
+The two routes differ only in a transition: the overlay mixes two lit results, the inline route
+lights one set of blended properties. At full weight they are identical.
+
+> A shader that reads `COLOR` for its own purposes cannot be used with painting: that channel
+> now means "how much of each layer is on this vertex". Unpainted terrain leaves it at zero.
+
+---
+
 ## ⚙️ Inspector Configuration Parameters
 
 | Property | Group | Type | Description |
@@ -434,6 +508,8 @@ transform, tilt included.
 | **Collision Cull Radius** | Collision Generation | `float` | Metres of collision kept around each target. Pre-filled with `chunk_size * cell_size * 2` and re-derived on dimension changes unless you overrode it. |
 | **Collision Retain Limit** | Collision Generation | `int` | `LAZY` only, hidden otherwise. How many colliders outside the radius stay built but parked, so returning to them is cheap. Zero releases immediately. |
 | **Collision Debug Draw** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Draws live colliders as a translucent wireframe, since Godot's own Visible Collision Shapes cannot see server bodies. |
+| **Paint Layer** | Brush Settings | `int` | Which of the four layers the Paint brush deposits. Also selectable from the viewport toolbar. |
+| **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours and roughness values. Created on first use; drawn as an overlay over `Custom Material`. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 
 ---
@@ -464,6 +540,9 @@ Collisions** to regenerate it instead.
 * **Brush Size:** Hold `,` (Comma) to shrink or `.` (Period) to expand the selection circle seamlessly.
 * **Brush Falloff:** Hold `Shift` with the same two keys to soften or sharpen the brush edge.
 * **Polarity Inversion:** Hold `Shift` during sculpt passes to instantly flip `Raise` into `Lower`.
+* **Paint:** Pick a layer in the toolbar or the inspector, then paint. `Brush Strength` sets how
+  fast it builds up, `Brush Falloff Strength` how softly the edge fades. `Shift` wipes back
+  towards the base material, every layer at once.
 * **Ramp:** Click once to anchor one end, then move the cursor - a translucent surface shows the
   slope that would be built, at full brush width. Its upward facing part carries the tool colour
   while the cuts down to the surrounding ground are drawn darker, so you can read how far the
