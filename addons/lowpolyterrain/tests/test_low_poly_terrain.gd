@@ -1457,3 +1457,123 @@ func test_paint_survives_a_dimension_change() -> void:
 		"A painted point keeps its coordinate through a resize.")
 	assert_almost_eq(manager.get_paint_at(7, 2).a, 1.0, 0.001,
 		"The fourth channel migrates with the rest.")
+
+
+# --- SLOPE FILTER ---
+# Each layer may restrict itself to a range of surface angles, so one sweep of the brush can
+# put rock on the cliffs and sand on the flats without aiming.
+
+
+## Builds a terrain that is level on the left and rises at a known angle on the right.
+func _ramp_terrain() -> void:
+	for gz in range(manager._total_vertices_z):
+		for gx in range(manager._total_vertices_x):
+			# 0.5 per cell is arctan(0.5) = 26.57 degrees; level before that.
+			manager.set_height_at(gx, gz, 0.0 if gx <= 8 else float(gx - 8) * 0.5)
+	manager.rebuild_chunks_structure()
+
+
+func test_slope_angle_matches_the_height_gradient() -> void:
+	_ramp_terrain()
+	assert_almost_eq(manager.get_slope_angle_at(4, 4), 0.0, 0.01,
+		"Level ground reads as zero degrees.")
+	assert_almost_eq(manager.get_slope_angle_at(14, 4), rad_to_deg(atan(0.5)), 0.01,
+		"Half a unit per cell is arctan(0.5).")
+
+
+## The configured range passes at full strength; the feather is the run-out beyond it.
+func test_slope_mask_feathers_outside_the_range() -> void:
+	manager.paint_layer_1_slope = Vector2(30.0, 90.0)
+	manager.paint_slope_feather = 6.0
+
+	assert_almost_eq(manager.get_slope_mask(45.0, 1), 1.0, 0.001, "Inside the range: full.")
+	assert_almost_eq(manager.get_slope_mask(30.0, 1), 1.0, 0.001, "The boundary itself: full.")
+	assert_almost_eq(manager.get_slope_mask(27.0, 1), 0.5, 0.001, "Half a feather out: half.")
+	assert_almost_eq(manager.get_slope_mask(24.0, 1), 0.0, 0.001, "A whole feather out: none.")
+	assert_almost_eq(manager.get_slope_mask(0.0, 1), 0.0, 0.001, "Far outside: none.")
+
+	# A range given back to front must not invert the filter.
+	manager.paint_layer_1_slope = Vector2(90.0, 30.0)
+	assert_almost_eq(manager.get_slope_mask(45.0, 1), 1.0, 0.001,
+		"Min and max swapped describe the same range.")
+
+
+## Zero feather is a hard boundary, which is a legitimate choice rather than a broken one.
+func test_slope_mask_without_feather_is_a_hard_edge() -> void:
+	manager.paint_layer_1_slope = Vector2(30.0, 90.0)
+	manager.paint_slope_feather = 0.0
+	assert_almost_eq(manager.get_slope_mask(30.0, 1), 1.0, 0.001, "Inside stays full.")
+	assert_almost_eq(manager.get_slope_mask(29.9, 1), 0.0, 0.001, "Outside drops at once.")
+
+
+## The point of the whole feature: one stroke, and the layer lands only where it belongs.
+func test_painting_respects_the_slope_range() -> void:
+	_ramp_terrain()
+	manager.ensure_paint_material()
+	manager.tool_mode = LowPolyTerrainManager.BrushMode.PAINT
+	manager.brush_radius = 12
+	manager.brush_strength = 15.0
+	manager.brush_falloff_strength = 0.0
+	manager.paint_layer = 1
+	manager.paint_slope_feather = 2.0
+	# Only the rising half, which sits at 26.57 degrees.
+	manager.paint_layer_1_slope = Vector2(20.0, 90.0)
+
+	# Centred so the brush covers level ground and slope alike.
+	_paint(manager.global_transform * Vector3(10.0, 0.0, -10.0), 10)
+
+	assert_almost_eq(manager.get_paint_at(4, 10).r, 0.0, 0.01,
+		"Level ground is outside the range and must stay unpainted.")
+	assert_gt(manager.get_paint_at(14, 10).r, 0.9,
+		"The slope is inside the range and must take the paint.")
+
+
+## Erasing must not be filtered, or paint could become impossible to remove.
+func test_erasing_ignores_the_slope_range() -> void:
+	_ramp_terrain()
+	manager.ensure_paint_material()
+	manager.tool_mode = LowPolyTerrainManager.BrushMode.PAINT
+	manager.brush_radius = 12
+	manager.brush_strength = 15.0
+	manager.brush_falloff_strength = 0.0
+	manager.paint_layer = 1
+
+	# Paint everything with the filter wide open.
+	manager.paint_layer_1_slope = Vector2(0.0, 90.0)
+	_paint(manager.global_transform * Vector3(10.0, 0.0, -10.0), 10)
+	assert_gt(manager.get_paint_at(4, 10).r, 0.9, "Precondition: level ground got paint.")
+
+	# Now close the filter so that level ground would be excluded, and erase.
+	manager.paint_layer_1_slope = Vector2(80.0, 90.0)
+	manager.paint_slope_feather = 0.0
+	_paint(manager.global_transform * Vector3(10.0, 0.0, -10.0), 20, true)
+
+	assert_almost_eq(manager.get_paint_at(4, 10).r, 0.0, 0.01,
+		"Shift must reach paint the filter would no longer let through.")
+
+
+## Only the selected layer's range is offered, but all four keep their stored values.
+func test_only_the_selected_layers_slope_range_is_shown() -> void:
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		manager.paint_layer = layer
+
+		for i in range(LowPolyTerrainManager.PAINT_SLOPE_PROPERTIES.size()):
+			var property: String = LowPolyTerrainManager.PAINT_SLOPE_PROPERTIES[i]
+			var usage: int = _usage_of_property(property)
+
+			if i == layer - 1:
+				assert_gt(usage & PROPERTY_USAGE_EDITOR, 0,
+					"'%s' must be shown while layer %d is selected." % [property, layer])
+			else:
+				assert_eq(usage & PROPERTY_USAGE_EDITOR, 0,
+					"'%s' must be hidden while layer %d is selected." % [property, layer])
+
+			assert_gt(usage & PROPERTY_USAGE_STORAGE, 0,
+				"'%s' must be saved whether shown or not." % property)
+
+
+func _usage_of_property(property: String) -> int:
+	for entry: Dictionary in manager.get_property_list():
+		if entry["name"] == property:
+			return int(entry["usage"])
+	return 0

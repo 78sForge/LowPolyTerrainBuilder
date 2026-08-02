@@ -177,6 +177,14 @@ const LAZY_ONLY_PROPERTIES: PackedStringArray = [
 	"collision_retain_limit",
 ]
 
+## The four per-layer slope ranges, indexed by layer number. Only the selected one is shown.
+const PAINT_SLOPE_PROPERTIES: PackedStringArray = [
+	"paint_layer_1_slope",
+	"paint_layer_2_slope",
+	"paint_layer_3_slope",
+	"paint_layer_4_slope",
+]
+
 ## Settings that only describe HOW the culling follows its targets, and therefore only mean
 ## anything once enable_collision_culling is on.
 const CULLING_ONLY_PROPERTIES: PackedStringArray = [
@@ -205,6 +213,11 @@ func _validate_property(property: Dictionary) -> void:
 	if not hidden and not enable_collision_culling:
 		hidden = CULLING_ONLY_PROPERTIES.has(name)
 
+	# And a fourth: four slope ranges exist, but showing all of them at once would bury the one
+	# that matters under three that do not. They stay stored either way.
+	if not hidden and PAINT_SLOPE_PROPERTIES.has(name):
+		hidden = name != PAINT_SLOPE_PROPERTIES[clampi(paint_layer - 1, 0, PAINT_LAYER_COUNT - 1)]
+
 	if hidden:
 		# Clear ONLY the editor bit. Assigning PROPERTY_USAGE_NO_EDITOR outright would replace
 		# the whole mask and drop PROPERTY_USAGE_SCRIPT_VARIABLE with it, at which point the
@@ -222,7 +235,9 @@ func _update_read_only_metrics() -> void:
 
 
 
-@export_group("Noise Generation")
+# Noise and smoothing share a group because they are usually used in sequence: scatter
+# detail, then take the harshness back out of it.
+@export_group("Noise and Smooth")
 ## The maximum vertical scaling applied to the added noise. 
 ## Generates balanced heights and depths centered around zero.
 @export var noise_amplitude: float = 1.5
@@ -310,6 +325,18 @@ func _generate_noise_terrain() -> void:
 
 
 
+## Blending weight factor used during smoothing operations. Higher values result in more
+## aggressive terrain blurring per pass.
+@export_range(0.0, 1.0, 0.05) var smooth_factor: float = 0.5
+## Determines how many consecutive iterations the global smoothing algorithm executes back-to-back
+## when clicked.
+@export_range(1, 10, 1) var smooth_iterations: int = 1
+## Click to run a global smoothing pass over the entire map. Blurs and softens all terrain hills
+## based on the smoothing settings below.
+@export_tool_button("Smooth Entire Terrain", "Mesh")
+var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
+
+
 @export_group("Terrain Properties")
 ## The exact vertical increment (in meters) applied to vertices when using the Raise, Lower,
 ## or Flatten brushes.
@@ -358,7 +385,44 @@ func _generate_noise_terrain() -> void:
 ## The layers live in the four channels of the vertex colour; whatever they leave unused belongs
 ## to the base material, so an unpainted terrain shows the base alone. Hold Shift while painting
 ## to wipe back towards it.
-@export_range(1, 4, 1) var paint_layer: int = 1
+@export_range(1, 4, 1) var paint_layer: int = 1:
+	set(v):
+		paint_layer = v
+		# Only the selected layer's slope range is shown, so the list has to be re-read.
+		notify_property_list_changed()
+
+## Range of surface angles the selected layer may be painted on, in degrees.
+##
+## Zero is level ground, ninety is a vertical wall. The default spans everything, so the filter
+## is off until you narrow it. Rock between 35 and 90, sand between 0 and 12, scree in between -
+## then you can sweep the brush across a whole hillside and each layer lands where it belongs.
+##
+## Per layer rather than global, so a stroke needs no aiming. Only the range of the layer you
+## are painting with is shown; the other three are still there and still stored.
+##
+## Erasing ignores this entirely: Shift must always be able to clean up, including where the
+## filter currently lets nothing through.
+@export_custom(PROPERTY_HINT_RANGE, "0,90,0.5,degrees")
+var paint_layer_1_slope: Vector2 = Vector2(0.0, 90.0)
+
+@export_custom(PROPERTY_HINT_RANGE, "0,90,0.5,degrees")
+var paint_layer_2_slope: Vector2 = Vector2(0.0, 90.0)
+
+@export_custom(PROPERTY_HINT_RANGE, "0,90,0.5,degrees")
+var paint_layer_3_slope: Vector2 = Vector2(0.0, 90.0)
+
+@export_custom(PROPERTY_HINT_RANGE, "0,90,0.5,degrees")
+var paint_layer_4_slope: Vector2 = Vector2(0.0, 90.0)
+
+## How far beyond the range above the layer fades out, in degrees.
+##
+## The range itself is painted at full strength; this is the run-out past its edges. Zero gives
+## a hard contour line across the terrain, which on faceted geometry is very visible.
+##
+## Global rather than per layer: it describes how sharp your transitions look, which is a
+## property of the terrain rather than of one material.
+@export_range(0.0, 45.0, 0.5, "degrees") var paint_slope_feather: float = 6.0
+
 
 ## Draws the painted layers on top of whatever custom_material produces.
 ##
@@ -376,19 +440,6 @@ func _generate_noise_terrain() -> void:
 	set(v):
 		paint_material = v
 		_queue_setup()
-
-
-@export_group("Terrain Smoothing")
-## Blending weight factor used during smoothing operations. Higher values result in more
-## aggressive terrain blurring per pass.
-@export_range(0.0, 1.0, 0.05) var smooth_factor: float = 0.5
-## Determines how many consecutive iterations the global smoothing algorithm executes back-to-back
-## when clicked.
-@export_range(1, 10, 1) var smooth_iterations: int = 1
-## Click to run a global smoothing pass over the entire map. Blurs and softens all terrain hills
-## based on the smoothing settings below.
-@export_tool_button("Smooth Entire Terrain", "Mesh")
-var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 
 
 @export_group("Collision Generation")
@@ -1630,6 +1681,59 @@ func _register_ramp_undo(old_state: PackedFloat32Array) -> void:
 	_active_undo_redo_manager.commit_action()
 
 
+## The surface angle at a grid point, in degrees. Zero is level, ninety is a vertical wall.
+##
+## Derived from the height matrix rather than from the mesh, for the same reason the height
+## query is: it is the source both backends build from, and it exists at full grid resolution
+## even where decimation threw the corresponding vertex away.
+##
+## Central differences, with the samples clamped at the border so an edge point leans on the
+## slope just inside it instead of reporting a cliff that is not there.
+func get_slope_angle_at(x: int, z: int) -> float:
+	if _total_vertices_x <= 1 or _total_vertices_z <= 1 or is_zero_approx(cell_size):
+		return 0.0
+
+	var left: float = get_height_at(maxi(x - 1, 0), z)
+	var right: float = get_height_at(mini(x + 1, _total_vertices_x - 1), z)
+	var back: float = get_height_at(x, maxi(z - 1, 0))
+	var front: float = get_height_at(x, mini(z + 1, _total_vertices_z - 1))
+
+	var dx: float = (right - left) / (2.0 * cell_size)
+	var dz: float = (front - back) / (2.0 * cell_size)
+
+	# The upward component of the surface normal is enough; no need to build the whole vector.
+	var up: float = 1.0 / sqrt(dx * dx + dz * dz + 1.0)
+	return rad_to_deg(acos(clampf(up, -1.0, 1.0)))
+
+
+## How much of a layer the slope filter lets through at a given angle, 0 to 1.
+##
+## The configured range is passed at full strength and the feather is the run-out BEYOND it, so
+## the numbers you type are the ground you definitely get rather than the ground you might.
+func get_slope_mask(angle: float, layer: int) -> float:
+	var range_deg: Vector2 = get_paint_layer_slope(layer)
+	var low: float = minf(range_deg.x, range_deg.y)
+	var high: float = maxf(range_deg.x, range_deg.y)
+
+	if angle >= low and angle <= high:
+		return 1.0
+	if paint_slope_feather <= 0.0:
+		return 0.0
+
+	if angle < low:
+		return clampf(1.0 - (low - angle) / paint_slope_feather, 0.0, 1.0)
+	return clampf(1.0 - (angle - high) / paint_slope_feather, 0.0, 1.0)
+
+
+## The configured slope range of one layer, 1 to 4.
+func get_paint_layer_slope(layer: int) -> Vector2:
+	match clampi(layer, 1, PAINT_LAYER_COUNT):
+		1: return paint_layer_1_slope
+		2: return paint_layer_2_slope
+		3: return paint_layer_3_slope
+	return paint_layer_4_slope
+
+
 ## Blends the selected paint layer into the grid around a LOCAL position.
 ##
 ## Works on weights rather than heights, but through the same brush settings: brush_radius sets
@@ -1697,6 +1801,10 @@ func _apply_paint_at(local_pos: Vector3, erase: bool, strength_scale: float) -> 
 			var ceiling: float = lerpf(1.0, smooth_curve, brush_falloff_strength)
 			if not erase:
 				ceiling = minf(ceiling, layer_opacity)
+				# A third cap, alongside the falloff and the layer's opacity. Folded into the
+				# ceiling rather than skipping the point, so the filter fades in and out with
+				# the terrain instead of cutting a contour line across it.
+				ceiling *= get_slope_mask(get_slope_angle_at(x, z), paint_layer)
 			if is_zero_approx(ceiling):
 				continue
 

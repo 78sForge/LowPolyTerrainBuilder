@@ -21,6 +21,7 @@ Key additions:
 * Per-Layer Look: Every layer carries its own colour and roughness, blended across transitions.
 * Layer Opacity: A layer colour's alpha caps how much it claims, turning it into a glaze.
 * Layer Selectors: Four colour-tinted buttons, in the viewport toolbar and in the inspector.
+* Slope Filter: Each layer can restrict itself to a range of surface angles, with a soft edge.
 * Paint-Aware Decimation: Evenly painted ground still decimates; only transitions cost vertices.
 * Zero Cost Unpainted: A terrain that was never painted stores nothing and renders as before.
 * Inline Route: Include 'terrain_paint.gdshaderinc' for a single pass in your own shader.
@@ -439,6 +440,26 @@ alpha afterwards does not repaint what is already down.
 Four layers is the ceiling, because the weights live in the four channels of the mesh's vertex
 colour. Between them and the base you have five distinct looks and every mixture of them.
 
+### Painting only on slopes, or only on flats
+
+Each layer can restrict itself to a range of surface angles. `0` is level ground, `90` a
+vertical wall, and the default spans everything, so the filter does nothing until you narrow it.
+
+Set rock to `35 – 90`, sand to `0 – 12` and scree to the gap between them, and one sweep of the
+brush across a hillside puts each of them where it belongs without aiming. The range belongs to
+the layer, not to the brush, so switching layers switches the rule with it — only the range of
+the layer you are painting with is shown, the others stay stored.
+
+`Paint Slope Feather` is how far past the range a layer fades out, in degrees. The range itself
+is painted at full strength. At `0` you get a hard contour line across the terrain, which on
+faceted geometry is very visible; a few degrees is usually enough to hide it.
+
+The angle comes from the height matrix rather than from the mesh, so it exists at full grid
+resolution even where the decimation dropped the corresponding vertex.
+
+Erasing ignores the filter entirely. `Shift` must always be able to clean up, including where
+the filter currently lets nothing through.
+
 ### What it costs
 
 The weights are stored per grid vertex, four bytes each, in a `PackedByteArray` alongside the
@@ -465,9 +486,9 @@ include the blend functions in your own terrain shader and clear the `Paint Mate
 #include "res://addons/lowpolyterrain/shader/terrain_paint.gdshaderinc"
 
 void fragment() {
-    // ... your own shading ...
-    ALBEDO    = lpt_paint_albedo(ALBEDO, COLOR);
-    ROUGHNESS = lpt_paint_roughness(ROUGHNESS, COLOR);
+	// ... your own shading ...
+	ALBEDO    = lpt_paint_albedo(ALBEDO, COLOR);
+	ROUGHNESS = lpt_paint_roughness(ROUGHNESS, COLOR);
 }
 ```
 
@@ -489,16 +510,19 @@ lights one set of blended properties. At full weight they are identical.
 | **Preview Cell Size** | World Dimensions | `float` | Scale size of a single grid square in meters. |
 | **Apply Dimension Changes** | World Dimensions | `Button` | Resizes the terrain safely to the new dimensions. |
 | **Step Height** | Terrain Properties | `float` | Vertical step height added or removed per brush stroke. |
-| **Brush Radius** | Terrain Properties | `int` | Size of the painting tool radius. |
-| **Brush Strength** | Terrain Properties | `float` | Multiplier for how fast the terrain deforms. |
-| **Brush Falloff Strength** | Terrain Properties | `float` | Blends between sharp linear brush edges (0.0) and soft transitions (1.0). |
+| **Brush Radius** | Brush Settings | `int` | Size of the painting tool radius. |
+| **Brush Strength** | Brush Settings | `float` | Multiplier for how fast the terrain deforms. |
+| **Brush Falloff Strength** | Brush Settings | `float` | Blends between sharp linear brush edges (0.0) and soft transitions (1.0). |
 | **Jitter Strength** | Terrain Properties | `float` | Intensity of the random vertex displacement for the low-poly look. |
 | **Jitter Slope Threshold** | Terrain Properties | `float` | Controls whether flat paths stay plain while hills get unique shapes. |
-| **Noise Amplitude** | Noise Generation | `float` | Vertical scale multiplier for balanced height/depth noise distribution. |
-| **Terrain Noise** | Noise Generation | `FastNoiseLite` | Target FastNoiseLite resource used for generating organic Perlin/Cellular shapes. |
-| **Generate Noise Terrain** | Noise Generation | `Button` | Processes and injects the selected noise pattern into all active chunk vertices. |
-| **Show Chunk Grid** | Terrain Properties | `bool` | Overlays a wireframe grid along the chunk boundaries in the editor. One line mesh for the whole terrain, so the cost does not grow with chunk count. |
-| **Show Deactivated Chunks** | Terrain Properties | `bool` | Shows or hides semi-transparent red grid boxes over disabled coordinates. |
+| **Noise Amplitude** | Noise and Smooth | `float` | Vertical scale multiplier for balanced height/depth noise distribution. |
+| **Terrain Noise** | Noise and Smooth | `FastNoiseLite` | Target FastNoiseLite resource used for generating organic Perlin/Cellular shapes. |
+| **Generate Noise Terrain** | Noise and Smooth | `Button` | Processes and injects the selected noise pattern into all active chunk vertices. |
+| **Smooth Factor** | Noise and Smooth | `float` | Blending weight per smoothing pass. Higher values blur the terrain more aggressively. |
+| **Smooth Iterations** | Noise and Smooth | `int` | How many consecutive passes the global smoothing runs. |
+| **Smooth Entire Terrain** | Noise and Smooth | `Button` | Runs the smoothing over the whole map. Grouped with the noise settings because the two are usually used in sequence. |
+| **Show Chunk Grid** | World Dimensions | `bool` | Overlays a wireframe grid along the chunk boundaries in the editor. One line mesh for the whole terrain, so the cost does not grow with chunk count. |
+| **Show Deactivated Chunks** | World Dimensions | `bool` | Shows or hides semi-transparent red grid boxes over disabled coordinates. |
 | **Custom Material** | Terrain Properties | `Resource` | Slot for custom 3D shader or standard materials. |
 | **Export Target Path** | Data Export | `String` | Target path where the exported `.gltf` file will be saved. |
 | **Choose Path & Export Terrain** | Data Export | `Button` | Opens a file dialog to name and save the model asset. |
@@ -509,6 +533,8 @@ lights one set of blended properties. At full weight they are identical.
 | **Collision Retain Limit** | Collision Generation | `int` | `LAZY` only, hidden otherwise. How many colliders outside the radius stay built but parked, so returning to them is cheap. Zero releases immediately. |
 | **Collision Debug Draw** | Collision Generation | `Enum` | `SERVERS` only, hidden otherwise. Draws live colliders as a translucent wireframe, since Godot's own Visible Collision Shapes cannot see server bodies. |
 | **Paint Layer** | Brush Settings | `int` | Which of the four layers the Paint brush deposits. Also selectable from the viewport toolbar. |
+| **Paint Layer N Slope** | Brush Settings | `Vector2` | Surface angles in degrees that layer may be painted on. Only the selected layer's range is shown. |
+| **Paint Slope Feather** | Brush Settings | `float` | Degrees over which a layer fades out past its slope range. Zero gives a hard contour. |
 | **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours and roughness values. Created on first use; drawn as an overlay over `Custom Material`. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 
