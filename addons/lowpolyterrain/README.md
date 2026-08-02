@@ -3,6 +3,9 @@
 An intuitive, optimized, and robust 3D terrain sculpting tool tailored for creating organic
 low-poly landscapes inside the Godot 4 editor.
 
+**Requires Godot 4.7 or newer.** That is the version it is built and tested on; anything older
+is untested.
+
 ## 💬 Bugs, requests and ideas
 
 Found something broken, missing a feature, or have an idea for the tool? Please open an issue:
@@ -11,6 +14,22 @@ Found something broken, missing a feature, or have an idea for the tool? Please 
 
 Bug reports are most useful with your Godot version, the renderer you are on, whether the
 terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that reproduce it.
+
+## 🚀 Getting started
+
+1. Copy the `addons/lowpolyterrain` folder into your project's `addons` directory.
+2. Enable **Low Poly Terrain Builder** under `Project → Project Settings → Plugins`.
+3. Add a **LowPolyTerrainManager** node to a 3D scene.
+4. Set **World Chunks**, **Chunk Size** and **Cell Size** in the inspector, then press
+   **Apply Dimension Changes**. Nothing is generated until you do - and note that *shrinking*
+   an existing terrain later discards whatever lies outside the new bounds. It asks first, and
+   the change is undoable.
+5. With the manager selected, pick a tool from the toolbar above the 3D viewport and sculpt.
+   Hold `Shift` to invert a tool, `,` and `.` to resize the brush.
+6. For collision, either press **Bake Live Collisions** or switch **Terrain Backend** to
+   `SERVERS`, which creates the bodies at runtime instead.
+
+Everything below is detail you can come back to. The defaults are usable as they are.
 
 ## ✅ **Update information for v1.1.1 (The Painter, Ramp & Brush Feedback Update):**
 Version 1.1.1 adds a brush for blending extra materials into the terrain, a tool for building
@@ -22,6 +41,8 @@ Key additions:
 * Layer Opacity: A layer colour's alpha caps how much it claims, turning it into a glaze.
 * Layer Selectors: Four colour-tinted buttons, in the viewport toolbar and in the inspector.
 * Slope Filter: Each layer can restrict itself to a range of surface angles, with a soft edge.
+* Shrink Guard: Applying smaller dimensions now asks first and names how much would be lost.
+* Undoable Resizing: A dimension change files an undo entry, heights, paint and activity alike.
 * Paint-Aware Decimation: Evenly painted ground still decimates; only transitions cost vertices.
 * Zero Cost Unpainted: A terrain that was never painted stores nothing and renders as before.
 * Inline Route: Include 'terrain_paint.gdshaderinc' for a single pass in your own shader.
@@ -550,9 +571,15 @@ Every editing operation registers in the editor history and reverses with `Ctrl+
 | Activate / Deactivate Chunk brush | `Terrain Chunk Activation` | Sparse delta, only the chunks that flipped |
 | Generate Noise Terrain | `Generate Noise Terrain` | Full height matrix snapshot |
 | Smooth Entire Terrain | `Smooth Entire Terrain` | Full height matrix snapshot |
+| Paint brush | `Paint Terrain` | Sparse delta, only the grid points touched |
+| Ramp tool | `Terrain Ramp` | Full height matrix snapshot |
+| Apply Dimension Changes | `Apply Terrain Dimensions` | Dimensions plus heights, paint and activity |
 
 One brush stroke is one history entry, no matter how many paint events it consists of, and the
 delta always holds the state from *before* the stroke began.
+
+Resizing the world is covered too, which is why it takes a whole-grid snapshot rather than a
+delta: the migration re-indexes every array by the new row width, so every value moves.
 
 **Not covered:** switching the terrain backend. That happens inside a property setter, where
 the inspector already has its own history action open, and a nested action does not work there.

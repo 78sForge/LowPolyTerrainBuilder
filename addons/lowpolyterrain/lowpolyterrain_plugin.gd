@@ -239,6 +239,9 @@ func _release_active_manager() -> void:
 		if active_manager.signal_export_requested.is_connected(_open_export_dialog_from_plugin):
 			active_manager.signal_export_requested.disconnect(_open_export_dialog_from_plugin)
 
+		if active_manager.signal_shrink_confirmation_requested.is_connected(_confirm_shrink):
+			active_manager.signal_shrink_confirmation_requested.disconnect(_confirm_shrink)
+
 		active_manager.set_meta("_edit_lock_", false)
 		if "is_paint_stroke_active" in active_manager:
 			active_manager.is_paint_stroke_active = false
@@ -269,6 +272,10 @@ func _edit(object: Object) -> void:
 		# Securely bridge the manager button with the isolated editor plugin UI pipeline
 		if not active_manager.signal_export_requested.is_connected(_open_export_dialog_from_plugin):
 			active_manager.signal_export_requested.connect(_open_export_dialog_from_plugin)
+
+		# Applying smaller dimensions destroys terrain and cannot be undone, so it asks first.
+		if not active_manager.signal_shrink_confirmation_requested.is_connected(_confirm_shrink):
+			active_manager.signal_shrink_confirmation_requested.connect(_confirm_shrink)
 
 		# Connect the inspector click hook safely
 		var inspector := EditorInterface.get_inspector()
@@ -1387,6 +1394,43 @@ func _on_inspector_property_edited(property_name: String) -> void:
 
 ## Opens a native editor save dialog. Safe from release build compilation errors since
 ## this entire script is automatically stripped by Godot during the export process.
+
+## Asks before dimensions are applied that would drop terrain off the edge of the world.
+##
+## The manager raises this instead of migrating, and nothing happens unless the answer comes
+## back. Shrinking has no undo entry - the migration rebuilds the whole grid - so a single
+## mistyped number used to cost whatever had been sculpted out there, with only a line in the
+## console to show for it.
+func _confirm_shrink(lost_chunks: int) -> void:
+	if active_manager == null or not is_instance_valid(active_manager):
+		return
+
+	var manager: LowPolyTerrainManager = active_manager
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Shrink terrain?"
+	dialog.dialog_text = (
+		"Applying these dimensions removes %d chunk%s from '%s'.\n\n"
+		% [lost_chunks, "" if lost_chunks == 1 else "s", manager.name]
+		+ "Everything sculpted, painted or deactivated out there is discarded. This can be "
+		+ "undone with Ctrl+Z, but not after the scene has been closed."
+	)
+	dialog.ok_button_text = "Discard and shrink"
+	dialog.cancel_button_text = "Keep as is"
+
+	dialog.confirmed.connect(
+		func() -> void:
+			if is_instance_valid(manager):
+				manager.apply_dimension_changes_confirmed()
+			dialog.queue_free()
+	)
+	dialog.canceled.connect(func() -> void: dialog.queue_free())
+
+	var editor_base: Control = EditorInterface.get_base_control()
+	if editor_base:
+		editor_base.add_child(dialog)
+		dialog.popup_centered()
+
+
 func _open_export_dialog_from_plugin() -> void:
 	if not active_manager or not is_instance_valid(active_manager):
 		return

@@ -1577,3 +1577,88 @@ func _usage_of_property(property: String) -> int:
 		if entry["name"] == property:
 			return int(entry["usage"])
 	return 0
+
+
+# --- DESTRUCTIVE DIMENSION CHANGES ---
+# Shrinking rebuilds the whole grid and leaves no undo entry behind, so it asks first.
+
+
+func test_shrinking_counts_the_chunks_it_would_discard() -> void:
+	manager.preview_world_chunks = manager.world_chunks
+	assert_eq(manager.count_chunks_lost_by_pending_dimensions(), 0,
+		"Unchanged dimensions discard nothing.")
+
+	manager.preview_world_chunks = manager.world_chunks + Vector2i(2, 2)
+	assert_eq(manager.count_chunks_lost_by_pending_dimensions(), 0,
+		"Growing the world discards nothing either.")
+
+	# A 2x2 world cut to 1x1 keeps one chunk of four.
+	manager.preview_world_chunks = Vector2i(1, 1)
+	assert_eq(manager.count_chunks_lost_by_pending_dimensions(), 3,
+		"Only chunks that exist today and would not exist afterwards count.")
+
+
+## Outside the editor there is nobody to answer, so the change goes through.
+func test_shrinking_outside_the_editor_applies_directly() -> void:
+	manager.set_height_at(1, 1, 7.0)
+	manager.preview_world_chunks = Vector2i(1, 1)
+	manager.preview_chunk_size = manager.chunk_size
+	manager.preview_cell_size = manager.cell_size
+
+	manager._apply_dimension_changes()
+	assert_eq(manager.world_chunks, Vector2i(1, 1),
+		"GUT runs with is_editor_hint() false, which is the runtime case.")
+
+
+## The confirmation must be a real gate: nothing may change until the answer comes back.
+func test_confirmed_shrink_is_what_actually_migrates() -> void:
+	manager.set_height_at(1, 1, 7.0)
+	var before: Vector2i = manager.world_chunks
+
+	manager.preview_world_chunks = Vector2i(1, 1)
+	manager.preview_chunk_size = manager.chunk_size
+	manager.preview_cell_size = manager.cell_size
+
+	# The dialog path ends here in the editor; the confirmed call is the other half of it.
+	assert_eq(manager.world_chunks, before,
+		"Precondition: setting the preview alone changes nothing.")
+
+	manager.apply_dimension_changes_confirmed()
+	assert_eq(manager.world_chunks, Vector2i(1, 1),
+		"Confirming is what performs the migration.")
+
+
+## Resizing must be reversible in full: dimensions and all three data layers.
+##
+## A whole-grid snapshot rather than a delta, because the migration re-indexes every array by
+## the new row width - there is no subset of values that stayed where it was.
+func test_dimension_change_restores_everything_it_touched() -> void:
+	manager.set_height_at(3, 3, 7.5)
+	manager.set_paint_at(3, 3, Color(1.0, 0.0, 0.0, 0.0))
+	manager.chunk_activity_data[1] = 0
+
+	var chunks_before: Vector2i = manager.world_chunks
+	var heights_before: PackedFloat32Array = manager.global_height_data.duplicate()
+	var paint_before: PackedByteArray = manager.global_paint_data.duplicate()
+	var activity_before: PackedByteArray = manager.chunk_activity_data.duplicate()
+
+	manager.preview_world_chunks = Vector2i(1, 1)
+	manager.preview_chunk_size = manager.chunk_size
+	manager.preview_cell_size = manager.cell_size
+	manager.apply_dimension_changes_confirmed()
+	assert_eq(manager.world_chunks, Vector2i(1, 1), "Precondition: the change went through.")
+
+	# What the undo entry hands back.
+	manager._apply_dimension_snapshot(
+		chunks_before, manager.chunk_size, manager.cell_size,
+		heights_before, activity_before, paint_before
+	)
+
+	assert_eq(manager.world_chunks, chunks_before, "The dimensions come back.")
+	assert_eq(manager.global_height_data, heights_before, "So do the heights.")
+	assert_eq(manager.global_paint_data, paint_before, "So does the paint.")
+	assert_eq(manager.chunk_activity_data, activity_before, "So does the chunk activity.")
+
+	# The preview values follow, or pressing Apply again would silently redo the undone change.
+	assert_eq(manager.preview_world_chunks, chunks_before,
+		"The inspector must not keep showing the size that was just undone.")

@@ -9,6 +9,10 @@ class_name LowPolyTerrainManager
 signal signal_brush_settings_changed
 ## Signal to notify the editor plugin when the user requests a terrain export.
 signal signal_export_requested
+## Raised when applying the dimensions would discard terrain, so the editor plugin can ask
+## first. Carries how many chunks would be lost. Nothing happens until the answer comes back
+## through apply_dimension_changes_confirmed().
+signal signal_shrink_confirmation_requested(lost_chunks: int)
 
 # Centralized structural constants for advanced Inspector paths
 const GROUP_DIMENSIONS := "World Dimensions (Requires Apply)"
@@ -1186,14 +1190,120 @@ func _initialize_empty_grid() -> void:
 	chunk_activity_data.fill(1)
 
 
-## Safeguards world changes by prompting warning logs and transferring active preview parameters.
+## How many chunks the pending dimensions would drop off the edge of the world.
+##
+## Only the count of chunks that exist today and would not exist afterwards. Growing the world,
+## or changing only the cell size, loses nothing and answers zero.
+func count_chunks_lost_by_pending_dimensions() -> int:
+	var lost: int = 0
+	for cz in range(world_chunks.y):
+		for cx in range(world_chunks.x):
+			if cx >= preview_world_chunks.x or cz >= preview_world_chunks.y:
+				lost += 1
+	return lost
+
+
+## Applies the pending world dimensions, asking first when that would destroy terrain.
+##
+## Shrinking is irreversible - the migration rebuilds the grid and there is no undo entry for
+## it - and it used to happen on a single click with nothing but a line in the console to show
+## for it. A console nobody has open while modelling is not a warning.
 func _apply_dimension_changes() -> void:
-	# Check if world boundaries are shrinking to print an explicit warning message to the console
-	if preview_world_chunks.x < world_chunks.x or preview_world_chunks.y < world_chunks.y:
-		print("WARNING: Shrinking world dimensions will permanently delete out-of-bounds terrain data!")
-	
+	var lost: int = count_chunks_lost_by_pending_dimensions()
+
+	# Ask only where someone can answer, and only when something is actually at stake.
+	if lost > 0 and Engine.is_editor_hint() and not global_height_data.is_empty():
+		signal_shrink_confirmation_requested.emit(lost)
+		return
+
+	apply_dimension_changes_confirmed()
+
+
+## Performs the change for real. Public because the confirmation dialog calls back into it.
+func apply_dimension_changes_confirmed() -> void:
+	# Everything the migration is about to rewrite, captured while it still exists.
+	var previous_chunks: Vector2i = world_chunks
+	var previous_chunk_size: int = chunk_size
+	var previous_cell_size: float = cell_size
+	var previous_heights: PackedFloat32Array = global_height_data.duplicate()
+	var previous_activity: PackedByteArray = chunk_activity_data.duplicate()
+	var previous_paint: PackedByteArray = global_paint_data.duplicate()
+
 	# Trigger high-performance grid data block copy migration pipeline
 	_migrate_grid_data()
+
+	_register_dimension_undo(
+		previous_chunks, previous_chunk_size, previous_cell_size,
+		previous_heights, previous_activity, previous_paint
+	)
+
+
+## Files one undo entry for a completed dimension change.
+##
+## A whole-grid snapshot, like the noise and smoothing generators use. It is the only shape that
+## works here: the migration re-indexes every array by the new row width, so there is no sparse
+## delta to record - every single value moves.
+func _register_dimension_undo(
+	previous_chunks: Vector2i,
+	previous_chunk_size: int,
+	previous_cell_size: float,
+	previous_heights: PackedFloat32Array,
+	previous_activity: PackedByteArray,
+	previous_paint: PackedByteArray
+) -> void:
+	if not Engine.is_editor_hint():
+		return
+
+	if _active_undo_redo_manager == null:
+		var editor: Object = Engine.get_singleton("EditorInterface")
+		if editor and editor.has_method("get_undo_redo"):
+			_active_undo_redo_manager = editor.call("get_undo_redo")
+	if _active_undo_redo_manager == null:
+		return
+
+	_active_undo_redo_manager.create_action("Apply Terrain Dimensions", 0, self)
+	_active_undo_redo_manager.add_do_method(
+		self, _apply_dimension_snapshot.get_method(),
+		world_chunks, chunk_size, cell_size,
+		global_height_data.duplicate(), chunk_activity_data.duplicate(),
+		global_paint_data.duplicate()
+	)
+	_active_undo_redo_manager.add_undo_method(
+		self, _apply_dimension_snapshot.get_method(),
+		previous_chunks, previous_chunk_size, previous_cell_size,
+		previous_heights, previous_activity, previous_paint
+	)
+	_active_undo_redo_manager.commit_action(false)
+
+
+## Restores a complete grid state: dimensions and all three data layers at once.
+##
+## The preview values are pulled along deliberately. They are what the inspector shows and what
+## the Apply button would act on next, so leaving them pointing at the undone size would invite
+## re-applying it by accident.
+func _apply_dimension_snapshot(
+	restored_chunks: Vector2i,
+	restored_chunk_size: int,
+	restored_cell_size: float,
+	heights: PackedFloat32Array,
+	activity: PackedByteArray,
+	paint: PackedByteArray
+) -> void:
+	world_chunks = restored_chunks
+	chunk_size = restored_chunk_size
+	cell_size = restored_cell_size
+	preview_world_chunks = restored_chunks
+	preview_chunk_size = restored_chunk_size
+	preview_cell_size = restored_cell_size
+
+	_recalculate_matrix_bounds()
+	global_height_data = heights.duplicate()
+	chunk_activity_data = activity.duplicate()
+	global_paint_data = paint.duplicate()
+
+	_apply_derived_cull_radius()
+	rebuild_chunks_structure()
+	notify_property_list_changed()
 
 
 ## Lossless Grid Migration Pipeline: Safely transforms and scales the continuous 
