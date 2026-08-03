@@ -948,6 +948,11 @@ const PAINT_OVERLAY_SHADER: String = \
 ##
 ## These MIRROR the defaults written into terrain_paint.gdshaderinc, which exist so the shader
 ## still looks sensible when someone includes it by hand. Change one, change the other.
+##
+## The layers' DETAIL TEXTURE settings are deliberately absent. Mirroring exists only because
+## something here has to read a value back - the brush ring tints itself with the layer colour -
+## and nothing on this side ever asks about the textures. They keep the shader's own defaults,
+## which start them switched off.
 const PAINT_LAYER_DEFAULT_COLORS: PackedColorArray = [
 	Color(0.76, 0.70, 0.50),
 	Color(0.45, 0.45, 0.47),

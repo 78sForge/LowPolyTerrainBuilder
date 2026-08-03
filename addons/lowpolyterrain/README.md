@@ -31,6 +31,22 @@ terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that repro
 
 Everything below is detail you can come back to. The defaults are usable as they are.
 
+## ✅ **Update information for v1.1.2 (The Layer Detail Update):**
+Version 1.1.2 lets a paint layer carry a texture and a normal map instead of only a flat colour,
+so ground cover like gravel, leaves or moss reads as material rather than as a coloured patch.
+Key additions:
+* Layer Detail Texture: Every layer takes an optional texture, tiled across the world.
+* Layer Detail Normals: An optional normal map per layer fakes the bumps a flat surface lacks.
+* Decal Textures Work: A texture's alpha places the motif, so decal assets serve as paint layers.
+* Colour Shows Through: The layer colour is the ground the detail sits on, not a thing it hides.
+* No UVs Needed: Detail is projected from above and lines up across chunk borders on its own.
+* Tangent Free: Normal maps work without per-vertex tangents, which a decimated mesh lacks.
+* Per-Layer Tile Size: Each layer sets how many metres one repeat of its texture covers.
+* Off By Default: Both detail strengths start at zero, and existing terrains render unchanged.
+* Free When Unused: The skip is a uniform branch, so a layer without detail costs nothing extra.
+* Correct At The Edges: Explicit gradients keep mipmaps right where a painted area stops.
+* Unbroken Inline Route: The pre-detail blend functions still compile in your own shader.
+
 ## ✅ **Update information for v1.1.1 (The Painter, Ramp & Brush Feedback Update):**
 Version 1.1.1 adds a brush for blending extra materials into the terrain, a tool for building
 slopes, and makes the brush show what it is about to do before it does it.
@@ -135,6 +151,7 @@ on my mobile device, achieving up to 1000 FPS within the editor.
 * **Organic Delaunay Topology:** Creates organic triangle networks for typical landscape looks.
 * **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower, Flatten, and Smooth tools.
 * **Four-Layer Vertex Painter:** Blends extra materials over any base shader, brush-controlled.
+* **Textured Paint Layers:** Optional detail texture and normal map per layer, world-projected.
 * **Two-Click Ramp Builder:** Connects two picked points with a graded slope, previewed live.
 * **Procedural Noise Injector:** Generates seamless Perlin or Cellular landscapes instantly.
 * **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu with clear SVG icons.
@@ -461,6 +478,62 @@ alpha afterwards does not repaint what is already down.
 Four layers is the ceiling, because the weights live in the four channels of the mesh's vertex
 colour. Between them and the base you have five distinct looks and every mixture of them.
 
+### Giving a layer a texture
+
+A flat colour is enough for grass or snow. Gravel and leaf litter are not colours, they are
+patterns, so each layer additionally takes a **detail texture** and a **detail normal map**.
+
+Both are **off until you raise their strength**, which is deliberate - assigning an image alone
+changes nothing, and a layer you never touch keeps rendering exactly as it did before this
+existed. Per layer you get:
+
+| Setting | What it does |
+| --- | --- |
+| **Detail** | The texture. Its **alpha** says where the detail is, its colour what it looks like there. |
+| **Detail Amount** | How strongly it shows. `0` is off, and off costs nothing at all. |
+| **Detail Normal** | A normal map. Fakes bumps by tilting how light hits the surface. |
+| **Detail Normal Strength** | How deep those bumps read. `0` is off. |
+| **Detail Size** | Metres covered by one repeat of the texture. Smaller means finer grain. |
+
+The texture is **composited onto** the layer colour through its alpha, not multiplied with it.
+That matters, and it is what lets both kinds of image work:
+
+**A decal-style texture** - scattered stones or leaves on empty space, the same asset you would
+hand a `Decal` node - drops its motif onto coloured ground, and the layer colour is what shows
+between the pieces. Set the colour to your soil or grass and the stones sit on it.
+
+**A fully opaque tiling photo** has alpha `1` everywhere, so it covers the ground completely and
+`Detail Amount` fades the whole image in over the colour instead. At `1` the texture is all you
+see; below that the layer colour mixes back through, which is how you tint one image warmer on
+one layer than on another.
+
+> If a texture with transparency comes out grey and muddy across the whole layer, its alpha is
+> being ignored somewhere. Godot's importer bleeds the nearest opaque pixel into transparent
+> areas ("Fix Alpha Border"), so the empty space is not empty in the RGB channels - it is a
+> smear of the motif. Reading it without the alpha stains everything.
+
+The **normal map is masked by the colour texture's alpha**, not by its own. A normal map
+imported as one is compressed down to two channels and keeps no alpha, and its empty space is
+bled over in the same way - unmasked, it would tilt the light across the entire layer instead of
+only where the stones are. With no colour texture assigned the mask is simply `1`, so a normal
+map on its own still works.
+
+Detail is projected **from above** onto the world, not mapped through UV coordinates. So it
+needs no unwrapping, it tiles seamlessly across chunk borders, and it stays put when the camera
+moves. The cost is that the projection stretches on steep faces - keep detail for ground you
+walk on and let your base shader handle cliffs, which is what the bundled cliff shaders already
+do.
+
+Normal maps here need **no per-vertex tangents**. The usual way to apply one requires knowing
+which direction is "right" across the surface, which a decimated terrain with no UVs cannot
+answer; this reads the slope out of the map and tilts the surface normal with it directly.
+
+> A word on where this replaces decals. Painted detail covers area for free - a hundred square
+> metres of gravel costs what one costs - and it follows the ground exactly, so there is no
+> projection box to stretch and nothing to z-fight. What it cannot do is place a *specific*
+> motif at a *specific* spot, and a tiled texture repeats visibly over large stretches. Paint
+> the carpet, keep decals for the single deliberate mark.
+
 ### Painting only on slopes, or only on flats
 
 Each layer can restrict itself to a range of surface angles. `0` is level ground, `90` a
@@ -494,6 +567,12 @@ ground still decimates, and only the transitions between layers keep their verti
 a painted area costs about what sculpted terrain of the same size costs, and unpainted ground
 costs nothing extra.
 
+Detail textures cost per **pixel on screen**, not per square metre of terrain, which is why
+covering more ground with them is free. A layer whose detail strengths are `0` is skipped on a
+uniform branch - the same decision for every pixel, so the hardware takes it once rather than
+diverging - and reads no texture at all. The textures themselves are ordinary shared resources:
+using one on three layers keeps one copy in memory.
+
 ### Using your own shader instead of the overlay
 
 By default the layers are drawn as a **material overlay** - a second pass over the chunks, which
@@ -504,17 +583,42 @@ For a single pass, and for blending the material *properties* rather than the li
 include the blend functions in your own terrain shader and clear the `Paint Material` slot:
 
 ```glsl
+shader_type spatial;
+render_mode world_vertex_coords;
+
 #include "res://addons/lowpolyterrain/shader/terrain_paint.gdshaderinc"
+
+// The detail textures are projected from above, so the blend needs the world position.
+varying vec3 world_position;
+
+void vertex() {
+	world_position = VERTEX;
+}
 
 void fragment() {
 	// ... your own shading ...
-	ALBEDO    = lpt_paint_albedo(ALBEDO, COLOR);
+	ALBEDO    = lpt_paint_albedo_at(ALBEDO, COLOR, world_position);
 	ROUGHNESS = lpt_paint_roughness(ROUGHNESS, COLOR);
+
+	// Only if you use the detail normal maps. NORMAL is view space in a fragment shader and
+	// the projection is defined in world space, hence the two hops.
+	if (lpt_paint_uses_normal_detail()) {
+		vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+		n = lpt_paint_normal_at(n, COLOR, world_position);
+		NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+	}
 }
 ```
 
+`lpt_paint_albedo()` and `lpt_paint_layer_color()` are still there with their original
+signatures, so a shader written before the detail textures keeps compiling. They ignore the
+detail slots - the `_at` variants are the ones that read them.
+
 The two routes differ only in a transition: the overlay mixes two lit results, the inline route
-lights one set of blended properties. At full weight they are identical.
+lights one set of blended properties. At full weight they are identical. A layer with a detail
+**normal map** widens that gap, because the difference between the routes is a lighting one and
+a normal map is nothing but lighting - so that is the case where inlining earns its keep, on top
+of saving the second pass over the whole terrain.
 
 > A shader that reads `COLOR` for its own purposes cannot be used with painting: that channel
 > now means "how much of each layer is on this vertex". Unpainted terrain leaves it at zero.
@@ -556,7 +660,7 @@ lights one set of blended properties. At full weight they are identical.
 | **Paint Layer** | Brush Settings | `int` | Which of the four layers the Paint brush deposits. Also selectable from the viewport toolbar. |
 | **Paint Layer N Slope** | Brush Settings | `Vector2` | Surface angles in degrees that layer may be painted on. Only the selected layer's range is shown. |
 | **Paint Slope Feather** | Brush Settings | `float` | Degrees over which a layer fades out past its slope range. Zero gives a hard contour. |
-| **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours and roughness values. Created on first use; drawn as an overlay over `Custom Material`. |
+| **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours, roughness values and optional detail textures. Created on first use; drawn as an overlay over `Custom Material`. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 
 ---

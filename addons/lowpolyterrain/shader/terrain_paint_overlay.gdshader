@@ -22,6 +22,11 @@ render_mode world_vertex_coords, blend_mix, cull_back, diffuse_lambert, specular
 // lit result instead of the material properties. At full weight the two are identical; in a
 // transition they differ slightly, because two lit results are mixed rather than one set of
 // properties being lit once. On stylised terrain that difference is not visible.
+//
+// A layer with a DETAIL NORMAL MAP widens that gap, because the difference between the two
+// routes is a lighting one and a normal map is nothing but lighting. The transition is still a
+// band a few vertices wide rather than a seam, but it is the case where inlining earns its
+// keep - on top of saving the second pass over the whole terrain.
 
 #include "res://addons/lowpolyterrain/shader/terrain_paint.gdshaderinc"
 
@@ -50,11 +55,27 @@ void fragment() {
 		discard;
 	}
 
+	// Where this pixel sits in the world, which is what the detail textures are projected onto.
+	// Rebuilt from VERTEX rather than carried in a varying: VERTEX is view space HERE no matter
+	// what world_vertex_coords did to it in vertex(), and reversing that is exact. A varying
+	// would additionally have to be written before the depth lead below displaces it.
+	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+
 	// Flat per-face normal, matching what the terrain shaders do. Without it the overlay would
 	// be lit smoothly while the surface under it is faceted, and the seam would show.
-	NORMAL = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
+	vec3 flat_normal = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
+	NORMAL = flat_normal;
 
-	ALBEDO = lpt_paint_layer_color(COLOR);
+	// The detail normal maps are defined against a projection from above, so the bending happens
+	// in world space and comes back. Skipped entirely while no layer carries one - the test is a
+	// uniform, so this costs nothing rather than almost nothing.
+	if (lpt_paint_uses_normal_detail()) {
+		vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(flat_normal, 0.0)).xyz);
+		world_normal = lpt_paint_normal_at(world_normal, COLOR, world_pos);
+		NORMAL = normalize((VIEW_MATRIX * vec4(world_normal, 0.0)).xyz);
+	}
+
+	ALBEDO = lpt_paint_layer_color_at(COLOR, world_pos);
 	ROUGHNESS = lpt_paint_layer_roughness(COLOR);
 	ALPHA = total;
 }
