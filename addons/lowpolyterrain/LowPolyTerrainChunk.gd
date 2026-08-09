@@ -12,6 +12,20 @@ class_name LowPolyTerrainChunk
 var jitter_strength: float = 0.0
 var jitter_slope_threshold: float = 0.5
 
+## Whether this chunk's mesh carries averaged vertex normals instead of one per face. Mirrors
+## the manager's shading_mode; see LowPolyTerrainMeshBuilder.build_chunk_mesh().
+var smooth_shading: bool = false
+
+## Heights of this chunk plus one ring of its neighbours', used to compute normals that agree
+## across a chunk border. Empty while shading is FLAT.
+##
+## Held ONLY between initialize() and generate_mesh(), which releases it again as soon as the
+## mesh exists - it is dead weight from that point on. Kept for the chunk's lifetime it would
+## be the very thing the note on the height window below rejects, and worse: at
+## (chunk_size + 3) squared floats it measures 169% of the manager's entire height matrix at
+## chunk_size 10, against the height window's 111%.
+var _padded_heights: PackedFloat32Array = PackedFloat32Array()
+
 # NOTE: The height window is NOT stored on the chunk. It is only needed while the mesh is
 # being built, and keeping a copy per chunk duplicated the manager's entire height matrix
 # (measured at 111% of it, since neighbouring chunks each store the shared border row).
@@ -32,7 +46,7 @@ func _ready() -> void:
 
 
 ## Called by the manager to safely pass initialized tracking states, configurations, and raw height arrays.
-func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, manager_data: PackedFloat32Array, m_jitter: float, m_threshold: float, m_material: Material, paint_window: PackedByteArray = PackedByteArray(), paint_steps: int = 8, m_paint_overlay: Material = null) -> void:
+func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, manager_data: PackedFloat32Array, m_jitter: float, m_threshold: float, m_material: Material, paint_window: PackedByteArray = PackedByteArray(), paint_steps: int = 8, m_paint_overlay: Material = null, m_smooth_shading: bool = false, m_padded_heights: PackedFloat32Array = PackedFloat32Array()) -> void:
 	chunk_coord = coord
 	chunk_size = c_size
 	cell_size = cell_s
@@ -41,6 +55,8 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 	jitter_slope_threshold = m_threshold
 	custom_material = m_material
 	paint_overlay = m_paint_overlay
+	smooth_shading = m_smooth_shading
+	_padded_heights = m_padded_heights
 	
 	# [FIX] Ensure the visibility state from the manager is respected on scene load
 	if not visible:
@@ -49,6 +65,10 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 			visible = true
 		else:
 			mesh = null
+			# generate_mesh() is the one place that releases the padded window, and this path
+			# never reaches it. Released here instead, so a chunk hidden at runtime does not
+			# carry a window for a mesh it will never build.
+			_padded_heights = PackedFloat32Array()
 			return
 
 	var vert_count: int = chunk_size + 1
@@ -73,11 +93,25 @@ func initialize(coord: Vector2i, c_size: int, cell_s: float, step_h: float, mana
 ## applies slope-damped random displacements, and builds the visual trimesh via Delaunay.
 ## The height window is a parameter rather than a field: it is dead weight once the mesh
 ## exists, and storing it per chunk duplicated the manager's whole height matrix.
+##
+## CONSUMES the padded window rather than merely reading it, which is why it is taken as a field
+## and not as a parameter like the height window: the manager hands it over in initialize(), and
+## this is the only place that knows when it stops being needed. Calling this a second time by
+## hand therefore builds a mesh WITHOUT height-field normals, falling back to the chunk-local
+## averages that leave a seam at the border. Re-run initialize(), which is the only caller and
+## always supplies a fresh window.
 func generate_mesh(
 	heights: PackedFloat32Array,
 	paint_window: PackedByteArray = PackedByteArray(),
 	paint_steps: int = 8
 ) -> void:
+	# Taken and released in one step, before the early return below can skip past it. The local
+	# keeps the buffer alive for the builder call: a PackedFloat32Array is reference counted, so
+	# clearing the field only drops the CHUNK's claim on it, and the memory goes back when this
+	# function returns rather than being held until the next rebuild.
+	var padded: PackedFloat32Array = _padded_heights
+	_padded_heights = PackedFloat32Array()
+
 	if heights.is_empty() or not visible:
 		mesh = null
 		return
@@ -87,7 +121,7 @@ func generate_mesh(
 	mesh = LowPolyTerrainMeshBuilder.build_chunk_mesh(
 		chunk_coord, chunk_size, cell_size, heights,
 		jitter_strength, jitter_slope_threshold,
-		paint_window, paint_steps
+		paint_window, paint_steps, smooth_shading, padded
 	)
 	
 	# Attach your specific rendering logic, material properties, or visual effects

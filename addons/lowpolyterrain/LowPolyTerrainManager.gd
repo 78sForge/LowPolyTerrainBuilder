@@ -358,7 +358,29 @@ var smooth_terrain_button: Callable = func() -> void: _smooth_entire_terrain()
 	set(v): jitter_slope_threshold = v; _queue_setup()
 
 
-## Automatically falls back to a pre-configured terrain_and_cliff ShaderMaterial if left empty.
+## Selects what normals the chunk meshes are built with. Purely a look; the geometry is the same.
+enum ShadingMode {
+	FLAT = 0,  ## One normal per triangle. Every face reads as its own crisp plate.
+	SMOOTH = 1 ## Normals averaged across the faces meeting at a point. Rounded, organic light.
+}
+
+## Chooses between the faceted low-poly look and a soft, rounded one. Both build the SAME
+## geometry - same vertices, same triangles, same silhouette - and differ only in what normal
+## each corner claims, so this costs no extra polygons. SMOOTH is in fact the lighter of the
+## two: matching normals let far more vertices merge into the index buffer.
+##
+## Requires a shader that USES the mesh normal, which the bundled ones do - nothing else to set
+## up. A hand-written shader that overwrites NORMAL with one recomputed from screen derivatives
+## discards what this writes, and will look faceted whatever it is set to.
+@export var shading_mode: ShadingMode = ShadingMode.FLAT:
+	set(v): shading_mode = v; _queue_setup()
+
+
+## The material every chunk is drawn with. Left empty - which is the default - the chunks carry no
+## material_override at all and Godot draws them with its own default one. There is no automatic
+## fallback to any bundled shader; the ones in shader/ are there to be assigned deliberately.
+##
+## Godot's default material reads the mesh normal, so Shading Mode works with an empty slot too.
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial,StandardMaterial3D") var custom_material: Material = null:
 	set(v):
 		custom_material = v
@@ -438,8 +460,9 @@ var paint_layer_4_slope: Vector2 = Vector2(0.0, 90.0)
 ## layer colours and roughness values belong to this terrain alone. Assign your own to share one
 ## look across several terrains. Only applied while something is actually painted.
 ##
-## For a single draw call, and for blending the material PROPERTIES rather than the lit results,
-## include terrain_paint.gdshaderinc in your own shader instead and clear this slot.
+## Only used while Paint Routing is OVERLAY. On INLINE the layers live on Custom Material instead
+## and this slot is ignored entirely - clearing it by hand does not work, because the Paint tool
+## recreates it on selection.
 @export_custom(PROPERTY_HINT_RESOURCE_TYPE, "ShaderMaterial") var paint_material: Material = null:
 	set(v):
 		paint_material = v
@@ -962,12 +985,67 @@ const PAINT_LAYER_DEFAULT_COLORS: PackedColorArray = [
 const PAINT_LAYER_DEFAULT_ROUGHNESS: PackedFloat32Array = [0.85, 0.70, 0.25, 0.90]
 
 
-## Returns the paint material, creating the bundled one if this terrain has none yet.
+## Where the painted layers are drawn.
+enum PaintRouting {
+	OVERLAY = 0, ## A second pass over the chunks. Works with any base material, changes nothing.
+	INLINE = 1   ## Custom Material draws them itself, having included terrain_paint.gdshaderinc.
+}
+
+## Selects who draws the paint layers.
+##
+## OVERLAY is the route that asks nothing of your material: the layers are drawn as a separate
+## pass on top of it. INLINE is for a Custom Material that includes 'terrain_paint.gdshaderinc'
+## and blends the layers itself - it saves that second pass over the whole terrain, and it is the
+## ONLY correct choice for a shader that modifies NORMAL, because an overlay cannot know what the
+## shader below it did to the lighting and would draw its patch differently from the ground
+## around it.
+##
+## On INLINE the layer settings live on Custom Material, since that is the material carrying the
+## uniforms, and no overlay is created or attached. None of the bundled shaders need it - they
+## leave NORMAL to the mesh - so OVERLAY stays the default and this only matters once you write
+## your own.
+@export var paint_routing: PaintRouting = PaintRouting.OVERLAY:
+	set(v):
+		paint_routing = v
+		_queue_setup()
+		signal_brush_settings_changed.emit()
+
+
+## The material that CARRIES the four layers' uniforms, which is not always the one that draws
+## them. On OVERLAY that is the generated overlay material; on INLINE it is Custom Material,
+## because the layer uniforms come from the include compiled into its shader.
+##
+## Null when INLINE is selected but Custom Material is not a ShaderMaterial, in which case there
+## is nowhere for the settings to live and the brush falls back to the shipped defaults.
+func get_paint_settings_material() -> ShaderMaterial:
+	if paint_routing == PaintRouting.INLINE:
+		return custom_material as ShaderMaterial
+	return paint_material as ShaderMaterial
+
+
+## Returns the material holding the paint layer settings, creating the bundled overlay if this
+## terrain has none yet.
 ##
 ## Called when the Paint tool is SELECTED rather than when the first stroke lands: the layer
 ## colours are what you want to set up before painting, and an empty slot in the inspector gives
 ## you nothing to set up. Stored on this terrain, so its four layers are its own.
 func ensure_paint_material() -> Material:
+	# On INLINE there is nothing to create. The layers belong to Custom Material's own shader, and
+	# generating an overlay here would hang a SECOND set of layers on a terrain that already draws
+	# them - the paint would be applied twice, the second time with the overlay's own lighting.
+	if paint_routing == PaintRouting.INLINE:
+		var inline_material: ShaderMaterial = custom_material as ShaderMaterial
+		if inline_material == null:
+			push_warning(
+				("LowPolyTerrain '%s': Paint Routing is INLINE, but Custom Material is not a "
+				+ "ShaderMaterial. The layers have nowhere to be configured. Assign a shader "
+				+ "that includes terrain_paint.gdshaderinc, or switch Paint Routing to OVERLAY.")
+				% name
+			)
+			return null
+		_write_paint_layer_defaults(inline_material)
+		return inline_material
+
 	if paint_material != null:
 		return paint_material
 
@@ -979,29 +1057,40 @@ func ensure_paint_material() -> Material:
 
 	var created := ShaderMaterial.new()
 	created.shader = shader
-
-	# Written out rather than left to the shader's own defaults, because Godot exposes no way to
-	# READ those back: get_shader_parameter() reports null for anything not explicitly set, and
-	# the RenderingServer route needs a compiled shader. The brush ring has to know the layer
-	# colour to tint itself with, so the values have to exist as parameters.
-	for layer in range(PAINT_LAYER_COUNT):
-		created.set_shader_parameter(
-			"paint_layer_%d_color" % (layer + 1), PAINT_LAYER_DEFAULT_COLORS[layer]
-		)
-		created.set_shader_parameter(
-			"paint_layer_%d_roughness" % (layer + 1), PAINT_LAYER_DEFAULT_ROUGHNESS[layer]
-		)
+	_write_paint_layer_defaults(created)
 
 	paint_material = created
 	return paint_material
 
 
-## The overlay to actually draw with, or null while there is nothing painted.
+## Writes the shipped layer colours and roughness values onto a material, skipping any that are
+## already set so a configured terrain is never reset.
+##
+## Written out rather than left to the shader's own defaults, because Godot exposes no way to
+## READ those back: get_shader_parameter() reports null for anything not explicitly set, and
+## the RenderingServer route needs a compiled shader. The brush ring has to know the layer
+## colour to tint itself with, so the values have to exist as parameters.
+func _write_paint_layer_defaults(target: ShaderMaterial) -> void:
+	for layer in range(PAINT_LAYER_COUNT):
+		var color_name: String = "paint_layer_%d_color" % (layer + 1)
+		if target.get_shader_parameter(color_name) == null:
+			target.set_shader_parameter(color_name, PAINT_LAYER_DEFAULT_COLORS[layer])
+
+		var roughness_name: String = "paint_layer_%d_roughness" % (layer + 1)
+		if target.get_shader_parameter(roughness_name) == null:
+			target.set_shader_parameter(roughness_name, PAINT_LAYER_DEFAULT_ROUGHNESS[layer])
+
+
+## The overlay to actually draw with, or null while there is nothing to draw.
 ##
 ## Deliberately separate from ensure_paint_material(): the material may exist so its layers can
 ## be configured, while the overlay is still not worth hanging on the chunks. An overlay that
 ## discards every fragment costs a second pass over the whole terrain for no result.
 func get_active_paint_material() -> Material:
+	# INLINE means Custom Material already draws the layers. Attaching an overlay as well would
+	# draw them a second time, over the top of themselves.
+	if paint_routing == PaintRouting.INLINE:
+		return null
 	return paint_material if has_paint_data() else null
 
 
@@ -1009,7 +1098,7 @@ func get_active_paint_material() -> Material:
 ## not carry the uniform, which is the case for a hand-written shader that only implements some
 ## of them.
 func get_paint_layer_color(layer: int) -> Color:
-	var shader_material: ShaderMaterial = paint_material as ShaderMaterial
+	var shader_material: ShaderMaterial = get_paint_settings_material()
 	if shader_material == null:
 		return Color.WHITE
 
@@ -2393,7 +2482,9 @@ func _update_single_chunk(coord: Vector2i) -> void:
 		chunk_local_heights, jitter_strength,
 		jitter_slope_threshold, custom_material,
 		extract_chunk_paint(coord), PAINT_STEPS,
-		get_active_paint_material()
+		get_active_paint_material(),
+		shading_mode == ShadingMode.SMOOTH,
+		extract_chunk_heights_padded(coord)
 	)
 
 
@@ -2621,6 +2712,39 @@ func extract_chunk_heights(coord: Vector2i) -> PackedFloat32Array:
 			chunk_local_heights[local_offset + i] = global_height_data[global_row_start + i]
 
 	return chunk_local_heights
+
+
+## The height window of one chunk plus ONE RING of its neighbours' heights around it.
+##
+## Only smooth shading needs this, and only to compute normals with. A normal taken from the
+## height field is continuous across a chunk border because the height field is - but computing
+## one at the border needs a sample from the far side of it, which the ordinary window stops
+## exactly one row short of. Returns an EMPTY array while shading is FLAT, which the builder
+## reads as "compute them yourself".
+##
+## Beyond the edge of the world the outermost row is repeated rather than treated as zero, so the
+## terrain's rim keeps the slope it visibly has instead of folding towards a cliff that is not
+## there.
+func extract_chunk_heights_padded(coord: Vector2i) -> PackedFloat32Array:
+	if shading_mode != ShadingMode.SMOOTH:
+		return PackedFloat32Array()
+	if global_height_data.is_empty() or _total_vertices_x <= 0 or _total_vertices_z <= 0:
+		return PackedFloat32Array()
+
+	var stride: int = LowPolyTerrainMeshBuilder.padded_stride_for(chunk_size)
+	var padded := PackedFloat32Array()
+	padded.resize(stride * stride)
+
+	for pz in range(stride):
+		var global_z: int = clampi((coord.y * chunk_size) + pz - 1, 0, _total_vertices_z - 1)
+		var global_row_start: int = global_z * _total_vertices_x
+		var local_offset: int = pz * stride
+
+		for px in range(stride):
+			var global_x: int = clampi((coord.x * chunk_size) + px - 1, 0, _total_vertices_x - 1)
+			padded[local_offset + px] = global_height_data[global_row_start + global_x]
+
+	return padded
 
 
 ## The paint window of one chunk, laid out like extract_chunk_heights() but four bytes wide.

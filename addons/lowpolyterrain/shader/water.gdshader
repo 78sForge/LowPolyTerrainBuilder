@@ -26,6 +26,26 @@ uniform float wave_scale : hint_range(0.05, 2.0) = 0.2;
 uniform float wave_height : hint_range(0.0, 5.0) = 0.1;
 uniform float low_poly_stepping : hint_range(1.0, 12.0) = 12.0;
 
+group_uniforms Surface_Shading;
+
+// FLAT (off, the default) or SMOOTH, and unlike the terrain shaders this has to be a switch
+// rather than something read off the mesh.
+//
+// The terrain shaders can simply use the normal their mesh carries, because terrain geometry is
+// built on the CPU and its normals describe the surface being drawn. Water is displaced here, in
+// vertex(), so the mesh's normals still describe the flat plane it was before the waves - they
+// know nothing about the surface you actually see. There is nothing to inherit, and the choice
+// has to be made explicitly.
+//
+// Off, the surface is quantised into blocks by low_poly_stepping and shaded from screen
+// derivatives, which is the original faceted look, unchanged. On, the waves run continuously and
+// the normal is derived from the wave field itself.
+uniform bool smooth_surface = false;
+
+// Distance in world units the wave slope is measured over, when smooth_surface is on. Small
+// values follow fine ripples and can read as noise; large ones round the swell off.
+uniform float wave_normal_distance : hint_range(0.01, 4.0) = 0.25;
+
 group_uniforms Depth_Settings;
 // CHANGED HERE: Decreased minimum distance to allow extremely narrow foam lines
 uniform float foam_distance : hint_range(0.001, 1.0, 0.001) = 0.05;
@@ -69,9 +89,18 @@ float value_noise(vec2 p) {
 	);
 }
 
-// Generates stepped block waves for the low-poly look
+// Generates the wave height at one world position: stepped into blocks for the low-poly look,
+// or continuous when smooth_surface asks for it.
 float low_poly_wave(vec2 uv, float time) {
-	vec2 grid_uv = floor(uv * low_poly_stepping) / low_poly_stepping;
+	// Quantising the INPUT is what makes the surface blocky - every position inside a block
+	// resolves to the same height. It is also why the smooth path has to skip it rather than
+	// smooth afterwards: with the steps in place, two positions a few centimetres apart return
+	// the identical height, and a slope measured between them would be flat everywhere except
+	// at the block seams, where it would spike.
+	vec2 grid_uv = uv;
+	if (!smooth_surface) {
+		grid_uv = floor(uv * low_poly_stepping) / low_poly_stepping;
+	}
 
 	// The phase is wrapped into a full turn, which is exact for sin/cos and stops the argument
 	// from growing without bound over a long session.
@@ -91,17 +120,45 @@ float low_poly_wave(vec2 uv, float time) {
 	return (w1 + w2 * detail_amount) * wave_height;
 }
 
+// The horizontal world position this vertex samples its wave at. Carried into the fragment stage
+// because the smooth path has to evaluate the wave field there too, and it must do so in the same
+// coordinates - the displacement is vertical only, so these two components are untouched by it.
+varying vec2 wave_world_xz;
+
 void vertex() {
 	vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wave_world_xz = world_pos.xz;
 	float height = low_poly_wave(world_pos.xz, TIME);
 	VERTEX.y += height;
 }
 
 void fragment() {
-	// 1. Force flat face normals
-	vec3 face_normal = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
-	NORMAL = face_normal;
-	
+	// 1. The surface normal, either way round.
+	if (smooth_surface) {
+		// Taken from the wave field rather than from the geometry, and that is the point: the
+		// mesh is a flat plane that vertex() pushed upwards, so its own normals describe water
+		// that is not there. Sampling the same function the displacement used gives the slope of
+		// the surface actually on screen, at full resolution rather than at mesh resolution.
+		//
+		// Costs two extra evaluations of the wave per pixel, which is not nothing - the wave
+		// carries a value noise with four hashed sines behind it. On a water plane covering much
+		// of the screen that is the most expensive thing this shader does.
+		float step_distance = max(wave_normal_distance, 0.001);
+		float here = low_poly_wave(wave_world_xz, TIME);
+		float along_x = low_poly_wave(wave_world_xz + vec2(step_distance, 0.0), TIME);
+		float along_z = low_poly_wave(wave_world_xz + vec2(0.0, step_distance), TIME);
+
+		vec3 tangent_x = vec3(step_distance, along_x - here, 0.0);
+		vec3 tangent_z = vec3(0.0, along_z - here, step_distance);
+		vec3 world_normal = normalize(cross(tangent_z, tangent_x));
+
+		// The wave field is defined in world space; NORMAL is expected in view space.
+		NORMAL = normalize((VIEW_MATRIX * vec4(world_normal, 0.0)).xyz);
+	} else {
+		// Force flat face normals
+		NORMAL = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
+	}
+
 	// 2. Depth calculation
 	//
 	// The normalised device depth range differs per backend: Vulkan (Forward+ and Mobile)

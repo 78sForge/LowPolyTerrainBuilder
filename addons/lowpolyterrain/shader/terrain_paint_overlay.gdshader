@@ -61,16 +61,23 @@ void fragment() {
 	// would additionally have to be written before the depth lead below displaces it.
 	vec3 world_pos = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
-	// Flat per-face normal, matching what the terrain shaders do. Without it the overlay would
-	// be lit smoothly while the surface under it is faceted, and the seam would show.
-	vec3 flat_normal = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
-	NORMAL = flat_normal;
+	// THE MESH'S OWN NORMAL, so this pass shades the way the mesh was built and follows the
+	// manager's Shading Mode without being told about it.
+	//
+	// This used to recompute a flat normal from screen derivatives, to match bundled terrain
+	// shaders that do the same. Under FLAT shading the two are identical anyway - every corner
+	// of a face carries that face's normal, so interpolating them yields the same constant the
+	// derivatives do - and under SMOOTH the derivative version was simply wrong: it forced
+	// facets back on for the painted patch alone, over ground that had rounded off around it,
+	// and the paint read as a seam.
+	vec3 base_normal = normalize(NORMAL);
+	NORMAL = base_normal;
 
 	// The detail normal maps are defined against a projection from above, so the bending happens
 	// in world space and comes back. Skipped entirely while no layer carries one - the test is a
 	// uniform, so this costs nothing rather than almost nothing.
 	if (lpt_paint_uses_normal_detail()) {
-		vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(flat_normal, 0.0)).xyz);
+		vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(base_normal, 0.0)).xyz);
 		world_normal = lpt_paint_normal_at(world_normal, COLOR, world_pos);
 		NORMAL = normalize((VIEW_MATRIX * vec4(world_normal, 0.0)).xyz);
 	}

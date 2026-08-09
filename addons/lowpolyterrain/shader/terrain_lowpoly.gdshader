@@ -19,10 +19,19 @@ void vertex() {
 }
 
 void fragment() {
-	// 1. Enforce crisp low-poly shading by calculating flat face normals via partial derivatives
-	vec3 flat_normal = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
-	NORMAL = flat_normal;
-	
+	// 1. NORMAL IS DELIBERATELY LEFT ALONE, so the mesh decides whether this looks faceted.
+	//
+	// This used to recompute a flat face normal from screen derivatives, which produced crisp
+	// facets on any mesh whatsoever. That was the right thing while the builder only ever emitted
+	// one normal per face - and the wrong thing the moment it could also emit averaged ones,
+	// because it discarded them: setting the manager's Shading Mode to SMOOTH changed the mesh
+	// and changed nothing on screen.
+	//
+	// Reading the mesh's own normal instead costs nothing and makes this shader follow that
+	// setting by itself, with no reference to a manager and no uniform to keep in sync. On a FLAT
+	// mesh the result is identical to the old code: every corner of a face carries that face's
+	// normal, so interpolating them returns the same constant the derivatives computed.
+
 	// 2. FIX: Utilize the stable world_position coordinates instead of view-space VERTEX
 	// This anchors the noise pattern firmly to the terrain geometry when the camera rotates
 	vec2 noise_uv = world_position.xz * noise_scale;

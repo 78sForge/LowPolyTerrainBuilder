@@ -31,6 +31,26 @@ terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that repro
 
 Everything below is detail you can come back to. The defaults are usable as they are.
 
+## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
+Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
+longer has to read as angular, and lets your own shader take over drawing the painted layers.
+Key additions:
+* Shading Mode: A FLAT / SMOOTH switch in the inspector picks faceted or rounded terrain.
+* Same Polygons: Smooth changes only what normal each corner claims, never the geometry.
+* Cheaper When Smooth: Matching normals let vertices merge - measured at 17.5% of the flat count.
+* No Retained Windows: The neighbour heights smooth normals need are freed once the mesh exists.
+* Collision Untouched: The collision geometry is bit-identical in both modes.
+* Seamless Chunk Borders: Smooth normals come from the height field, so neighbours agree exactly.
+* Shaders Follow The Mesh: All four terrain shaders read the mesh normal instead of forcing flat.
+* Works Unassigned: With no Custom Material set, Godot's own default already obeys the mode.
+* Cliff Shaders Too: 'terrain_and_cliff' and its fast variant follow the mode as well.
+* Consistent Cliff Blend: The slope test now reads the same normal the surface is lit with.
+* Follows By Itself: It takes its cue from the mesh, so it needs no reference to any manager.
+* Smooth Water: The water shader gains a switch between blocky waves and a continuous surface.
+* Paint Routing: A switch picks whether the overlay or your own shader draws the painted layers.
+* No Double Paint: INLINE stops the Paint tool from recreating an overlay your shader already draws.
+* Overlay Follows The Mesh: The paint pass now shades by the mesh normal instead of forcing flat.
+
 ## ✅ **Update information for v1.1.2 (The Layer Detail Update):**
 Version 1.1.2 lets a paint layer carry a texture and a normal map instead of only a flat colour,
 so ground cover like gravel, leaves or moss reads as material rather than as a coloured patch.
@@ -152,6 +172,7 @@ on my mobile device, achieving up to 1000 FPS within the editor.
 * **Integrated Sculpting Brushes:** Includes intuitive Raise, Lower, Flatten, and Smooth tools.
 * **Four-Layer Vertex Painter:** Blends extra materials over any base shader, brush-controlled.
 * **Textured Paint Layers:** Optional detail texture and normal map per layer, world-projected.
+* **Flat or Smooth Shading:** One switch picks faceted or rounded terrain, at no polygon cost.
 * **Two-Click Ramp Builder:** Connects two picked points with a graded slope, previewed live.
 * **Procedural Noise Injector:** Generates seamless Perlin or Cellular landscapes instantly.
 * **Ergonomic Viewport Toolbar:** Adds a horizontal radio-button menu with clear SVG icons.
@@ -580,7 +601,8 @@ leaves your material untouched. That matters: a material is usually a shared res
 writing into it would change every other object using it.
 
 For a single pass, and for blending the material *properties* rather than the lit results,
-include the blend functions in your own terrain shader and clear the `Paint Material` slot:
+include the blend functions in your own terrain shader and set **`Paint Routing` to `INLINE`**.
+The layer settings then live on `Custom Material`, and no overlay is created:
 
 ```glsl
 shader_type spatial;
@@ -620,8 +642,153 @@ lights one set of blended properties. At full weight they are identical. A layer
 a normal map is nothing but lighting - so that is the case where inlining earns its keep, on top
 of saving the second pass over the whole terrain.
 
+> **A shader that writes `NORMAL` must use `INLINE`.** This is not a preference. An overlay is a
+> separate pass and cannot know what the shader underneath it did to the lighting, so it draws
+> its patch with the plain mesh normal while the ground around it has been softened, tilted or
+> bumped - and the paint reads as a seam. None of the bundled shaders are in that category, so
+> `OVERLAY` remains the right default; this matters once you write your own.
+
 > A shader that reads `COLOR` for its own purposes cannot be used with painting: that channel
 > now means "how much of each layer is on this vertex". Unpainted terrain leaves it at zero.
+
+---
+
+## 🌄 Faceted or rounded terrain
+
+Angular trees and rocks against a landscape that rolls is a perfectly good look, and the addon
+lets you take either side. `Shading Mode` in the inspector decides it.
+
+### What actually makes low-poly look hard
+
+Not the silhouette. It is that each triangle carries **one** normal, so it is lit at one
+brightness across its whole surface, and two neighbouring triangles then meet at a visible step.
+
+`Shading Mode` attacks that at the source:
+
+| Mode | What the mesh stores | Look |
+| --- | --- | --- |
+| **Flat** (default) | One normal per triangle | Crisp facets, each face its own plate |
+| **Smooth** | Normals averaged across the faces meeting at a point | Light rolls over the edges |
+
+### It costs nothing. It is cheaper.
+
+This is the part worth being precise about, because the intuition runs the wrong way.
+
+The geometry is **identical** in both modes - same points, same triangles, same silhouette, same
+collision. Only what each corner *claims* its normal is changes. So there are no extra polygons
+and no extra draw calls.
+
+Smooth is in fact the **lighter** of the two. The builder merges vertices that agree on position,
+normal, UV and colour into an index buffer. Under flat shading the normals disagree by
+construction, so almost nothing merges. Under smooth shading they agree, and the buffer
+collapses. Measured on one 32×32 chunk of hilly terrain:
+
+| | Triangles | Vertices | Draw surfaces |
+| --- | --- | --- | --- |
+| Flat | 2024 | 6072 | 1 |
+| **Smooth** | **2024** | **1065** | **1** |
+
+Same triangles, **17.5%** of the vertices - a smaller vertex buffer, less vertex shader work and
+less memory. The collision face soup came out bit-identical between the two, so physics, brush
+picking and `get_height_at_world_coords()` are all unaffected.
+
+### Chunk borders stay invisible
+
+Smooth shading has an obvious way to go wrong at chunk boundaries, and this avoids it.
+
+The naive route is to average the normals of the triangles meeting at each vertex. That fails on
+a border: a chunk can only see its own triangles, so it averages one half of the surface while
+its neighbour averages the other half, and the two arrive at different normals for the same point
+in space. The result is a lit grid across the terrain.
+
+The normals here are taken from the **height field** instead, which knows nothing about chunks -
+both sides of a border read the same numbers and reach the same answer. Measured on two adjacent
+chunks over one continuous height field, comparing all 17 vertices they share:
+
+| | Largest disagreement |
+| --- | --- |
+| Averaging triangles per chunk | 23.17° |
+| **Height field** | **0.0000°** |
+
+Building this needs the neighbours' heights one cell past the border, which the manager supplies
+as a padded window - only while `SMOOTH` is selected, so `FLAT` pays nothing for it. At the edge
+of the world the outermost row is repeated, so the rim keeps the slope it visibly has instead of
+folding towards a cliff that is not there.
+
+### The shader follows the mesh, not the manager
+
+`Shading Mode` writes normals into the mesh, and the bundled `terrain_lowpoly.gdshader` simply
+reads them. There is no second shader to pick and nothing to configure - switch the mode and the
+look follows.
+
+That it works this way is deliberate, and it buys three things at once:
+
+- **No coupling.** The shader never looks a manager up, holds no reference to one, and has no
+  uniform you must remember to keep in sync.
+- **Usable anywhere.** Put it on any mesh from any source and it shades by that mesh's normals.
+  Nothing about it is specific to this addon.
+- **Several managers in one scene.** Five managers on five different settings produce five meshes
+  carrying five sets of normals. One material on all of them still does the right thing
+  everywhere, because the answer travels with the geometry rather than with the material.
+
+A uniform pointing at a manager would have broken all three.
+
+> If you write your own terrain shader, the same rule applies: do not overwrite `NORMAL` with one
+> recomputed from screen derivatives. That is what `terrain_lowpoly.gdshader` used to do, and it
+> discarded the mesh's normals - `SMOOTH` changed the geometry and changed nothing on screen.
+
+### Water is the exception, and has a switch
+
+`water.gdshader` cannot inherit anything, because its surface does not exist until the shader
+makes it: `vertex()` displaces a flat plane into waves. The mesh's normals still describe the
+plane it was beforehand and know nothing about the water you see, so there is nothing to read.
+
+It therefore carries an explicit **`Smooth Surface`** toggle:
+
+| | Waves | Normal from |
+| --- | --- | --- |
+| **Off** (default) | Quantised into blocks by `Low Poly Stepping` | Screen derivatives - one per facet |
+| **On** | Continuous | The wave field itself, sampled per pixel |
+
+`Wave Normal Distance` sets how far apart the slope is measured when smooth. Small values chase
+fine ripples and can read as noise; larger ones round the swell off.
+
+The stepping has to be skipped rather than smoothed over afterwards. It quantises the *input*
+position, so with it in place two points a few centimetres apart return the identical height - a
+slope measured between them would read as flat everywhere except at the block seams, where it
+would spike.
+
+> Smooth water costs two extra evaluations of the wave function per pixel, and the wave carries a
+> value noise with four hashed sines behind it. On a water plane filling much of the screen that
+> is the most expensive thing in the shader. The default is off, so nothing changes until you ask
+> for it.
+
+### One triangulation artefact worth knowing about
+
+Smooth shading removes the step between facets, which leaves one hard feature as the only thing
+still visible: the **diagonal** each grid cell is split along.
+
+Four corners of a cell only lie in one plane while the ground is level. Anywhere it curves they do
+not, and the triangulation has to pick a diagonal to fold along - which puts a real ridge or gully
+there. Flat shading hides it among all the other edges; smooth shading does not. Measured as the
+angle between the two triangles meeting at an edge:
+
+| | Crease |
+| --- | --- |
+| Level ground | **0.00°** |
+| Hilly, cell-scale detail | mean 12.01°, max 47.02° |
+| Same hills over a smoother field | mean **1.45°**, max 5.51° |
+
+So it appears on bumps and hollows, never on flat ground, and it runs diagonally. If you see it,
+the fix is a **gentler height field relative to `Cell Size`** - run **Smooth Entire Terrain**, or
+shrink `Cell Size` so the same landform spans more triangles. Measured at an eight-fold reduction.
+
+Two things that do *not* help: `Jitter Strength` (measured at 12.01° → 13.00°, marginally worse),
+and anything to do with normals - the crease is in the geometry, not in the shading.
+
+> Rotating the light also makes it disappear, because all the diagonals run the same way and there
+> are sun angles at which the two halves of a cell land at the same brightness. That is a fine fix
+> for a fixed sun and a trap for a moving one: a day/night cycle will walk back into the bad angle.
 
 ---
 
@@ -640,6 +807,7 @@ of saving the second pass over the whole terrain.
 | **Brush Falloff Strength** | Brush Settings | `float` | Blends between sharp linear brush edges (0.0) and soft transitions (1.0). |
 | **Jitter Strength** | Terrain Properties | `float` | Intensity of the random vertex displacement for the low-poly look. |
 | **Jitter Slope Threshold** | Terrain Properties | `float` | Controls whether flat paths stay plain while hills get unique shapes. |
+| **Shading Mode** | Terrain Properties | `Enum` | `FLAT` gives every triangle its own normal, `SMOOTH` averages them across shared points. Same geometry either way, and `SMOOTH` builds a smaller vertex buffer. Needs a shader that reads the mesh normal - the bundled `terrain_lowpoly` shader forces flat on purpose. |
 | **Noise Amplitude** | Noise and Smooth | `float` | Vertical scale multiplier for balanced height/depth noise distribution. |
 | **Terrain Noise** | Noise and Smooth | `FastNoiseLite` | Target FastNoiseLite resource used for generating organic Perlin/Cellular shapes. |
 | **Generate Noise Terrain** | Noise and Smooth | `Button` | Processes and injects the selected noise pattern into all active chunk vertices. |
@@ -660,7 +828,8 @@ of saving the second pass over the whole terrain.
 | **Paint Layer** | Brush Settings | `int` | Which of the four layers the Paint brush deposits. Also selectable from the viewport toolbar. |
 | **Paint Layer N Slope** | Brush Settings | `Vector2` | Surface angles in degrees that layer may be painted on. Only the selected layer's range is shown. |
 | **Paint Slope Feather** | Brush Settings | `float` | Degrees over which a layer fades out past its slope range. Zero gives a hard contour. |
-| **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours, roughness values and optional detail textures. Created on first use; drawn as an overlay over `Custom Material`. |
+| **Paint Routing** | Brush Settings | `Enum` | `OVERLAY` draws the layers as a second pass and asks nothing of your material. `INLINE` lets `Custom Material` draw them itself, which saves the pass and is required for any shader that writes `NORMAL`. On `INLINE` the layer settings live on `Custom Material`. |
+| **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours, roughness values and optional detail textures. Created on first use; drawn as an overlay over `Custom Material`. Ignored while `Paint Routing` is `INLINE`. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 
 ---

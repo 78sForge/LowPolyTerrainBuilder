@@ -26,6 +26,68 @@ static func _same_paint(
 		and paint_data[a + 2] == paint_data[b + 2] and paint_data[a + 3] == paint_data[b + 3])
 
 
+## Width of the padded height window: the chunk's own grid plus one ring of the neighbours'.
+static func padded_stride_for(chunk_size: int) -> int:
+	return chunk_size + 3
+
+
+## The surface normal at one grid point, taken from the HEIGHT FIELD rather than from the
+## triangles around it.
+##
+## This exists because smooth shading is otherwise seam-ridden at chunk borders.
+## SurfaceTool.generate_normals() averages the faces it can see, and it can only see the ones in
+## the chunk being built - so a border vertex is averaged over its own half of the surface while
+## the neighbouring chunk averages the other half, and the two arrive at different normals for
+## the same point in space. That difference is a lit seam along every chunk boundary.
+##
+## Reading the height field instead removes the cause rather than the symptom: it is one
+## continuous surface that knows nothing about chunks, so both sides of a border compute the
+## same answer from the same numbers. The padded window is what makes the neighbours' heights
+## available a cell beyond the edge.
+##
+## Computed as the sum of the cross products around the point's four neighbours, which is the
+## average of the normals of the faces meeting there - the same quantity generate_normals()
+## produces, only read off the height field instead of off one chunk's triangles. That is the
+## point: it agrees with what smooth shading conventionally means AND with the neighbouring
+## chunk, where generate_normals() can only manage the first.
+##
+## Central differences would also work and be cheaper. This form is preferred because it weights
+## each quadrant by its own steepness, so an asymmetric neighbourhood - a point on the shoulder
+## of a ridge, say - leans towards the steep side the way the surrounding triangles do, instead
+## of reporting the average of the two opposite slopes. On a symmetric neighbourhood the two
+## agree exactly, and both correctly report a symmetric peak as vertical: its four faces cancel,
+## which is what an averaged vertex normal is.
+##
+## `x` and `z` are chunk-local grid coordinates; the padding offset is applied here.
+static func grid_normal(
+	padded: PackedFloat32Array, stride: int, x: int, z: int, cell_size: float
+) -> Vector3:
+	var px: int = x + 1
+	var pz: int = z + 1
+	var here: float = padded[pz * stride + px]
+
+	# The four neighbours as vectors FROM this point, in world space. Grid row z sits at world
+	# -z, so walking to grid z+1 moves towards negative world Z.
+	var east := Vector3(cell_size, padded[pz * stride + (px + 1)] - here, 0.0)
+	var north := Vector3(0.0, padded[(pz + 1) * stride + px] - here, -cell_size)
+	var west := Vector3(-cell_size, padded[pz * stride + (px - 1)] - here, 0.0)
+	var south := Vector3(0.0, padded[(pz - 1) * stride + px] - here, cell_size)
+
+	# Taken in counter-clockwise order seen from above, so every cross product points upwards
+	# and they reinforce rather than cancel. Their sum is area weighted for free: a steeper
+	# quadrant yields a longer vector and pulls the result further.
+	var accumulated: Vector3 = (
+		east.cross(north) + north.cross(west) + west.cross(south) + south.cross(east)
+	)
+
+	# Degenerate only if all four neighbours are collinear with this point, which a height field
+	# cannot produce as long as cell_size is non-zero. Guarded anyway so a malformed chunk
+	# reports level ground instead of a zero-length normal.
+	if accumulated.length_squared() < 0.000001:
+		return Vector3.UP
+	return accumulated.normalized()
+
+
 ## Reads one grid point's paint weights as a Color for the mesh's vertex colour channel.
 static func _paint_color(
 	paint_data: PackedByteArray, vert_count: int, x: int, z: int, steps: int
@@ -58,7 +120,9 @@ static func build_chunk_mesh(
 	jitter_strength: float,
 	jitter_slope_threshold: float,
 	paint_data: PackedByteArray = PackedByteArray(),
-	paint_steps: int = 8
+	paint_steps: int = 8,
+	smooth_shading: bool = false,
+	padded_heights: PackedFloat32Array = PackedFloat32Array()
 ) -> ArrayMesh:
 	if height_data.is_empty():
 		return null
@@ -87,9 +151,21 @@ static func build_chunk_mesh(
 	# triangle assembly can hand each vertex its own weights.
 	var points_paint := PackedColorArray()
 
+	# Height-field normals, and only when smooth shading actually asked for them. See
+	# grid_normal(): without the padded window there is no way to compute a normal at a chunk
+	# border that the neighbouring chunk will agree with, so the code falls back to
+	# generate_normals() and accepts the seam rather than inventing something.
+	var padded_stride: int = padded_stride_for(chunk_size)
+	var use_field_normals: bool = (
+		smooth_shading and padded_heights.size() >= padded_stride * padded_stride
+	)
+	var points_normal := PackedVector3Array()
+
 	points_2d.resize(max_points)
 	points_3d.resize(max_points)
 	points_paint.resize(max_points)
+	if use_field_normals:
+		points_normal.resize(max_points)
 
 	# Tracker index for direct O(1) array insertions
 	var active_count: int = 0
@@ -198,12 +274,22 @@ static func build_chunk_mesh(
 			points_paint[active_count] = (
 				_paint_color(paint_data, vert_count, x, z, paint_steps) if has_paint else c
 			)
+			# Taken at the UNJITTERED grid coordinate on purpose. The jitter shifts a point
+			# sideways within the same surface; the surface's slope where it stands is still the
+			# one the height field describes, and sampling it at the grid point is what keeps two
+			# chunks sharing a border vertex in exact agreement.
+			if use_field_normals:
+				points_normal[active_count] = grid_normal(
+					padded_heights, padded_stride, x, z, cell_size
+				)
 			active_count += 1
 
 	# Shrink arrays down to the actual active Delaunay points in a single operation
 	points_2d.resize(active_count)
 	points_3d.resize(active_count)
 	points_paint.resize(active_count)
+	if use_field_normals:
+		points_normal.resize(active_count)
 
 	# --- STEP 2: GODOT DELAUNAY TRIANGULATION ---
 	var triangles: PackedInt32Array = Geometry2D.triangulate_delaunay(points_2d)
@@ -212,10 +298,24 @@ static func build_chunk_mesh(
 
 	# --- STEP 3: ASSEMBLE MESH GEOMETRY ---
 
-	# CRITICAL FOR LOW-POLY: Setting the smooth group to -1 disables vertex normal blending.
-	# This forces the SurfaceTool to isolate each triangle's face normal later on,
-	# ensuring crisp, distinct, and perfectly flat shading boundaries.
-	st.set_smooth_group(-1)
+	# THE FLAT / SMOOTH DECISION, and it is made here rather than in a shader because it is a
+	# property of the MESH.
+	#
+	# Group -1 disables vertex normal blending: generate_normals() then gives every triangle its
+	# own copy of each corner, carrying that face's own normal, which is what produces crisp and
+	# perfectly flat shading boundaries.
+	#
+	# Group 0 averages the normals of every corner that shares a position, so a vertex points
+	# halfway between the faces meeting at it and the light rolls across the boundary instead of
+	# stepping over it. The geometry is IDENTICAL either way - same points, same triangles, same
+	# silhouette. Only what the corners claim their normal is changes.
+	#
+	# Smoothing is in fact the cheaper of the two, which is counterintuitive enough to spell out.
+	# st.index() below merges vertices that agree on position, normal, UV and colour. Under flat
+	# shading the normals disagree by construction, so almost nothing merges and the buffer keeps
+	# roughly three vertices per triangle. Under smooth shading they agree, and the buffer
+	# collapses towards one vertex per grid point.
+	st.set_smooth_group(0 if smooth_shading else -1)
 
 	# Iterate through the Delaunay triangulation index array in steps of 3 (one triangle at a time)
 	for i in range(0, triangles.size(), 3):
@@ -261,31 +361,42 @@ static func build_chunk_mesh(
 
 		# Push Vertex 0 data into the SurfaceTool format stack. The colour is per vertex now:
 		# it carries this point's paint weights into the shader.
+		if use_field_normals:
+			st.set_normal(points_normal[idx0])
 		st.set_color(points_paint[idx0])
 		st.set_uv(uv0)
 		st.add_vertex(p0)
 
 		# Push Vertex 1 data into the SurfaceTool format stack
+		if use_field_normals:
+			st.set_normal(points_normal[idx1])
 		st.set_color(points_paint[idx1])
 		st.set_uv(uv1)
 		st.add_vertex(p1)
 
 		# Push Vertex 2 data into the SurfaceTool format stack
+		if use_field_normals:
+			st.set_normal(points_normal[idx2])
 		st.set_color(points_paint[idx2])
 		st.set_uv(uv2)
 		st.add_vertex(p2)
 
-	# Automatically generate face normals. Because smooth group is set to -1,
-	# vertices at shared boundaries will not blend, preserving the low-poly appearance.
-	st.generate_normals()
+	# Generate the normals the smooth group above decided the shape of: isolated per face, or
+	# averaged across every face that meets at a point.
+	#
+	# Skipped when the height field already supplied them - generate_normals() would overwrite
+	# the seamless ones with its own chunk-local averages, which is exactly what they replace.
+	if not use_field_normals:
+		st.generate_normals()
 
 	# Generate tangent vectors. This is mandatory for stable lighting calculation
 	# and custom shader support within the Compatibility Mode backend.
 	st.generate_tangents()
 
-	# Optimize the mesh structure by generating an index buffer and merging vertices
-	# that share identical position, normal, UV, and color values. Since group -1
-	# splits normals per face, this safely reduces GPU vertex load without breaking flat shading.
+	# Optimize the mesh structure by generating an index buffer and merging vertices that share
+	# identical position, normal, UV, and color values. Because a normal is part of that test,
+	# flat shading merges only where faces happen to be coplanar, while smooth shading merges
+	# nearly everything - see the note at the smooth group above.
 	st.index()
 
 	# Commit the built geometric arrays into a rendering-ready Mesh resource

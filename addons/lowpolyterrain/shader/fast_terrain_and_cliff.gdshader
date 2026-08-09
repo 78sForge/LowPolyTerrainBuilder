@@ -79,8 +79,16 @@ void vertex() {
 }
 
 void fragment() {
-	// 1. Enforce crisp low-poly shading via screen-space partial derivatives
-	vec3 flat_normal_view = normalize(cross(dFdy(VERTEX), dFdx(VERTEX)));
+	// 1. THE MESH'S OWN NORMAL, so the manager's Shading Mode reaches this shader.
+	//
+	// This used to recompute a flat one from screen-space derivatives, which forced facets on any
+	// mesh and therefore discarded whatever the builder had put there. On a FLAT mesh the two are
+	// identical - all three corners of a face carry that face's normal - so nothing changes for
+	// the classic look; on SMOOTH the averaged normals now survive instead of being thrown away.
+	//
+	// The slope test below reads the same vector, which keeps the cliff blend consistent with the
+	// lighting rather than judging the surface by a different normal than it shades it with.
+	vec3 flat_normal_view = normalize(NORMAL);
 	vec3 flat_normal_world = mat3(INV_VIEW_MATRIX) * flat_normal_view;
 	NORMAL = flat_normal_view;
 	ROUGHNESS = cliff_roughness;
