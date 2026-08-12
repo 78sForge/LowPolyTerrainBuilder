@@ -31,6 +31,19 @@ terrain uses the `MESH_NODES` or the `SERVERS` backend, and the steps that repro
 
 Everything below is detail you can come back to. The defaults are usable as they are.
 
+## ✅ **Update information for v1.1.4 (The Particle Collision Update):**
+Version 1.1.4 lets GPU particles land on the terrain instead of falling through it, which no
+amount of baked collision ever gave them - particles see collision nodes, not physics bodies.
+Key additions:
+* Particle Collision: One switch creates a GPUParticlesCollisionHeightField3D over the terrain.
+* Fitted, Not Guessed: The box takes the full terrain dimensions and the exact Y span of the data.
+* Follows The Terrain: Sculpting, noise, ramps, undo and dimension changes all refit the box.
+* Yours To Configure: Only size and position are written; every other setting stays as you set it.
+* Saved With The Scene: The field is an owned child, so its settings survive a reload.
+* Both Backends: The field captures what is rendered, so MESH_NODES and SERVERS work alike.
+* Runtime Refit: 'queue_particles_collision_refresh()' covers heights a game writes itself.
+* Height Bounds: 'get_height_range()' reports the terrain's lowest and highest point.
+
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
 longer has to read as angular, and lets your own shader take over drawing the painted layers.
@@ -416,6 +429,58 @@ taken straight from `Shape3D.get_debug_mesh()`, as a translucent cyan wireframe:
 Because only chunks that actually own a collider light up, this is the direct way to watch
 `LAZY` at work: the lit region *is* the culling radius. Turn it off for profiling, since the
 wireframe adds line geometry per visible chunk.
+
+---
+
+## ✨ Particle Collision
+
+GPU particles do not collide with physics bodies. They see only `GPUParticlesCollision3D` nodes,
+which means a terrain with baked colliders and a terrain with none look exactly the same to a
+rain, spark or leaf effect: the particles fall straight through the ground.
+
+**Generate Particles Collision** creates the node that fixes that - a
+`GPUParticlesCollisionHeightField3D`, fitted to the terrain:
+
+* Horizontally it covers the full applied dimensions, offset so it sits **over** the terrain.
+  The terrain grows from the manager's origin towards `+X` and `-Z`, so a box centred on the
+  manager would miss three quarters of it.
+* Vertically it spans exactly the distance between the lowest and the highest point of the
+  height matrix, with its top on the peak and its bottom on the deepest valley.
+* It is refitted whenever the terrain changes - sculpting, noise, smoothing, ramps, undo, a
+  dimension change - so a mountain built after the fact grows the box with it.
+
+Everything else on the node is yours. Select **Terrain_Particles_Collision** in the scene tree
+and set resolution, update mode, cull mask or follow camera there; a refit writes `size` and
+`position` and nothing else. Unlike the chunks, this child is a normal owned node and is saved
+into the scene, which is what makes those settings survive a reload. Switching the option off
+deletes the node again, and with it whatever was configured on it.
+
+Both backends work, because the field captures what is **rendered** beneath it rather than what
+is collidable - which also means anything you parked in `Terrain_Assets` casts into it.
+
+### Resolution is a whole-terrain budget
+
+The resolution is spent across the longer horizontal axis, not per chunk. At the default `1024`
+over a 500 m terrain one texel covers half a metre, and detail finer than that is invisible to
+the particles no matter how dense the mesh is. Small detailed terrain can afford to raise it;
+on a large one, accept the blur rather than paying for `8192`.
+
+### Writing heights yourself
+
+The manager refits after its own editing operations. A game that writes into the matrix
+directly has to say when it is done, because individual `set_height_at()` calls are not visible
+to it:
+
+```gdscript
+terrain.set_height_at(x, z, y)
+terrain.queue_particles_collision_refresh()
+```
+
+The call coalesces, so a loop over ten thousand vertices still refits once. It costs nothing
+while the option is off.
+
+`get_height_range()` returns the same `(min, max)` the fit is built from, in local space, if you
+need the terrain's vertical bounds for something else.
 
 ---
 
@@ -830,6 +895,7 @@ and anything to do with normals - the crease is in the geometry, not in the shad
 | **Paint Slope Feather** | Brush Settings | `float` | Degrees over which a layer fades out past its slope range. Zero gives a hard contour. |
 | **Paint Routing** | Brush Settings | `Enum` | `OVERLAY` draws the layers as a second pass and asks nothing of your material. `INLINE` lets `Custom Material` draw them itself, which saves the pass and is required for any shader that writes `NORMAL`. On `INLINE` the layer settings live on `Custom Material`. |
 | **Paint Material** | Brush Settings | `ShaderMaterial` | Holds the four layers' colours, roughness values and optional detail textures. Created on first use; drawn as an overlay over `Custom Material`. Ignored while `Paint Routing` is `INLINE`. |
+| **Generate Particles Collision** | Particle Collision | `bool` | Keeps a `GPUParticlesCollisionHeightField3D` child fitted to the terrain, so GPU particles collide with the ground. Off by default. Only `size` and `position` are the manager's; everything else is set on the node itself and saved with the scene. |
 | **Collision Layer / Group** | Collision Generation | `Flags / String` | Physics layer mask and custom scene group name for colliders. In `SERVERS` mode the group is applied to the **manager** itself and bodies report the manager as their collider, so `collider.is_in_group("Wall")` keeps working. |
 
 ---

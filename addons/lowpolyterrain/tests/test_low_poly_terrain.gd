@@ -1662,3 +1662,124 @@ func test_dimension_change_restores_everything_it_touched() -> void:
 	# The preview values follow, or pressing Apply again would silently redo the undone change.
 	assert_eq(manager.preview_world_chunks, chunks_before,
 		"The inspector must not keep showing the size that was just undone.")
+
+
+# --- PARTICLE COLLISION HEIGHT FIELD ---
+
+## Convenience accessor for the child the switch is supposed to maintain.
+func _particles_field() -> GPUParticlesCollisionHeightField3D:
+	return manager.find_child(
+		LowPolyTerrainManager.PARTICLES_COLLISION_NODE_NAME, false, false
+	) as GPUParticlesCollisionHeightField3D
+
+
+## Off by default, and off means the node does not exist at all rather than existing unused.
+func test_no_particle_collision_field_until_it_is_asked_for() -> void:
+	assert_false(manager.generate_particles_collision,
+		"The switch must default to off.")
+	assert_null(_particles_field(),
+		"Nothing may be created while the switch is off.")
+
+
+## The horizontal box has to cover the terrain exactly - it grows from the manager's origin
+## towards +X and -Z, so a box centred on the manager would miss three quarters of it.
+func test_particle_collision_field_covers_the_whole_terrain() -> void:
+	manager.generate_particles_collision = true
+
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	assert_not_null(field, "Switching it on creates the height field.")
+
+	var width: float = float(manager.world_chunks.x * manager.chunk_size) * manager.cell_size
+	var length: float = float(manager.world_chunks.y * manager.chunk_size) * manager.cell_size
+
+	assert_almost_eq(field.size.x, width, 0.001, "The box spans the full terrain width.")
+	assert_almost_eq(field.size.z, length, 0.001, "The box spans the full terrain length.")
+	assert_almost_eq(field.position.x, width * 0.5, 0.001, "Centred over the terrain in X.")
+	assert_almost_eq(field.position.z, -length * 0.5, 0.001, "Centred over the terrain in Z.")
+
+
+## The vertical extent is the span between the lowest and the highest point, and the box has to
+## sit so that both of them are inside it.
+func test_particle_collision_field_spans_the_height_range() -> void:
+	manager.set_height_at(5, 5, 4.0)
+	manager.set_height_at(6, 6, -2.0)
+	manager.generate_particles_collision = true
+
+	assert_eq(manager.get_height_range(), Vector2(-2.0, 4.0),
+		"Precondition: the matrix reports the sculpted extremes.")
+
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	assert_almost_eq(field.size.y, 6.0, 0.001, "The box is exactly as tall as the terrain.")
+	assert_almost_eq(field.position.y + field.size.y * 0.5, 4.0, 0.001,
+		"Its top sits on the highest point.")
+	assert_almost_eq(field.position.y - field.size.y * 0.5, -2.0, 0.001,
+		"Its bottom sits on the lowest point.")
+
+
+## A terrain nobody sculpted yet spans nothing, and Godot rejects a size below 0.01 outright.
+func test_flat_terrain_still_gets_a_usable_box() -> void:
+	manager.generate_particles_collision = true
+
+	assert_eq(manager.get_height_range(), Vector2.ZERO, "Precondition: the terrain is flat.")
+	assert_gt(_particles_field().size.y, 0.0,
+		"A flat terrain must not collapse the box to nothing.")
+
+
+## Sculpting a mountain after the fact has to grow the box with it, or particles pass straight
+## through everything above the old bounds.
+func test_particle_collision_field_follows_the_terrain() -> void:
+	manager.generate_particles_collision = true
+	var height_before: float = _particles_field().size.y
+
+	manager.set_height_at(5, 5, 9.0)
+	manager.queue_particles_collision_refresh()
+	await get_tree().process_frame
+
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	assert_gt(field.size.y, height_before, "The box grew with the terrain.")
+	assert_almost_eq(field.position.y + field.size.y * 0.5, 9.0, 0.001,
+		"Its top sits on the new peak.")
+
+
+## Resizing the world moves the horizontal bounds, and the field is fitted to the APPLIED
+## dimensions rather than to the preview values still sitting in the inspector.
+func test_particle_collision_field_follows_a_dimension_change() -> void:
+	manager.generate_particles_collision = true
+
+	manager.preview_world_chunks = Vector2i(4, 3)
+	manager.preview_chunk_size = manager.chunk_size
+	manager.preview_cell_size = manager.cell_size
+	manager.apply_dimension_changes_confirmed()
+
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	assert_almost_eq(field.size.x, 40.0, 0.001, "The box followed the new width.")
+	assert_almost_eq(field.size.z, 30.0, 0.001, "The box followed the new length.")
+
+
+## Everything that is not size or position belongs to the user, so a refit must leave it alone.
+func test_refitting_leaves_the_users_settings_alone() -> void:
+	manager.generate_particles_collision = true
+
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	field.resolution = GPUParticlesCollisionHeightField3D.RESOLUTION_2048
+	field.update_mode = GPUParticlesCollisionHeightField3D.UPDATE_MODE_ALWAYS
+	field.cull_mask = 42
+
+	manager.set_height_at(5, 5, 3.0)
+	manager._refresh_particles_collision_field()
+
+	assert_eq(field.resolution, GPUParticlesCollisionHeightField3D.RESOLUTION_2048,
+		"The resolution is the user's.")
+	assert_eq(field.update_mode, GPUParticlesCollisionHeightField3D.UPDATE_MODE_ALWAYS,
+		"So is the update mode.")
+	assert_eq(field.cull_mask, 42, "So is everything else on the node.")
+
+
+## Switching it off has to take the node with it, or a terrain with no particles keeps paying
+## for a depth render nobody asked for.
+func test_switching_particle_collision_off_removes_the_field() -> void:
+	manager.generate_particles_collision = true
+	assert_not_null(_particles_field(), "Precondition: the field exists.")
+
+	manager.generate_particles_collision = false
+	assert_null(_particles_field(), "Switching it off removes the node again.")
