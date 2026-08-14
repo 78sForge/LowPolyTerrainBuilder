@@ -6,8 +6,10 @@ render_mode blend_mix, depth_draw_never, diffuse_lambert, specular_schlick_ggx;
 // before the transparent pass. depth_draw_never for the same reason: writing depth would cut
 // away what this exists to show.
 //
-// FOAM only forms against the depth buffer, which a transparent material does not write to by
-// default. Set Depth Draw to ALWAYS on such an object to give it a foam line.
+// FOAM only forms against geometry that is in the depth buffer BEFORE the transparent pass, so
+// an ALPHA material never gets a foam line - not with Depth Draw ALWAYS either, which writes
+// depth too late to be read here. Alpha Scissor and Alpha Hash do get one: both render in the
+// opaque pass. Measured, all five modes side by side.
 //
 // SET extra_cull_margin ON THE MESH USING THIS SHADER.
 //

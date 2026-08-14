@@ -46,7 +46,7 @@ Key additions:
 * Real Water Transparency: Paint, glass and particles under the water are finally visible through it.
 * Cheaper Water: Dropping the full-screen copy measured 0.41 ms per frame at 1080p on an M2 Pro.
 * Overlay Sorts Itself: The paint overlay takes a lower render priority, so no chunk squares.
-* Foam Needs Depth: Set Depth Draw to Always on a transparent object to give it a foam line.
+* Foam Needs Opaque Depth: Alpha Scissor or Alpha Hash gets a foam line, plain Alpha cannot.
 
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
@@ -838,9 +838,10 @@ would spike.
 anything transparent under it - glass, particles, painted ground - is finally visible through it,
 and the dropped full-screen copy measured 0.41 ms per frame cheaper at 1080p.
 
-> A transparent object needs **Depth Draw** = `Always` to get a foam line, because foam is
-> measured against the depth buffer. Sorting needs no attention: the manager gives the paint
-> overlay a lower `render_priority` by itself.
+> Foam only forms against geometry already in the depth buffer, so an object on `Transparency` =
+> `Alpha` never gets a foam line - `Depth Draw` = `Always` does not help, it writes too late.
+> `Alpha Scissor` and `Alpha Hash` do get one, since both render in the opaque pass. Sorting needs
+> no attention: the manager gives the paint overlay a lower `render_priority` by itself.
 
 ### One triangulation artefact worth knowing about
 
