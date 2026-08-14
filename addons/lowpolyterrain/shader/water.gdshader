@@ -1,7 +1,14 @@
 shader_type spatial;
-// CHANGE 1: Keep depth_draw_always, but use screen_texture for bug-free transparency
-render_mode blend_mix, depth_draw_always, diffuse_lambert, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_never, diffuse_lambert, specular_schlick_ggx;
 
+// REAL transparency: ALPHA is written and the hardware blends it. Faking it through a screen
+// texture, as this used to, hid everything transparent under the water - that copy is taken
+// before the transparent pass. depth_draw_never for the same reason: writing depth would cut
+// away what this exists to show.
+//
+// FOAM only forms against the depth buffer, which a transparent material does not write to by
+// default. Set Depth Draw to ALWAYS on such an object to give it a foam line.
+//
 // SET extra_cull_margin ON THE MESH USING THIS SHADER.
 //
 // vertex() raises the surface by up to wave_height, but frustum culling works from the mesh
@@ -16,7 +23,7 @@ uniform vec3 shallow_water_color : source_color = vec3(0.0, 0.6, 0.7);
 uniform vec3 foam_color : source_color = vec3(0.9, 0.95, 1.0);
 uniform float roughness : hint_range(0.0, 1.0) = 0.0;
 
-// NEW: Controls base transparency (0.0 = completely invisible, 1.0 = solid)
+// How solid deep water is. Shallow water reaches less than this.
 uniform float water_alpha : hint_range(0.0, 1.0) = 0.6;
 
 group_uniforms Wave_Settings;
@@ -53,10 +60,8 @@ uniform float foam_distance : hint_range(0.001, 1.0, 0.001) = 0.05;
 uniform float foam_stepping : hint_range(2.0, 100.0) = 100.0;
 uniform float depth_distance : hint_range(0.1, 10.0) = 4.0;
 
-// Textures for depth calculation (foam) and the background (transparency)
+// What the foam edge and the shallow-to-deep blend are measured against.
 uniform sampler2D depth_texture : hint_depth_texture, filter_linear_mipmap;
-// NEW: Fetches the rendered screen image behind the water for the glass effect
-uniform sampler2D screen_texture : hint_screen_texture, filter_linear_mipmap;
 
 const float TAU_CONST = 6.28318530718;
 
@@ -179,22 +184,16 @@ void fragment() {
 	float depth_blend = clamp(water_depth / depth_distance, 0.0, 1.0);
 	vec3 water_base = mix(shallow_water_color, deep_water_color, depth_blend);
 	
-	// 4. NEW: Read background color for true transparency
-	vec3 background_color = textureLod(screen_texture, SCREEN_UV, 0.0).rgb;
-	
-	// NEW: Calculate dynamic alpha based on depth
-	// Shallow water becomes more transparent, deep water becomes more opaque (light absorption)
+	// 4. Deep water absorbs more light, so it lets less through.
 	float dynamic_alpha = mix(water_alpha * 0.3, water_alpha, depth_blend);
-	
-	// NEW: Mix the base water color with the background image
-	vec3 transparent_water = mix(background_color, water_base, dynamic_alpha);
-	
+
 	// 5. Stylized foam at object intersections (NOW CUSTOMIZABLE)
 	float stepped_depth = floor(water_depth * foam_stepping) / foam_stepping;
 	float foam_mask = step(stepped_depth, foam_distance);
-	
-	// Mix final result (foam remains fully opaque!)
-	ALBEDO = mix(transparent_water, foam_color, foam_mask);
+
+	// Foam stays fully opaque, exactly as before.
+	ALBEDO = mix(water_base, foam_color, foam_mask);
+	ALPHA = mix(dynamic_alpha, 1.0, foam_mask);
 	ROUGHNESS = roughness;
 	SPECULAR = 0.5;
 }

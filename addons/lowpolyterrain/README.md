@@ -43,6 +43,10 @@ Key additions:
 * Both Backends: The field captures what is rendered, so MESH_NODES and SERVERS work alike.
 * Runtime Refit: 'queue_particles_collision_refresh()' covers heights a game writes itself.
 * Height Bounds: 'get_height_range()' reports the terrain's lowest and highest point.
+* Real Water Transparency: Paint, glass and particles under the water are finally visible through it.
+* Cheaper Water: Dropping the full-screen copy measured 0.41 ms per frame at 1080p on an M2 Pro.
+* Overlay Sorts Itself: The paint overlay takes a lower render priority, so no chunk squares.
+* Foam Needs Depth: Set Depth Draw to Always on a transparent object to give it a foam line.
 
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
@@ -827,6 +831,16 @@ would spike.
 > value noise with four hashed sines behind it. On a water plane filling much of the screen that
 > is the most expensive thing in the shader. The default is off, so nothing changes until you ask
 > for it.
+
+### The water is really transparent now
+
+`water.gdshader` writes `ALPHA` instead of faking transparency through a screen texture, so
+anything transparent under it - glass, particles, painted ground - is finally visible through it,
+and the dropped full-screen copy measured 0.41 ms per frame cheaper at 1080p.
+
+> A transparent object needs **Depth Draw** = `Always` to get a foam line, because foam is
+> measured against the depth buffer. Sorting needs no attention: the manager gives the paint
+> overlay a lower `render_priority` by itself.
 
 ### One triangulation artefact worth knowing about
 

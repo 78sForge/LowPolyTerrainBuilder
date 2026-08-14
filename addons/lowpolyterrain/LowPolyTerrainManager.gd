@@ -296,7 +296,6 @@ func _generate_noise_terrain() -> void:
 	for coord in _get_chunk_coords():
 		_update_single_chunk(coord)
 
-	# Noise moves the extremes of the terrain more than anything else does.
 	queue_particles_collision_refresh()
 
 	# [GLOBAL UNDO] Securely fetch manager and commit history entry inside editor workspace
@@ -630,31 +629,18 @@ var bake_collisions_button: Callable = func() -> void: _bake_live_collisions_as_
 ## Keeps a GPUParticlesCollisionHeightField3D child fitted to the terrain, so GPU particles land
 ## on the ground instead of falling through it.
 ##
-## The field is a box, and keeping that box on the terrain is the entire job of this switch: the
-## full width and length of the applied dimensions, and vertically exactly the span between the
-## lowest and the highest point of the height matrix. It is refitted whenever the terrain
-## changes, so sculpting a mountain grows the box with it and nothing falls outside.
+## Only size and position are the manager's, and both are rewritten whenever the terrain changes:
+## the full applied dimensions horizontally, the span from the lowest to the highest point of the
+## height matrix vertically. Everything else on the node is yours to set in the scene tree.
 ##
-## Everything ELSE about the field - resolution, update mode, cull mask, follow camera - is left
-## alone and belongs to you: select the child in the scene tree and set it there. Only size and
-## position are the manager's, and those two are overwritten on every refresh.
-##
-## Unlike the chunks, this child is a regular owned node and is saved into the .tscn, which is
-## what makes those settings survive a reload. Switching this off deletes it again, and with it
-## whatever was configured on it.
-##
-## Works in both backends, because the field captures whatever is RENDERED underneath it - which
-## also means anything you parked in Terrain_Assets casts into it as well.
-##
-## Off by default: a height field costs a depth render and a texture, and a terrain with no GPU
-## particles on it has no use for either.
+## The child is owned and saved into the .tscn, which is what makes those settings survive a
+## reload. Switching this off deletes it again. Works in both backends, since the field captures
+## what is rendered beneath it.
 @export var generate_particles_collision: bool = false:
 	set(v):
 		generate_particles_collision = v
-		# Property setters already fire while the scene is being deserialized, long before
-		# _ready() runs and before this node is inside the tree. rebuild_chunks_structure()
-		# fits the field for whatever value was restored from disk, so the initial build is not
-		# this setter's job.
+		# Setters also fire during deserialization, before this node is in the tree.
+		# rebuild_chunks_structure() builds the field for the value restored from disk.
 		if not is_node_ready():
 			return
 		_refresh_particles_collision_field()
@@ -1125,6 +1111,18 @@ func _write_paint_layer_defaults(target: ShaderMaterial) -> void:
 
 ## The overlay to actually draw with, or null while there is nothing to draw.
 ##
+## Where the paint overlay sorts against everything else transparent in the scene.
+##
+## The overlay is a transparent pass on a CHUNK-sized object, and transparent objects are sorted
+## back to front by bounding box centre. Under a water plane that comparison flips per chunk, and
+## the terrain then shows its chunk grid as squares of paint floating on the water. Render
+## priority is sorted before distance, so one step ahead settles it.
+##
+## Safe in the other direction: anything behind the terrain is already discarded by the depth
+## test, because the chunk's base material is opaque and writes depth.
+const PAINT_OVERLAY_RENDER_PRIORITY: int = -1
+
+
 ## Deliberately separate from ensure_paint_material(): the material may exist so its layers can
 ## be configured, while the overlay is still not worth hanging on the chunks. An overlay that
 ## discards every fragment costs a second pass over the whole terrain for no result.
@@ -1133,7 +1131,14 @@ func get_active_paint_material() -> Material:
 	# draw them a second time, over the top of themselves.
 	if paint_routing == PaintRouting.INLINE:
 		return null
-	return paint_material if has_paint_data() else null
+	if not has_paint_data():
+		return null
+
+	if paint_material != null \
+			and paint_material.render_priority != PAINT_OVERLAY_RENDER_PRIORITY:
+		paint_material.render_priority = PAINT_OVERLAY_RENDER_PRIORITY
+
+	return paint_material
 
 
 ## The configured colour of one paint layer, 1 to 4. Falls back to white when the material does
@@ -1532,9 +1537,7 @@ func rebuild_chunks_structure() -> void:
 	# both backends without duplicating it into the branch below.
 	_update_chunk_grid_overlay()
 
-	# Same reasoning, and this is also where the field gets built in the first place: every path
-	# that brings a terrain into existence - loading a scene, applying dimensions, switching
-	# backend - ends up here.
+	# Also where the field is built: every path that brings a terrain into existence ends here.
 	_refresh_particles_collision_field()
 
 	if terrain_backend == TerrainBackend.SERVERS:
@@ -2584,8 +2587,7 @@ func stroke_finished() -> void:
 	if Engine.is_editor_hint():
 		notify_property_list_changed()
 
-	# Once per stroke rather than once per brush event: a held brush would otherwise re-render
-	# the depth map every frame, and the field is not what the user is looking at while sculpting.
+	# Once per stroke, not per brush event - a held brush would re-render the depth map per frame.
 	queue_particles_collision_refresh()
 
 	if not Engine.is_editor_hint() or _active_undo_redo_manager == null:
@@ -2727,7 +2729,7 @@ func _apply_sparse_delta(indices: PackedInt32Array, heights: PackedFloat32Array)
 	for coord in unique_chunks_to_rebuild:
 		_update_single_chunk(coord)
 
-	# Undoing a mountain has to shrink the field again, exactly like building it grew it.
+	# Undoing a mountain shrinks the field again, exactly like building it grew it.
 	queue_particles_collision_refresh()
 
 	notify_property_list_changed()
@@ -2969,16 +2971,13 @@ func _update_chunk_grid_overlay() -> void:
 ## Name of the GPUParticlesCollisionHeightField3D child kept fitted to the terrain.
 const PARTICLES_COLLISION_NODE_NAME := "Terrain_Particles_Collision"
 
-## Smallest vertical extent the height field is ever given. A terrain that was never sculpted
-## spans nothing at all, and a box with no height captures nothing either - and Godot rejects a
-## size below 0.01 outright.
+## Smallest vertical extent the field is given. A flat terrain spans nothing, and Godot rejects
+## a size below 0.01 anyway.
 const PARTICLES_COLLISION_MIN_HEIGHT: float = 0.1
 
 
-## The lowest and the highest point of the height matrix, as (min, max), in LOCAL space.
-##
-## Reads the matrix rather than the meshes, so it is identical in both backends and covers
-## deactivated chunks too - the height data of a deactivated chunk is kept, not discarded.
+## The lowest and the highest point of the height matrix, as (min, max), in LOCAL space. Read
+## from the matrix rather than the meshes, so both backends and deactivated chunks are covered.
 func get_height_range() -> Vector2:
 	if global_height_data.is_empty():
 		return Vector2.ZERO
@@ -2994,10 +2993,8 @@ func get_height_range() -> Vector2:
 	return Vector2(lowest, highest)
 
 
-## Creates, refits or removes the particle collision height field.
-##
-## Only size and position are written. Everything else on the node is the user's, so a refit
-## never touches resolution, update mode or anything else configured in the scene tree.
+## Creates, refits or removes the particle collision height field. Only size and position are
+## written; everything else on the node stays as the user configured it.
 func _refresh_particles_collision_field() -> void:
 	if not is_inside_tree():
 		return
@@ -3018,9 +3015,8 @@ func _refresh_particles_collision_field() -> void:
 		field.name = PARTICLES_COLLISION_NODE_NAME
 		add_child(field)
 
-		# Owned on purpose, unlike every other node this manager creates: the whole point of the
-		# switch is that the field is then configurable in the scene tree, and settings only
-		# survive a reload if the node is written to the .tscn.
+		# Owned, unlike every other node this manager creates: settings made on it in the scene
+		# tree only survive a reload if it is written to the .tscn.
 		if Engine.is_editor_hint() and get_tree() and get_tree().edited_scene_root:
 			field.set_owner(get_tree().edited_scene_root)
 
@@ -3028,8 +3024,8 @@ func _refresh_particles_collision_field() -> void:
 	var length: float = float(world_chunks.y * chunk_size) * cell_size
 	var span: Vector2 = get_height_range()
 
-	# The box is centred on its own origin, while the terrain grows from this manager's origin
-	# towards +X and -Z, so the field sits half a world away along both axes.
+	# The box is centred on its own origin, the terrain grows towards +X and -Z from this
+	# manager's, so the field sits half a world away along both axes.
 	var box := Vector3(width, maxf(span.y - span.x, PARTICLES_COLLISION_MIN_HEIGHT), length)
 	var centre := Vector3(width * 0.5, (span.x + span.y) * 0.5, -length * 0.5)
 
@@ -3039,26 +3035,21 @@ func _refresh_particles_collision_field() -> void:
 		field.position = centre
 
 	# Sculpting inside the existing bounds changes the surface without moving the box, and
-	# UPDATE_MODE_WHEN_MOVED - the sane default for terrain, which does not move - would then
-	# keep serving the depth map it rendered before the edit. This is the explicit re-render
-	# that the enum has no value for.
+	# UPDATE_MODE_WHEN_MOVED would then keep serving the depth map from before the edit.
 	RenderingServer.particles_collision_height_field_update(field.get_base())
 
 
-## Refits the particle collision height field, if there is one, at most once per frame.
-##
-## Public because a game that writes heights through set_height_at() has to say when it is done;
-## the manager cannot see individual writes. Every editing path inside the plugin already calls
-## this for you. Costs nothing at all while the field is switched off.
+## Refits the height field, if there is one, at most once per frame. Public because a game
+## writing heights through set_height_at() has to say when it is done - every editing path inside
+## the plugin already calls it. Costs nothing while the field is switched off.
 func queue_particles_collision_refresh() -> void:
 	if not generate_particles_collision or not is_inside_tree():
 		return
 	if _particles_collision_refresh_pending:
 		return
 
-	# One refresh per frame regardless of how many chunks an operation touched. Each one scans
-	# the whole height matrix for its bounds and re-renders a depth map, and doing that per
-	# chunk would make a smoothing pass pay for it several hundred times.
+	# Coalesced: each refit scans the whole matrix and re-renders a depth map, which a smoothing
+	# pass would otherwise pay for once per chunk.
 	_particles_collision_refresh_pending = true
 	_flush_particles_collision_refresh.call_deferred()
 

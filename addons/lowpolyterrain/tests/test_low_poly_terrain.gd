@@ -1681,8 +1681,7 @@ func test_no_particle_collision_field_until_it_is_asked_for() -> void:
 		"Nothing may be created while the switch is off.")
 
 
-## The horizontal box has to cover the terrain exactly - it grows from the manager's origin
-## towards +X and -Z, so a box centred on the manager would miss three quarters of it.
+## The terrain grows towards +X and -Z, so a box centred on the manager would miss most of it.
 func test_particle_collision_field_covers_the_whole_terrain() -> void:
 	manager.generate_particles_collision = true
 
@@ -1698,8 +1697,7 @@ func test_particle_collision_field_covers_the_whole_terrain() -> void:
 	assert_almost_eq(field.position.z, -length * 0.5, 0.001, "Centred over the terrain in Z.")
 
 
-## The vertical extent is the span between the lowest and the highest point, and the box has to
-## sit so that both of them are inside it.
+## Both extremes have to end up inside the box.
 func test_particle_collision_field_spans_the_height_range() -> void:
 	manager.set_height_at(5, 5, 4.0)
 	manager.set_height_at(6, 6, -2.0)
@@ -1725,8 +1723,7 @@ func test_flat_terrain_still_gets_a_usable_box() -> void:
 		"A flat terrain must not collapse the box to nothing.")
 
 
-## Sculpting a mountain after the fact has to grow the box with it, or particles pass straight
-## through everything above the old bounds.
+## A mountain sculpted after the fact has to grow the box with it.
 func test_particle_collision_field_follows_the_terrain() -> void:
 	manager.generate_particles_collision = true
 	var height_before: float = _particles_field().size.y
@@ -1741,8 +1738,7 @@ func test_particle_collision_field_follows_the_terrain() -> void:
 		"Its top sits on the new peak.")
 
 
-## Resizing the world moves the horizontal bounds, and the field is fitted to the APPLIED
-## dimensions rather than to the preview values still sitting in the inspector.
+## Fitted to the APPLIED dimensions, not to the preview values sitting in the inspector.
 func test_particle_collision_field_follows_a_dimension_change() -> void:
 	manager.generate_particles_collision = true
 
@@ -1775,11 +1771,38 @@ func test_refitting_leaves_the_users_settings_alone() -> void:
 	assert_eq(field.cull_mask, 42, "So is everything else on the node.")
 
 
-## Switching it off has to take the node with it, or a terrain with no particles keeps paying
-## for a depth render nobody asked for.
+## Switching it off takes the node with it, rather than leaving a depth render nobody wants.
 func test_switching_particle_collision_off_removes_the_field() -> void:
 	manager.generate_particles_collision = true
 	assert_not_null(_particles_field(), "Precondition: the field exists.")
 
 	manager.generate_particles_collision = false
 	assert_null(_particles_field(), "Switching it off removes the node again.")
+
+
+# --- PAINT OVERLAY SORTING ---
+
+## At the default priority the overlay sorts against a water plane per chunk, which shows the
+## chunk grid as squares of paint floating on the water.
+func test_paint_overlay_sorts_itself_ahead_of_default_transparents() -> void:
+	manager.ensure_paint_material()
+	manager.set_paint_at(5, 5, Color(1.0, 0.0, 0.0, 0.0))
+
+	var overlay: Material = manager.get_active_paint_material()
+	assert_not_null(overlay, "Precondition: a painted terrain hands out an overlay.")
+	assert_eq(overlay.render_priority, LowPolyTerrainManager.PAINT_OVERLAY_RENDER_PRIORITY,
+		"The overlay has to sort ahead of anything at the default priority.")
+
+
+## A material saved by an earlier version carries zero, so the priority is enforced on the way
+## out rather than only at creation.
+func test_a_stored_overlay_priority_is_corrected() -> void:
+	manager.ensure_paint_material()
+	manager.set_paint_at(5, 5, Color(1.0, 0.0, 0.0, 0.0))
+	manager.paint_material.render_priority = 0
+
+	assert_eq(
+		manager.get_active_paint_material().render_priority,
+		LowPolyTerrainManager.PAINT_OVERLAY_RENDER_PRIORITY,
+		"An overlay from an older scene is corrected when it is handed out."
+	)
