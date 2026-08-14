@@ -1481,7 +1481,15 @@ func _execute_gltf_export_pipeline(target_path: String) -> void:
 		if chunk_material != null:
 			chunk_instance.material_override = chunk_material
 
-		chunk_instance.position = active_manager.get_chunk_local_position(coord)
+		# The chunk's WORLD transform, not its offset inside the manager. The manager's own
+		# transform is what "Center Global Position" writes, so exporting the offsets alone put
+		# the terrain back in the corner it starts out in - and a rotated or scaled terrain came
+		# out unrotated and unscaled for the same reason.
+		#
+		# The export root itself stays at the origin, so the terrain sits around it exactly as it
+		# sits around the scene origin. That survives an inherited scene whose root gets moved,
+		# which carrying the transform on the root would not.
+		chunk_instance.transform = active_manager.get_chunk_global_transform(coord)
 		export_root.add_child(chunk_instance)
 		chunk_instance.set_owner(export_root)
 		chunks_exported += 1

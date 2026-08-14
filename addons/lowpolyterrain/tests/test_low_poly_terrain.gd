@@ -1806,3 +1806,15 @@ func test_a_stored_overlay_priority_is_corrected() -> void:
 		LowPolyTerrainManager.PAINT_OVERLAY_RENDER_PRIORITY,
 		"An overlay from an older scene is corrected when it is handed out."
 	)
+
+
+## The glTF export places its chunks by this transform, so it has to carry the manager's own
+## position - which is exactly what Center Global Position writes.
+func test_chunk_global_transform_carries_the_managers_own_position() -> void:
+	var coord := Vector2i(1, 0)
+	var local: Vector3 = manager.get_chunk_local_position(coord)
+	manager.position = Vector3(-10.0, 0.0, 10.0)
+
+	var world: Transform3D = manager.get_chunk_global_transform(coord)
+	assert_true(world.origin.is_equal_approx(manager.global_position + local),
+		"A moved manager has to move the chunk's world transform with it.")

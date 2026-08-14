@@ -47,6 +47,7 @@ Key additions:
 * Cheaper Water: Dropping the full-screen copy measured 0.41 ms per frame at 1080p on an M2 Pro.
 * Overlay Sorts Itself: The paint overlay takes a lower render priority, so no chunk squares.
 * Foam Needs Opaque Depth: Alpha Scissor or Alpha Hash gets a foam line, plain Alpha cannot.
+* Export Keeps Its Place: The glTF export carries the terrain's transform, so a centred terrain stays centred.
 
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
