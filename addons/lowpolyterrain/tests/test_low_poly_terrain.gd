@@ -1818,3 +1818,32 @@ func test_chunk_global_transform_carries_the_managers_own_position() -> void:
 	var world: Transform3D = manager.get_chunk_global_transform(coord)
 	assert_true(world.origin.is_equal_approx(manager.global_position + local),
 		"A moved manager has to move the chunk's world transform with it.")
+
+
+## In the editor a refit waits for the save, because nothing reads the box before then - but the
+## saved scene must not carry a box from before the sculpting.
+func test_saving_refits_a_field_that_sculpting_left_behind() -> void:
+	manager.generate_particles_collision = true
+	var field: GPUParticlesCollisionHeightField3D = _particles_field()
+	var height_before: float = field.size.y
+
+	manager.set_height_at(5, 5, 9.0)
+	# What queue_particles_collision_refresh() does while Engine.is_editor_hint() is true.
+	manager._particles_collision_dirty = true
+
+	manager.notification(NOTIFICATION_EDITOR_PRE_SAVE)
+
+	assert_gt(field.size.y, height_before, "Saving picks up the pending edit.")
+	assert_almost_eq(field.position.y + field.size.y * 0.5, 9.0, 0.001,
+		"And fits the box to the sculpted peak.")
+	assert_false(manager._particles_collision_dirty, "The refit clears the flag.")
+
+
+## Saving an untouched terrain must not scan the matrix and re-render a depth map for nothing.
+func test_saving_without_pending_edits_does_nothing() -> void:
+	manager.generate_particles_collision = true
+	assert_false(manager._particles_collision_dirty,
+		"A field built just now is already current.")
+
+	manager.notification(NOTIFICATION_EDITOR_PRE_SAVE)
+	assert_false(manager._particles_collision_dirty, "And stays that way.")

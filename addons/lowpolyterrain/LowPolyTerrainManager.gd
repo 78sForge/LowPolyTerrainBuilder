@@ -840,6 +840,10 @@ var _joined_collision_group: String = ""
 ## touches many chunks still refits the height field exactly once.
 var _particles_collision_refresh_pending: bool = false
 
+## Editor only: sculpting changed the heights and the field has not been refitted for it yet.
+## Cleared by the refit, which happens when the scene is saved.
+var _particles_collision_dirty: bool = false
+
 
 
 # --- AUTOMATIC INITIALIZATION PIPELINE ---
@@ -2999,6 +3003,8 @@ func _refresh_particles_collision_field() -> void:
 	if not is_inside_tree():
 		return
 
+	_particles_collision_dirty = false
+
 	var existing: Node = find_child(PARTICLES_COLLISION_NODE_NAME, false, false)
 
 	if not generate_particles_collision:
@@ -3039,17 +3045,22 @@ func _refresh_particles_collision_field() -> void:
 	RenderingServer.particles_collision_height_field_update(field.get_base())
 
 
-## Refits the height field, if there is one, at most once per frame. Public because a game
-## writing heights through set_height_at() has to say when it is done - every editing path inside
-## the plugin already calls it. Costs nothing while the field is switched off.
+## Marks the height field for a refit: at most once per frame at run time, at the next scene save
+## in the editor, where nothing reads the box before then. Public because a game writing heights
+## through set_height_at() has to say when it is done; the plugin's own paths already call it.
 func queue_particles_collision_refresh() -> void:
 	if not generate_particles_collision or not is_inside_tree():
 		return
+
+	if Engine.is_editor_hint():
+		_particles_collision_dirty = true
+		return
+
 	if _particles_collision_refresh_pending:
 		return
 
-	# Coalesced: each refit scans the whole matrix and re-renders a depth map, which a smoothing
-	# pass would otherwise pay for once per chunk.
+	# Coalesced: a refit scans the whole matrix and re-renders a depth map, and a smoothing pass
+	# would otherwise pay for that once per chunk.
 	_particles_collision_refresh_pending = true
 	_flush_particles_collision_refresh.call_deferred()
 
@@ -3105,6 +3116,12 @@ func _leave_collision_group() -> void:
 ## Mirrors the node bookkeeping that a MeshInstance3D child would otherwise inherit for free.
 func _notification(what: int) -> void:
 	match what:
+		NOTIFICATION_EDITOR_PRE_SAVE:
+			# The box is about to be written into the scene file, so this is the one moment in
+			# the editor where it has to be current. Sculpting only marks it out of date.
+			if _particles_collision_dirty:
+				_refresh_particles_collision_field()
+
 		NOTIFICATION_TRANSFORM_CHANGED:
 			if _server_backend == null:
 				return

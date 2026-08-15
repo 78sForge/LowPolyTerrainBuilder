@@ -37,7 +37,7 @@ amount of baked collision ever gave them - particles see collision nodes, not ph
 Key additions:
 * Particle Collision: One switch creates a GPUParticlesCollisionHeightField3D over the terrain.
 * Fitted, Not Guessed: The box takes the full terrain dimensions and the exact Y span of the data.
-* Follows The Terrain: Sculpting, noise, ramps, undo and dimension changes all refit the box.
+* Follows The Terrain: The box is refitted on load, on dimension changes and when you save.
 * Yours To Configure: Only size and position are written; every other setting stays as you set it.
 * Saved With The Scene: The field is an owned child, so its settings survive a reload.
 * Both Backends: The field captures what is rendered, so MESH_NODES and SERVERS work alike.
@@ -439,53 +439,22 @@ wireframe adds line geometry per visible chunk.
 
 ## ✨ Particle Collision
 
-GPU particles do not collide with physics bodies. They see only `GPUParticlesCollision3D` nodes,
-which means a terrain with baked colliders and a terrain with none look exactly the same to a
-rain, spark or leaf effect: the particles fall straight through the ground.
+GPU particles collide only with `GPUParticlesCollision3D` nodes, never with physics bodies - so
+rain, sparks and leaves fall straight through a terrain no matter how much collision it carries.
 
-**Generate Particles Collision** creates the node that fixes that - a
-`GPUParticlesCollisionHeightField3D`, fitted to the terrain:
+**Generate Particles Collision** keeps a `GPUParticlesCollisionHeightField3D` fitted to the
+terrain: the full applied dimensions horizontally, the span from the lowest to the highest point
+of the height matrix vertically. Only `size` and `position` are written - resolution, update mode
+and everything else are yours to set on **Terrain_Particles_Collision** in the scene tree, and
+they survive a reload because the node is saved with the scene. Switching the option off deletes
+it again. Both backends work, since the field captures what is rendered beneath it.
 
-* Horizontally it covers the full applied dimensions, offset so it sits **over** the terrain.
-  The terrain grows from the manager's origin towards `+X` and `-Z`, so a box centred on the
-  manager would miss three quarters of it.
-* Vertically it spans exactly the distance between the lowest and the highest point of the
-  height matrix, with its top on the peak and its bottom on the deepest valley.
-* It is refitted whenever the terrain changes - sculpting, noise, smoothing, ramps, undo, a
-  dimension change - so a mountain built after the fact grows the box with it.
+> Refitted on load and on dimension changes. In the editor, sculpting only marks the box out of
+> date and the refit happens when you save the scene - at run time it is immediate.
 
-Everything else on the node is yours. Select **Terrain_Particles_Collision** in the scene tree
-and set resolution, update mode, cull mask or follow camera there; a refit writes `size` and
-`position` and nothing else. Unlike the chunks, this child is a normal owned node and is saved
-into the scene, which is what makes those settings survive a reload. Switching the option off
-deletes the node again, and with it whatever was configured on it.
-
-Both backends work, because the field captures what is **rendered** beneath it rather than what
-is collidable - which also means anything you parked in `Terrain_Assets` casts into it.
-
-### Resolution is a whole-terrain budget
-
-The resolution is spent across the longer horizontal axis, not per chunk. At the default `1024`
-over a 500 m terrain one texel covers half a metre, and detail finer than that is invisible to
-the particles no matter how dense the mesh is. Small detailed terrain can afford to raise it;
-on a large one, accept the blur rather than paying for `8192`.
-
-### Writing heights yourself
-
-The manager refits after its own editing operations. A game that writes into the matrix
-directly has to say when it is done, because individual `set_height_at()` calls are not visible
-to it:
-
-```gdscript
-terrain.set_height_at(x, z, y)
-terrain.queue_particles_collision_refresh()
-```
-
-The call coalesces, so a loop over ten thousand vertices still refits once. It costs nothing
-while the option is off.
-
-`get_height_range()` returns the same `(min, max)` the fit is built from, in local space, if you
-need the terrain's vertical bounds for something else.
+> A game writing heights itself has to call `queue_particles_collision_refresh()` when it is
+> done, since single `set_height_at()` calls are not visible to the manager. The call coalesces.
+> `get_height_range()` gives the `(min, max)` the fit is built from.
 
 ---
 
