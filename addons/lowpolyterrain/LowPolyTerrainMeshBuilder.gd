@@ -89,7 +89,11 @@ static func grid_normal(
 
 
 ## Reads one grid point's paint weights as a Color for the mesh's vertex colour channel.
-static func _paint_color(
+##
+## Public because the glTF export bakes the very same weights into a texture and has to read them
+## the identical way - a second copy of this arithmetic would be a second place for the
+## quantisation to drift out of step with the brush.
+static func paint_color_at(
 	paint_data: PackedByteArray, vert_count: int, x: int, z: int, steps: int
 ) -> Color:
 	var base: int = (x + z * vert_count) * 4
@@ -272,7 +276,7 @@ static func build_chunk_mesh(
 			points_2d[active_count] = Vector2(pos_x, pos_z)
 			points_3d[active_count] = Vector3(pos_x, current_h, pos_z)
 			points_paint[active_count] = (
-				_paint_color(paint_data, vert_count, x, z, paint_steps) if has_paint else c
+				paint_color_at(paint_data, vert_count, x, z, paint_steps) if has_paint else c
 			)
 			# Taken at the UNJITTERED grid coordinate on purpose. The jitter shifts a point
 			# sideways within the same surface; the surface's slope where it stands is still the

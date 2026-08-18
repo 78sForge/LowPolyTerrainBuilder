@@ -792,6 +792,10 @@ var _total_vertices_z: int = 0
 @export_group("Data Export")
 ## The target path within your project where the generated terrain mesh will be saved
 ## as a GLTF file.
+##
+## The extension decides the shape of the result. '.glb' writes ONE self-contained file. '.gltf'
+## is a text file that cannot hold an image, so the baked paint textures land beside it in a
+## 'textures/' folder - readable and diffable, at the price of extra files.
 @export var export_target_path: String = "res://terrain_export.gltf"
 
 # Click to open a native Editor Save Dialog where you can choose a folder and name
@@ -1162,6 +1166,26 @@ func get_paint_layer_color(layer: int) -> Color:
 	# without ensure_paint_material(). Falling back to the shipped default beats reporting a
 	# colour the brush would then wrongly advertise.
 	return PAINT_LAYER_DEFAULT_COLORS[index - 1]
+
+
+## The configured roughness of one paint layer, 1 to 4. The counterpart of
+## get_paint_layer_color(), and it falls back the same way for the same reason.
+##
+## Read by the glTF export, which bakes the layers into a texture and needs every property the
+## overlay shader would have applied.
+func get_paint_layer_roughness(layer: int) -> float:
+	var shader_material: ShaderMaterial = get_paint_settings_material()
+	var index: int = clampi(layer, 1, PAINT_LAYER_COUNT)
+	if shader_material == null:
+		return PAINT_LAYER_DEFAULT_ROUGHNESS[index - 1]
+
+	var value: Variant = shader_material.get_shader_parameter(
+		"paint_layer_%d_roughness" % index
+	)
+	if value is float or value is int:
+		return float(value)
+
+	return PAINT_LAYER_DEFAULT_ROUGHNESS[index - 1]
 
 
 ## True once anything has been painted. An unpainted terrain keeps an empty array, so this is

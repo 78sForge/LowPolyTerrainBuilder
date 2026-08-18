@@ -1438,7 +1438,13 @@ func _open_export_dialog_from_plugin() -> void:
 	var dialog := EditorFileDialog.new()
 	dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
 	dialog.access = EditorFileDialog.ACCESS_RESOURCES
-	dialog.add_filter("*.gltf", "GLTF 3D Asset")
+	# Both, and the chosen extension decides which GLTFDocument writes - nothing else has to know.
+	#
+	# .glb is worth reaching for since the paint bake exists: a .gltf is a TEXT file and cannot
+	# hold an image, so Godot drops the baked textures beside it as PNGs in a textures/ folder,
+	# while .glb keeps everything in the single file it names.
+	dialog.add_filter("*.glb", "GLTF Binary Asset (single file)")
+	dialog.add_filter("*.gltf", "GLTF 3D Asset (separate textures)")
 	dialog.current_path = active_manager.export_target_path
 	
 	dialog.file_selected.connect(
@@ -1459,11 +1465,47 @@ func _open_export_dialog_from_plugin() -> void:
 ## Isolated editor-only engine that packages and writes the visual trimesh blocks to disk.
 func _execute_gltf_export_pipeline(target_path: String) -> void:
 	print("Starting GLTF terrain export to: %s" % target_path)
-	
+
+	# The painted layers are baked into textures here rather than shipped as the overlay material
+	# they are drawn with, because glTF cannot carry a shader. See LowPolyTerrainPaintBake.
+	#
+	# ONE bake for the whole terrain, and therefore one material every chunk shares. Baking per
+	# chunk wrote a PNG per chunk next to the .gltf - 200 files for a 10x10 world, each one its
+	# own import for the editor to grind through.
+	var cells := Vector2i(
+		active_manager.world_chunks.x * active_manager.chunk_size,
+		active_manager.world_chunks.y * active_manager.chunk_size
+	)
+	var edge := Vector2i(
+		LowPolyTerrainPaintBake.texture_edge_for(cells.x),
+		LowPolyTerrainPaintBake.texture_edge_for(cells.y)
+	)
+	var paint_material: StandardMaterial3D = null
+	if active_manager.has_paint_data():
+		_report_paint_bake_limits(cells, edge)
+
+		var layer_colors := PackedColorArray()
+		var layer_roughness := PackedFloat32Array()
+		for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+			layer_colors.append(active_manager.get_paint_layer_color(layer))
+			layer_roughness.append(active_manager.get_paint_layer_roughness(layer))
+
+		paint_material = LowPolyTerrainPaintBake.bake_terrain_material(
+			active_manager.global_paint_data,
+			cells.x + 1,
+			cells.y + 1,
+			LowPolyTerrainManager.PAINT_STEPS,
+			layer_colors,
+			layer_roughness,
+			_export_base_color(),
+			_export_base_roughness(),
+			active_manager.name
+		)
+
 	var export_root := Node3D.new()
 	export_root.name = "Exported_LowPoly_Terrain"
 	var chunks_exported: int = 0
-	
+
 	# The plugin iterates through the active manager's chunks via the backend-agnostic accessors
 	for coord: Vector2i in active_manager.get_chunk_coords():
 		if not active_manager.is_chunk_active(coord.x, coord.y):
@@ -1475,11 +1517,22 @@ func _execute_gltf_export_pipeline(target_path: String) -> void:
 
 		var chunk_instance := MeshInstance3D.new()
 		chunk_instance.name = "Terrain_Chunk_%d_%d" % [coord.x, coord.y]
-		chunk_instance.mesh = chunk_mesh
 
-		var chunk_material: Material = active_manager.get_chunk_material(coord)
-		if chunk_material != null:
-			chunk_instance.material_override = chunk_material
+		# The chunk's own UVs run 0..1 across itself. They are moved into the terrain-wide bake's
+		# coordinates here, so every chunk reads its own patch out of the one shared texture.
+		var uv_transform := Transform2D.IDENTITY
+		if paint_material != null:
+			uv_transform = LowPolyTerrainPaintBake.uv_mapping(
+				coord, active_manager.chunk_size, cells, edge
+			)
+		chunk_instance.mesh = LowPolyTerrainPaintBake.mesh_for_export(chunk_mesh, uv_transform)
+
+		if paint_material != null:
+			chunk_instance.material_override = paint_material
+		else:
+			var chunk_material: Material = active_manager.get_chunk_material(coord)
+			if chunk_material != null:
+				chunk_instance.material_override = chunk_material
 
 		# The chunk's WORLD transform, not its offset inside the manager. The manager's own
 		# transform is what "Center Global Position" writes, so exporting the offsets alone put
@@ -1508,10 +1561,104 @@ func _execute_gltf_export_pipeline(target_path: String) -> void:
 	
 	if error_code == OK:
 		print("SUCCESS: Successfully exported %d terrain chunks to GLTF format!" % chunks_exported)
-		
-		# Native call is 100% legal here, since this script runs exclusively within editor RAM
-		var filesystem := EditorInterface.get_resource_filesystem()
-		if filesystem:
-			filesystem.scan()
+		_queue_export_filesystem_scan()
 	else:
 		print("ERROR: GLTF export failed with engine error code: %d" % error_code)
+
+
+## Asks the editor to pick the exported files up, on the NEXT idle frame rather than right now.
+##
+## Scanning immediately used to be fine, because the export wrote two files and only one of them
+## needed importing. Since the paint bake it also writes textures, and that is enough for the
+## editor's own filesystem watcher to be busy importing them by the time this runs.
+##
+## Deferring alone does NOT settle that, which is worth spelling out because it looks like it
+## should. EditorProgress pumps the main loop so its dialog stays responsive, and pumping flushes
+## the deferred message queue - so a deferred call can land INSIDE the very import it was meant
+## to stay clear of. The guard below is what actually settles it.
+func _queue_export_filesystem_scan() -> void:
+	call_deferred("_scan_exported_files")
+
+
+## The deferred half of _queue_export_filesystem_scan(). Split out rather than written as a
+## lambda so the guard is evaluated late, when the editor's state is the one that matters.
+##
+## is_importing() IS THE GUARD THAT MATTERS, and the one the first attempt at this was missing.
+## is_scanning() only reports the scan thread. The "(Re)Importing Assets" progress task lives in
+## the IMPORT phase, and starting a second scan there had EditorFileSystem open a second task by
+## the same name - which is exactly what "Task 'reimport' already exists" and the two failed
+## conditions in progress_dialog.cpp are reporting.
+##
+## Skipping costs nothing when the guard trips: an editor that is already scanning or importing
+## has, by definition, found the exported files on its own.
+func _scan_exported_files() -> void:
+	# Native call is 100% legal here, since this script runs exclusively within editor RAM
+	var filesystem := EditorInterface.get_resource_filesystem()
+	if filesystem == null or filesystem.is_scanning() or filesystem.is_importing():
+		return
+	filesystem.scan()
+
+
+## Prints what the paint bake cannot carry across, once per export rather than once per chunk.
+##
+## Said out loud on purpose. Every one of these is a case where the exported file will look
+## different from the editor, and silently shipping a washed-out terrain is worse than a line in
+## the output naming the part of the setup glTF had no room for.
+func _report_paint_bake_limits(cells: Vector2i, edge: Vector2i) -> void:
+	if edge.x < cells.x * LowPolyTerrainPaintBake.CELL_RESOLUTION + 1 \
+			or edge.y < cells.y * LowPolyTerrainPaintBake.CELL_RESOLUTION + 1:
+		print(("NOTE: The terrain is large enough that the baked paint texture hit its %d pixel "
+			+ "ceiling, so it covers the whole terrain at reduced precision. Coverage is "
+			+ "unaffected.") % LowPolyTerrainPaintBake.MAX_TEXTURE_EDGE)
+
+	if active_manager.custom_material is ShaderMaterial:
+		print(("NOTE: Custom Material is a ShaderMaterial, which glTF cannot represent. "
+			+ "The bake puts white underneath the paint, so unpainted ground exports white."))
+	elif active_manager.custom_material is StandardMaterial3D:
+		var standard: StandardMaterial3D = active_manager.custom_material
+		if standard.albedo_texture != null:
+			print(("NOTE: Custom Material's albedo texture is not composited into the bake. "
+				+ "Only its albedo colour goes underneath the paint."))
+
+	var settings: ShaderMaterial = active_manager.get_paint_settings_material()
+	if settings == null:
+		return
+
+	for layer in range(1, LowPolyTerrainManager.PAINT_LAYER_COUNT + 1):
+		var amount: Variant = settings.get_shader_parameter(
+			"paint_layer_%d_detail_amount" % layer
+		)
+		var normal_strength: Variant = settings.get_shader_parameter(
+			"paint_layer_%d_detail_normal_strength" % layer
+		)
+		var uses_detail: bool = (
+			(amount is float and float(amount) > 0.0)
+			or (normal_strength is float and float(normal_strength) > 0.0)
+		)
+		if uses_detail:
+			print(("NOTE: Paint layer %d uses detail textures, which are not baked. Their "
+				+ "default tile is 2 metres across and the bake resolves %d pixels per cell, "
+				+ "so the detail would arrive as mush. The layer's flat colour is baked.")
+				% [layer, LowPolyTerrainPaintBake.CELL_RESOLUTION])
+
+
+## What the bake puts UNDERNEATH the paint.
+##
+## A StandardMaterial3D crosses into glTF intact, so its albedo is a real answer. A ShaderMaterial
+## does not, and there is nothing to read: its colour is the result of running a program per
+## pixel. White is what the export already showed for it before the paint bake existed, so this
+## is the honest stand-in rather than a regression - _report_paint_bake_limits() says so out loud.
+func _export_base_color() -> Color:
+	var standard := active_manager.custom_material as StandardMaterial3D
+	if standard != null:
+		return standard.albedo_color
+	return Color.WHITE
+
+
+## The roughness the base contributes, matching _export_base_color()'s reasoning. 1.0 is
+## StandardMaterial3D's own default, which is what an unset material renders with.
+func _export_base_roughness() -> float:
+	var standard := active_manager.custom_material as StandardMaterial3D
+	if standard != null:
+		return standard.roughness
+	return 1.0

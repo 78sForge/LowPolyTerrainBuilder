@@ -48,6 +48,9 @@ Key additions:
 * Overlay Sorts Itself: The paint overlay takes a lower render priority, so no chunk squares.
 * Foam Needs Opaque Depth: Alpha Scissor or Alpha Hash gets a foam line, plain Alpha cannot.
 * Export Keeps Its Place: The glTF export carries the terrain's transform, so a centred terrain stays centred.
+* Paint Survives Export: The painted layers are baked into one terrain-wide texture, so an exported terrain arrives painted instead of white.
+* Single File If You Want It: Exporting as `.glb` packs mesh and textures into one file; `.gltf` keeps its two PNGs beside it.
+* Honest About Limits: A ShaderMaterial base still cannot cross into glTF, and the export says so instead of shipping white in silence.
 
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
@@ -867,7 +870,7 @@ and anything to do with normals - the crease is in the geometry, not in the shad
 | **Show Chunk Grid** | World Dimensions | `bool` | Overlays a wireframe grid along the chunk boundaries in the editor. One line mesh for the whole terrain, so the cost does not grow with chunk count. |
 | **Show Deactivated Chunks** | World Dimensions | `bool` | Shows or hides semi-transparent red grid boxes over disabled coordinates. |
 | **Custom Material** | Terrain Properties | `Resource` | Slot for custom 3D shader or standard materials. |
-| **Export Target Path** | Data Export | `String` | Target path where the exported `.gltf` file will be saved. |
+| **Export Target Path** | Data Export | `String` | Target path for the export. `.glb` writes one self-contained file, `.gltf` writes its textures beside it. |
 | **Choose Path & Export Terrain** | Data Export | `Button` | Opens a file dialog to name and save the model asset. |
 | **Runtime Collision** | Collision Generation | `Enum` | **`SERVERS` only**, hidden and inert under `MESH_NODES`, whose collision comes from the bake button instead. Decides *when* a collider is created: `PREBUILT` up front, `LAZY` on first approach, `NONE` never. |
 | **Enable Collision Culling** | Collision Generation | `bool` | Master switch for the two settings below. On by default. Works in **both** backends. |
