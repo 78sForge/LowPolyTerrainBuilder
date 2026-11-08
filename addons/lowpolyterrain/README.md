@@ -51,6 +51,7 @@ Key additions:
 * Paint Survives Export: The painted layers are baked into one terrain-wide texture, so an exported terrain arrives painted instead of white.
 * Single File If You Want It: Exporting as `.glb` packs mesh and textures into one file; `.gltf` keeps its two PNGs beside it.
 * Honest About Limits: A ShaderMaterial base still cannot cross into glTF, and the export says so instead of shipping white in silence.
+* Detail Cutout: A paint layer can drop its colour between the motifs, so leaves lie on the real ground.
 
 ## ✅ **Update information for v1.1.3 (The Smooth Shading Update):**
 Version 1.1.3 adds a switch between faceted and rounded terrain, so a landscape meant to roll no
@@ -554,6 +555,7 @@ existed. Per layer you get:
 | --- | --- |
 | **Detail** | The texture. Its **alpha** says where the detail is, its colour what it looks like there. |
 | **Detail Amount** | How strongly it shows. `0` is off, and off costs nothing at all. |
+| **Detail Cutout** | How much of the layer colour between the motifs is removed. `1` shows the ground there. |
 | **Detail Normal** | A normal map. Fakes bumps by tilting how light hits the surface. |
 | **Detail Normal Strength** | How deep those bumps read. `0` is off. |
 | **Detail Size** | Metres covered by one repeat of the texture. Smaller means finer grain. |
@@ -569,6 +571,19 @@ between the pieces. Set the colour to your soil or grass and the stones sit on i
 `Detail Amount` fades the whole image in over the colour instead. At `1` the texture is all you
 see; below that the layer colour mixes back through, which is how you tint one image warmer on
 one layer than on another.
+
+**Detail Cutout** goes one step further for decal-style textures. The colour between the pieces
+is a flat patch that only passes for the ground while it happens to match it. Raise the cutout
+and the layer gives that space back: whatever it would have hidden - the base material with its
+own shading, or another layer - shows between the leaves or stones, and they lie on the real
+terrain. Roughness and detail normals follow along, so the gaps are lit as ground, not as paint.
+At `1` the layer colour is gone entirely; in between, it shows through partly. From a distance
+the mipmaps average the alpha, and a sparse texture fades into a thin glaze of its motif's colour.
+
+The layers still share one surface. Where a cut-out layer sits at full weight it has pushed the
+others out, so its gaps show the base, not a layer painted there before. For two densities of
+the same litter, make the dense texture contain every piece of the sparse one at the same spot,
+and the change between them reads as pieces being added.
 
 > If a texture with transparency comes out grey and muddy across the whole layer, its alpha is
 > being ignored somewhere. Godot's importer bleeds the nearest opaque pixel into transparent

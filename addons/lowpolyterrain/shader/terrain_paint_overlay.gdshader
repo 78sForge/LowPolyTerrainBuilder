@@ -73,16 +73,23 @@ void fragment() {
 	vec3 base_normal = normalize(NORMAL);
 	NORMAL = base_normal;
 
+	// Colour and the weights left after the layers' cutout, from one pass over the textures.
+	// Everything below blends by the kept weights, so between cut-out motifs the material
+	// underneath keeps its own colour, roughness and normal. Without a cutout they equal COLOR.
+	vec3 layer_color;
+	vec4 kept;
+	lpt_paint_layers_at(COLOR, world_pos, layer_color, kept);
+
 	// The detail normal maps are defined against a projection from above, so the bending happens
 	// in world space and comes back. Skipped entirely while no layer carries one - the test is a
 	// uniform, so this costs nothing rather than almost nothing.
 	if (lpt_paint_uses_normal_detail()) {
 		vec3 world_normal = normalize((INV_VIEW_MATRIX * vec4(base_normal, 0.0)).xyz);
-		world_normal = lpt_paint_normal_at(world_normal, COLOR, world_pos);
+		world_normal = lpt_paint_normal_at(world_normal, kept, world_pos);
 		NORMAL = normalize((VIEW_MATRIX * vec4(world_normal, 0.0)).xyz);
 	}
 
-	ALBEDO = lpt_paint_layer_color_at(COLOR, world_pos);
-	ROUGHNESS = lpt_paint_layer_roughness(COLOR);
-	ALPHA = total;
+	ALBEDO = layer_color;
+	ROUGHNESS = lpt_paint_layer_roughness(kept);
+	ALPHA = lpt_paint_total(kept);
 }

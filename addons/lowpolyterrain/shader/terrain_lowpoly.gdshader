@@ -13,6 +13,8 @@ uniform int color_steps = 3;
 // This variable stabley transports the factual world coordinates into the fragment processor
 varying vec3 world_position;
 
+
+
 void vertex() {
 	// Stores the immutable spatial position in world space
 	world_position = VERTEX;
@@ -48,4 +50,5 @@ void fragment() {
 	
 	ROUGHNESS = roughness;
 	SPECULAR = 0.1;
+
 }

@@ -13,7 +13,8 @@
 // else. Both kinds of image therefore work. A decal-style one - scattered stones on empty
 // space, the very asset a Decal node would project - lands its motif on a coloured ground. A
 // fully opaque tiling photo covers everything, and the detail amount fades it in over the
-// colour instead.
+// colour instead. A layer's DETAIL CUTOUT drops that colour between the motifs, so the ground
+// underneath shows through instead of a flat patch.
 //
 // Both detail slots are OFF until their strength is raised above zero, and a layer that leaves
 // them there costs exactly what it cost before they existed. The switch is a uniform, so every
@@ -35,14 +36,17 @@
 //
 //          void fragment() {
 //              // ... your own shading ...
+//              // The weights left after the layers' cutout. Equal to COLOR while no layer
+//              // uses one; with one, roughness and normals follow the motif, not the patch.
+//              vec4 kept = lpt_paint_weights_at(COLOR, world_position);
 //              ALBEDO    = lpt_paint_albedo_at(ALBEDO, COLOR, world_position);
-//              ROUGHNESS = lpt_paint_roughness(ROUGHNESS, COLOR);
+//              ROUGHNESS = lpt_paint_roughness(ROUGHNESS, kept);
 //
 //              // Only if you want the detail normal maps. NORMAL is view space in a fragment
 //              // shader and the projection is defined in world space, hence the two hops.
 //              if (lpt_paint_uses_normal_detail()) {
 //                  vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
-//                  n = lpt_paint_normal_at(n, COLOR, world_position);
+//                  n = lpt_paint_normal_at(n, kept, world_position);
 //                  NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 //              }
 //          }
@@ -59,6 +63,7 @@ uniform vec4 paint_layer_1_color : source_color = vec4(0.76, 0.70, 0.50, 1.0);
 uniform float paint_layer_1_roughness : hint_range(0.0, 1.0) = 0.85;
 uniform sampler2D paint_layer_1_detail : source_color, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_1_detail_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float paint_layer_1_detail_cutout : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D paint_layer_1_detail_normal : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_1_detail_normal_strength : hint_range(0.0, 4.0) = 0.0;
 uniform float paint_layer_1_detail_size : hint_range(0.05, 64.0) = 2.0;
@@ -69,6 +74,7 @@ uniform vec4 paint_layer_2_color : source_color = vec4(0.45, 0.45, 0.47, 1.0);
 uniform float paint_layer_2_roughness : hint_range(0.0, 1.0) = 0.70;
 uniform sampler2D paint_layer_2_detail : source_color, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_2_detail_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float paint_layer_2_detail_cutout : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D paint_layer_2_detail_normal : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_2_detail_normal_strength : hint_range(0.0, 4.0) = 0.0;
 uniform float paint_layer_2_detail_size : hint_range(0.05, 64.0) = 2.0;
@@ -79,6 +85,7 @@ uniform vec4 paint_layer_3_color : source_color = vec4(0.95, 0.96, 1.00, 1.0);
 uniform float paint_layer_3_roughness : hint_range(0.0, 1.0) = 0.25;
 uniform sampler2D paint_layer_3_detail : source_color, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_3_detail_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float paint_layer_3_detail_cutout : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D paint_layer_3_detail_normal : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_3_detail_normal_strength : hint_range(0.0, 4.0) = 0.0;
 uniform float paint_layer_3_detail_size : hint_range(0.05, 64.0) = 2.0;
@@ -89,6 +96,7 @@ uniform vec4 paint_layer_4_color : source_color = vec4(0.35, 0.26, 0.18, 1.0);
 uniform float paint_layer_4_roughness : hint_range(0.0, 1.0) = 0.90;
 uniform sampler2D paint_layer_4_detail : source_color, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_4_detail_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float paint_layer_4_detail_cutout : hint_range(0.0, 1.0) = 0.0;
 uniform sampler2D paint_layer_4_detail_normal : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform float paint_layer_4_detail_normal_strength : hint_range(0.0, 4.0) = 0.0;
 uniform float paint_layer_4_detail_size : hint_range(0.05, 64.0) = 2.0;
@@ -142,15 +150,41 @@ bool lpt_paint_uses_normal_detail() {
 // alpha is 1 everywhere, and the detail amount then fades the whole image in over the colour.
 
 
-// The layers' own colour, before it is blended onto anything. Divided by the total so the
-// layers keep their proportions to each other rather than darkening where they overlap.
-vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
+// ON THE CUTOUT, which lets the empty space of a detail texture show the ground underneath.
+//
+// Composited as above, the space between the motifs is the layer COLOUR - a flat patch that
+// only passes for the ground while the colour happens to match it. Raising a layer's cutout
+// takes that space away from the layer instead: its weight is cut down to where the texture
+// covers, and whatever the layer would have hidden there - the base material with all its own
+// shading, or another layer - stays visible. Leaves or stones then lie ON the terrain rather
+// than on a coloured sheet.
+//
+// The cutout only removes the colour part. Per unit of weight the layer is a share `a` of
+// detail and `1 - a` of colour (`a` being the texture's alpha times the detail amount); a cutout
+// of k drops k of the colour share, so the layer keeps `a + (1 - k)(1 - a)` = mix(1, a, k) of
+// its weight, and within what it keeps the detail claims `a / keep`. At k = 1 the colour is
+// gone entirely and the motif is drawn straight, which also keeps the colour from fringing the
+// motif's anti-aliased edge. At k = 0 nothing changes - keep is 1 and the mix is the one above.
+//
+// Mipmaps average the alpha, so from afar a sparse texture becomes a thin glaze of its motif's
+// average colour over the ground, which is what loosely scattered detail looks like anyway.
+//
+// It needs the detail amount raised: without a detail texture in play there is nothing to cut
+// along, and the layer behaves as before.
+
+
+// One pass over the four layers that yields both their colour and the weights they keep after
+// the cutout. Everything that wants either goes through here, so a texture is sampled once no
+// matter how many properties the caller derives from it. `kept` equals `weights` while no
+// layer uses a cutout.
+void lpt_paint_layers_at(vec4 weights, vec3 world_pos, out vec3 color, out vec4 kept) {
 	vec2 world_dx = dFdx(world_pos.xz);
 	vec2 world_dy = dFdy(world_pos.xz);
 
-	float total = weights.r + weights.g + weights.b + weights.a;
-	if (total <= 0.0) {
-		return vec3(0.0);
+	color = vec3(0.0);
+	kept = weights;
+	if (weights.r + weights.g + weights.b + weights.a <= 0.0) {
+		return;
 	}
 
 	vec3 c1 = paint_layer_1_color.rgb;
@@ -159,7 +193,10 @@ vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
 		vec4 detail = textureGrad(
 			paint_layer_1_detail, world_pos.xz / size, world_dx / size, world_dy / size
 		);
-		c1 = mix(c1, detail.rgb, detail.a * paint_layer_1_detail_amount);
+		float a = detail.a * paint_layer_1_detail_amount;
+		float keep = mix(1.0, a, paint_layer_1_detail_cutout);
+		c1 = mix(c1, detail.rgb, keep > 0.0 ? a / keep : 0.0);
+		kept.r *= keep;
 	}
 
 	vec3 c2 = paint_layer_2_color.rgb;
@@ -168,7 +205,10 @@ vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
 		vec4 detail = textureGrad(
 			paint_layer_2_detail, world_pos.xz / size, world_dx / size, world_dy / size
 		);
-		c2 = mix(c2, detail.rgb, detail.a * paint_layer_2_detail_amount);
+		float a = detail.a * paint_layer_2_detail_amount;
+		float keep = mix(1.0, a, paint_layer_2_detail_cutout);
+		c2 = mix(c2, detail.rgb, keep > 0.0 ? a / keep : 0.0);
+		kept.g *= keep;
 	}
 
 	vec3 c3 = paint_layer_3_color.rgb;
@@ -177,7 +217,10 @@ vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
 		vec4 detail = textureGrad(
 			paint_layer_3_detail, world_pos.xz / size, world_dx / size, world_dy / size
 		);
-		c3 = mix(c3, detail.rgb, detail.a * paint_layer_3_detail_amount);
+		float a = detail.a * paint_layer_3_detail_amount;
+		float keep = mix(1.0, a, paint_layer_3_detail_cutout);
+		c3 = mix(c3, detail.rgb, keep > 0.0 ? a / keep : 0.0);
+		kept.b *= keep;
 	}
 
 	vec3 c4 = paint_layer_4_color.rgb;
@@ -186,11 +229,47 @@ vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
 		vec4 detail = textureGrad(
 			paint_layer_4_detail, world_pos.xz / size, world_dx / size, world_dy / size
 		);
-		c4 = mix(c4, detail.rgb, detail.a * paint_layer_4_detail_amount);
+		float a = detail.a * paint_layer_4_detail_amount;
+		float keep = mix(1.0, a, paint_layer_4_detail_cutout);
+		c4 = mix(c4, detail.rgb, keep > 0.0 ? a / keep : 0.0);
+		kept.a *= keep;
 	}
 
-	vec3 mixed = c1 * weights.r + c2 * weights.g + c3 * weights.b + c4 * weights.a;
-	return mixed / total;
+	float total = kept.r + kept.g + kept.b + kept.a;
+	if (total > 0.0) {
+		color = (c1 * kept.r + c2 * kept.g + c3 * kept.b + c4 * kept.a) / total;
+	}
+}
+
+
+// The layers' own colour, before it is blended onto anything. Divided by the total so the
+// layers keep their proportions to each other rather than darkening where they overlap.
+vec3 lpt_paint_layer_color_at(vec4 weights, vec3 world_pos) {
+	vec3 color;
+	vec4 kept;
+	lpt_paint_layers_at(weights, world_pos, color, kept);
+	return color;
+}
+
+
+// The weights after the cutout, for everything blended by weight besides the colour - the
+// coverage, the roughness, the detail normals. Returns the weights untouched, without sampling
+// anything, while no layer uses a cutout; the test is a uniform, so that skip is free.
+bool lpt_paint_uses_cutout() {
+	return paint_layer_1_detail_cutout > 0.0
+		|| paint_layer_2_detail_cutout > 0.0
+		|| paint_layer_3_detail_cutout > 0.0
+		|| paint_layer_4_detail_cutout > 0.0;
+}
+
+vec4 lpt_paint_weights_at(vec4 weights, vec3 world_pos) {
+	if (!lpt_paint_uses_cutout()) {
+		return weights;
+	}
+	vec3 color;
+	vec4 kept;
+	lpt_paint_layers_at(weights, world_pos, color, kept);
+	return kept;
 }
 
 
@@ -316,8 +395,12 @@ vec3 lpt_paint_normal_at(vec3 base_normal, vec4 weights, vec3 world_pos) {
 
 
 // Blends the painted layers over a base colour, detail textures included. For the inline route.
+// Covers only what the layers keep after the cutout, so the base shows between the motifs.
 vec3 lpt_paint_albedo_at(vec3 base, vec4 weights, vec3 world_pos) {
-	return mix(base, lpt_paint_layer_color_at(weights, world_pos), lpt_paint_total(weights));
+	vec3 color;
+	vec4 kept;
+	lpt_paint_layers_at(weights, world_pos, color, kept);
+	return mix(base, color, lpt_paint_total(kept));
 }
 
 
